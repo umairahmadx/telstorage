@@ -1,0 +1,9 @@
+name = "telstorage-proxy"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+# Cloudflare Workers configuration
+# This proxy allows your Flutter web app to download files from Telegram
+
+[env.production]
+name = "telstorage-proxy"

@@ -1,0 +1,76 @@
+name: telstorage
+description: "Telegram as Ultimate Storage — upload, browse, and manage files via Telegram Bot API."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Environment configuration
+  flutter_dotenv: ^5.1.0
+
+  # UI
+  cupertino_icons: ^1.0.8
+
+  # Networking
+  dio: ^5.4.0
+
+  # Secure credential storage
+  flutter_secure_storage: ^9.0.0
+
+  # Local database for file index cache
+  hive_flutter: ^1.1.0
+  hive: ^2.2.3
+
+  # File picking
+  file_picker: ^8.0.0
+
+  # Unique IDs
+  uuid: ^4.3.0
+
+  # Hashing (SHA-256 for file integrity)
+  crypto: ^3.0.3
+
+  # MIME type detection
+  mime: ^1.0.5
+
+  # Image + video
+  cached_network_image: ^3.3.1
+  video_player: ^2.8.3
+
+  # Path utilities
+  path_provider: ^2.1.2
+  path: ^1.9.0
+
+  # Background service for large uploads
+  flutter_background_service: ^5.0.5
+
+  # Animations
+  flutter_animate: ^4.3.0
+
+  # Utils
+  intl: ^0.19.0
+  archive: ^4.0.9
+  convert: ^3.1.2
+  google_fonts: ^8.1.0
+  permission_handler: ^12.0.1
+  open_file: ^3.5.11
+  share_plus: ^12.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  hive_generator: ^2.0.1
+  build_runner: ^2.4.8
+
+flutter:
+  uses-material-design: true
+  assets:
+    - .env
+    - assets/images/
+    - assets/icons/

@@ -41,7 +41,10 @@ class SyncService {
 
       // ── Folders: add missing ──────────────────────────────────────────────
       onProgress?.call(0.05, 'Syncing folders...');
-      AppLogger.d('${appMeta.folders.length} folder(s) on Telegram', tag: 'SyncService');
+      AppLogger.d(
+        '${appMeta.folders.length} folder(s) on Telegram',
+        tag: 'SyncService',
+      );
       for (final folder in appMeta.folders) {
         if (_hive.getFolder(folder.id) == null) {
           await _hive.saveFolder(FolderRecord.fromFolder(folder));
@@ -51,14 +54,16 @@ class SyncService {
       }
 
       // ── Folders: remove stale (deleted on another device) ─────────────────
-      final telegramFolderIds =
-          appMeta.folders.map((f) => f.id).toSet();
+      final telegramFolderIds = appMeta.folders.map((f) => f.id).toSet();
       final localFolders = _hive.allFolders;
       for (final local in localFolders) {
         if (!telegramFolderIds.contains(local.id)) {
           await _hive.deleteFolder(local.id);
           removed++;
-          AppLogger.d('Removed stale folder: ${local.name}', tag: 'SyncService');
+          AppLogger.d(
+            'Removed stale folder: ${local.name}',
+            tag: 'SyncService',
+          );
         }
       }
 
@@ -80,7 +85,10 @@ class SyncService {
         }
 
         try {
-          AppLogger.d('Fetching index for ${ref.name} (meta file_id: ${ref.metaFileId})', tag: 'SyncService');
+          AppLogger.d(
+            'Fetching index for ${ref.name} (meta file_id: ${ref.metaFileId})',
+            tag: 'SyncService',
+          );
           final bytes = await _telegram.downloadByFileId(ref.metaFileId);
           final fileMeta =
               jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
@@ -106,7 +114,10 @@ class SyncService {
       }
 
       onProgress?.call(1.0, 'Sync complete!');
-      AppLogger.i('Sync done — +$added added, -$removed removed. Local: ${_hive.totalFiles} files, ${_hive.totalFolders} folders', tag: 'SyncService');
+      AppLogger.i(
+        'Sync done — +$added added, -$removed removed. Local: ${_hive.totalFiles} files, ${_hive.totalFolders} folders',
+        tag: 'SyncService',
+      );
 
       return SyncResult(added: added, removed: removed);
     } catch (e) {

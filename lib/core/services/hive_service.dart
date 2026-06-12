@@ -10,10 +10,12 @@ class HiveService {
   HiveService._();
 
   Box<FileRecord> get _files => Hive.box<FileRecord>(AppConstants.filesBox);
-  Box<FolderRecord> get _folders => Hive.box<FolderRecord>(AppConstants.foldersBox);
+  Box<FolderRecord> get _folders =>
+      Hive.box<FolderRecord>(AppConstants.foldersBox);
 
   ValueListenable<Box<FileRecord>> get filesListenable => _files.listenable();
-  ValueListenable<Box<FolderRecord>> get foldersListenable => _folders.listenable();
+  ValueListenable<Box<FolderRecord>> get foldersListenable =>
+      _folders.listenable();
 
   // ── File Operations ──────────────────────────────────────
 
@@ -41,6 +43,7 @@ class HiveService {
   Future<void> updateFile(
     String fileId, {
     String? name,
+
     /// Pass [HiveService.kRootFolderId] to move the file to the root folder.
     String? folderId,
     bool clearFolderId = false,

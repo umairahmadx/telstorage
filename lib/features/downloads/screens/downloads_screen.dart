@@ -59,7 +59,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     // Safety check for unit tests/web design where locator might not be initialized yet
     final isReady = ServiceLocator.instance.isInitialized && !_isLoading;
 
@@ -74,7 +74,8 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                   icon: const Icon(Icons.delete_sweep_rounded),
                   tooltip: 'Clear Completed History',
                   onPressed: () {
-                    ServiceLocator.instance.downloadQueue.clearCompletedHistory();
+                    ServiceLocator.instance.downloadQueue
+                        .clearCompletedHistory();
                   },
                 ),
               ]
@@ -139,9 +140,9 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
               child: Text(
                 'No downloads yet',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                    ),
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                ),
               ),
             ),
             const SizedBox(height: 8),
@@ -150,8 +151,8 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
             Text(
               'Downloaded files will appear here',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).textTheme.bodySmall?.color,
-                  ),
+                color: Theme.of(context).textTheme.bodySmall?.color,
+              ),
             ),
           ],
         ),
@@ -172,7 +173,9 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
         if (active.isNotEmpty) ...[
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            sliver: SliverToBoxAdapter(child: _sectionHeader('Queue / In Progress')),
+            sliver: SliverToBoxAdapter(
+              child: _sectionHeader('Queue / In Progress'),
+            ),
           ),
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -185,20 +188,32 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                   iconData: _icon(active[index].mimeType),
                   iconColor: _color(active[index].mimeType),
                   onCancel: () {
-                    ServiceLocator.instance.downloadQueue.cancelDownload(active[index].fileId);
+                    ServiceLocator.instance.downloadQueue.cancelDownload(
+                      active[index].fileId,
+                    );
                   },
                   onRetry: () {
-                    final fileRecord = ServiceLocator.instance.hive.getFile(active[index].fileId);
+                    final fileRecord = ServiceLocator.instance.hive.getFile(
+                      active[index].fileId,
+                    );
                     if (fileRecord != null) {
-                      ServiceLocator.instance.downloadQueue.enqueueDownload(fileRecord);
+                      ServiceLocator.instance.downloadQueue.enqueueDownload(
+                        fileRecord,
+                      );
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('File metadata not found, cannot retry')),
+                        const SnackBar(
+                          content: Text(
+                            'File metadata not found, cannot retry',
+                          ),
+                        ),
                       );
                     }
                   },
                   onDelete: () {
-                    ServiceLocator.instance.downloadQueue.removeJob(active[index].fileId);
+                    ServiceLocator.instance.downloadQueue.removeJob(
+                      active[index].fileId,
+                    );
                   },
                 );
                 return tile
@@ -214,7 +229,11 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
         if (completed.isNotEmpty) ...[
           SliverPadding(
             padding: EdgeInsets.fromLTRB(
-                16, active.isNotEmpty ? 20 : 12, 16, 0),
+              16,
+              active.isNotEmpty ? 20 : 12,
+              16,
+              0,
+            ),
             sliver: SliverToBoxAdapter(child: _sectionHeader('Completed')),
           ),
           SliverPadding(
@@ -233,7 +252,9 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                       OpenFile.open(path);
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Saved path not found locally')),
+                        const SnackBar(
+                          content: Text('Saved path not found locally'),
+                        ),
                       );
                     }
                   },
@@ -248,12 +269,16 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                       );
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Saved path not found locally')),
+                        const SnackBar(
+                          content: Text('Saved path not found locally'),
+                        ),
                       );
                     }
                   },
                   onDelete: () {
-                    ServiceLocator.instance.downloadQueue.removeJob(completed[index].fileId);
+                    ServiceLocator.instance.downloadQueue.removeJob(
+                      completed[index].fileId,
+                    );
                   },
                 );
                 return tile
@@ -274,17 +299,17 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   // ── Section header ────────────────────────────────────────────────────────
 
   Widget _sectionHeader(String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 8, top: 4, left: 2),
-        child: Text(
-          text.toUpperCase(),
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: AppTheme.primary,
-            letterSpacing: 1.1,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.only(bottom: 8, top: 4, left: 2),
+    child: Text(
+      text.toUpperCase(),
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        color: AppTheme.primary,
+        letterSpacing: 1.1,
+      ),
+    ),
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -372,8 +397,8 @@ class _ActiveDownloadTile extends StatelessWidget {
                             ? download.error!
                             : '${download.sizeMb.toStringAsFixed(1)} MB',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: isFailed ? AppTheme.error : null,
-                            ),
+                          color: isFailed ? AppTheme.error : null,
+                        ),
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                       ),
@@ -404,7 +429,11 @@ class _ActiveDownloadTile extends StatelessWidget {
                     height: 32,
                     child: IconButton(
                       padding: EdgeInsets.zero,
-                      icon: const Icon(Icons.refresh_rounded, size: 20, color: AppTheme.primary),
+                      icon: const Icon(
+                        Icons.refresh_rounded,
+                        size: 20,
+                        color: AppTheme.primary,
+                      ),
                       tooltip: 'Retry download',
                       onPressed: onRetry,
                     ),
@@ -449,7 +478,9 @@ class _ActiveDownloadTile extends StatelessWidget {
             ClipRRect(
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
-                value: isQueued ? null : (isFailed || isCancelled ? 0.0 : download.progress),
+                value: isQueued
+                    ? null
+                    : (isFailed || isCancelled ? 0.0 : download.progress),
                 minHeight: 5,
                 backgroundColor: isDark
                     ? Colors.white.withAlpha(15)

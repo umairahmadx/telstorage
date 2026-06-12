@@ -6,9 +6,8 @@ class AppException implements Exception {
   final int? code;
 
   @override
-  String toString() => code != null
-      ? 'AppException[$code]: $message'
-      : 'AppException: $message';
+  String toString() =>
+      code != null ? 'AppException[$code]: $message' : 'AppException: $message';
 }
 
 class NetworkException extends AppException {

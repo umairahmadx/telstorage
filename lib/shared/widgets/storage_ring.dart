@@ -20,9 +20,10 @@ class _StorageRingState extends State<StorageRing>
   late Animation<double> _anim;
 
   double get _percent =>
-      widget.limitMb < 1e6 // show real % only for non-unlimited
-          ? (widget.usedMb / widget.limitMb).clamp(0.0, 1.0)
-          : 0.0; // unlimited: ring is decorative only
+      widget.limitMb <
+          1e6 // show real % only for non-unlimited
+      ? (widget.usedMb / widget.limitMb).clamp(0.0, 1.0)
+      : 0.0; // unlimited: ring is decorative only
 
   bool get _isUnlimited => widget.limitMb >= 1e6;
 
@@ -69,15 +70,17 @@ class _StorageRingState extends State<StorageRing>
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    _isUnlimited ? '∞' : '${(_percent * 100).toStringAsFixed(0)}%',
+                    _isUnlimited
+                        ? '∞'
+                        : '${(_percent * 100).toStringAsFixed(0)}%',
                     style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                          fontSize: _isUnlimited ? 44 : 36,
-                          fontWeight: FontWeight.w800,
-                          foreground: Paint()
-                            ..shader = const LinearGradient(
-                              colors: [AppTheme.primary, Color(0xFFA78BFA)],
-                            ).createShader(const Rect.fromLTWH(0, 0, 80, 40)),
-                        ),
+                      fontSize: _isUnlimited ? 44 : 36,
+                      fontWeight: FontWeight.w800,
+                      foreground: Paint()
+                        ..shader = const LinearGradient(
+                          colors: [AppTheme.primary, Color(0xFFA78BFA)],
+                        ).createShader(const Rect.fromLTWH(0, 0, 80, 40)),
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -85,7 +88,9 @@ class _StorageRingState extends State<StorageRing>
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   Text(
-                    _isUnlimited ? 'Storage' : 'of ${_formatSize(widget.limitMb)}',
+                    _isUnlimited
+                        ? 'Storage'
+                        : 'of ${_formatSize(widget.limitMb)}',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
@@ -109,7 +114,11 @@ class _RingPainter extends CustomPainter {
   final bool isDark;
   final bool isUnlimited;
 
-  _RingPainter({required this.percent, required this.isDark, required this.isUnlimited});
+  _RingPainter({
+    required this.percent,
+    required this.isDark,
+    required this.isUnlimited,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -119,9 +128,7 @@ class _RingPainter extends CustomPainter {
 
     // Track
     final trackPaint = Paint()
-      ..color = isDark
-          ? const Color(0xFF2A2A45)
-          : const Color(0xFFE8E4FF)
+      ..color = isDark ? const Color(0xFF2A2A45) : const Color(0xFFE8E4FF)
       ..style = PaintingStyle.stroke
       ..strokeWidth = sw
       ..strokeCap = StrokeCap.round;

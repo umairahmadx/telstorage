@@ -69,7 +69,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final picked = await FilePicker.platform.pickFiles(withData: true);
     if (picked == null || picked.files.isEmpty) return;
     final file = picked.files.first;
-    if (file.bytes == null) { _snack('Could not read file'); return; }
+    if (file.bytes == null) {
+      _snack('Could not read file');
+      return;
+    }
 
     _uploadCubit.upload(bytes: file.bytes!, name: file.name, folderId: null);
   }
@@ -84,7 +87,6 @@ class _HomeScreenState extends State<HomeScreen> {
       margin: const EdgeInsets.all(16),
     ));
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -134,117 +136,135 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-
   PreferredSizeWidget _mobileAppBar(bool isUploading) => PreferredSize(
-    preferredSize: const Size.fromHeight(64),
-    child: Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).scaffoldBackgroundColor,
-        border: Border(bottom: BorderSide(
-          color: Theme.of(context).brightness == Brightness.dark
-              ? const Color(0xFF2A2A45) : const Color(0xFFE0DFFF))),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: BlocBuilder<SyncCubit, SyncState>(
-            builder: (ctx, syncState) {
-              final isSyncing = syncState is SyncInProgress;
-              final statusText = syncState is SyncInProgress ? syncState.status : 'Your cloud drive';
-              return Row(children: [
-                Container(
-                  width: 36, height: 36,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: [AppTheme.primary, Color(0xFFA78BFA)]),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.cloud_done_rounded, color: Colors.white, size: 20),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Text('TelStorage',
-                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
-                    Text(statusText,
-                        style: Theme.of(context).textTheme.bodySmall,
-                        overflow: TextOverflow.ellipsis),
-                  ]),
-                ),
-                if (isSyncing)
-                  const SizedBox(width: 20, height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary))
-                else
-                  IconButton(
-                    icon: const Icon(Icons.sync_rounded, size: 22),
-                    tooltip: 'Sync',
-                    onPressed: () => _syncCubit.sync().then((_) => _loadMeta()),
-                  ),
-                IconButton(
-                  icon: const Icon(Icons.settings_outlined, size: 22),
-                  onPressed: () {
-                    final shell = MobileShell.of(context);
-                    if (shell != null) {
-                      shell.switchTab(3); // Settings tab
-                    } else {
-                      Navigator.of(context).pushNamed(AppRouter.settings);
-                    }
-                  },
-                ),
-              ]);
-            },
+        preferredSize: const Size.fromHeight(64),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            border: Border(
+                bottom: BorderSide(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? const Color(0xFF2A2A45)
+                        : const Color(0xFFE0DFFF))),
+          ),
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: BlocBuilder<SyncCubit, SyncState>(
+                builder: (ctx, syncState) {
+                  final isSyncing = syncState is SyncInProgress;
+                  final statusText = syncState is SyncInProgress
+                      ? syncState.status
+                      : 'Your cloud drive';
+                  return Row(children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                            colors: [AppTheme.primary, Color(0xFFA78BFA)]),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.cloud_done_rounded,
+                          color: Colors.white, size: 20),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('TelStorage',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w800, fontSize: 17)),
+                            Text(statusText,
+                                style: Theme.of(context).textTheme.bodySmall,
+                                overflow: TextOverflow.ellipsis),
+                          ]),
+                    ),
+                    if (isSyncing)
+                      const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: AppTheme.primary))
+                    else
+                      IconButton(
+                        icon: const Icon(Icons.sync_rounded, size: 22),
+                        tooltip: 'Sync',
+                        onPressed: () =>
+                            _syncCubit.sync().then((_) => _loadMeta()),
+                      ),
+                    IconButton(
+                      icon: const Icon(Icons.settings_outlined, size: 22),
+                      onPressed: () {
+                        final shell = MobileShell.of(context);
+                        if (shell != null) {
+                          shell.switchTab(3); // Settings tab
+                        } else {
+                          Navigator.of(context).pushNamed(AppRouter.settings);
+                        }
+                      },
+                    ),
+                  ]);
+                },
+              ),
+            ),
           ),
         ),
-      ),
-    ),
-  );
+      );
 
   AppBar _desktopTopBar(bool isUploading) => AppBar(
-    automaticallyImplyLeading: false,
-    title: Text('Dashboard', style: Theme.of(context).textTheme.headlineSmall),
-    actions: [
-      BlocBuilder<SyncCubit, SyncState>(
-        builder: (ctx, syncState) {
-          if (syncState is SyncInProgress) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-              child: Row(children: [
-                const SizedBox(width: 18, height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary)),
-                const SizedBox(width: 8),
-                Text(syncState.status,
-                    style: Theme.of(context).textTheme.bodySmall),
-              ]),
-            );
-          }
-          return TextButton.icon(
-            onPressed: () => _syncCubit.sync().then((_) => _loadMeta()),
-            icon: const Icon(Icons.sync_rounded, size: 18),
-            label: const Text('Sync'),
-            style: TextButton.styleFrom(foregroundColor: AppTheme.primary),
-          );
-        },
-      ),
-      const SizedBox(width: 8),
-    ],
-  );
-
+        automaticallyImplyLeading: false,
+        title:
+            Text('Dashboard', style: Theme.of(context).textTheme.headlineSmall),
+        actions: [
+          BlocBuilder<SyncCubit, SyncState>(
+            builder: (ctx, syncState) {
+              if (syncState is SyncInProgress) {
+                return Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  child: Row(children: [
+                    const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: AppTheme.primary)),
+                    const SizedBox(width: 8),
+                    Text(syncState.status,
+                        style: Theme.of(context).textTheme.bodySmall),
+                  ]),
+                );
+              }
+              return TextButton.icon(
+                onPressed: () => _syncCubit.sync().then((_) => _loadMeta()),
+                icon: const Icon(Icons.sync_rounded, size: 18),
+                label: const Text('Sync'),
+                style: TextButton.styleFrom(foregroundColor: AppTheme.primary),
+              );
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
+      );
 
   Widget _buildLoading() {
     final syncState = _syncCubit.state;
-    final statusText = syncState is SyncInProgress ? syncState.status : 'Loading…';
+    final statusText =
+        syncState is SyncInProgress ? syncState.status : 'Loading…';
     return Center(
       child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
         const SizedBox(
-          width: 44, height: 44,
+          width: 44,
+          height: 44,
           child: CircularProgressIndicator(
             strokeWidth: 3,
             valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primary),
           ),
         ),
         const SizedBox(height: 20),
-        Text(statusText,
-            style: Theme.of(context).textTheme.bodyMedium),
+        Text(statusText, style: Theme.of(context).textTheme.bodyMedium),
       ]),
     );
   }
@@ -276,7 +296,8 @@ class _HomeScreenState extends State<HomeScreen> {
             // Storage ring card
             SizedBox(
               width: 260,
-              child: _glassCard(child: Column(children: [
+              child: _glassCard(
+                  child: Column(children: [
                 StorageRing(
                   usedMb: _meta?.storageUsedMb ?? 0,
                   limitMb: double.maxFinite,
@@ -295,8 +316,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     Text('Quick Upload',
                         style: Theme.of(context).textTheme.titleLarge),
                     const SizedBox(height: 8),
-                    Text('Upload any file — videos, images, docs, and more.\nLarge files are automatically split into parts.',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.5)),
+                    Text(
+                        'Upload any file — videos, images, docs, and more.\nLarge files are automatically split into parts.',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(height: 1.5)),
                     const SizedBox(height: 20),
                     SizedBox(
                       height: 48,
@@ -327,7 +352,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ]),
           const SizedBox(height: 24),
           // Categories grid
-          Text('Storage Categories', style: Theme.of(context).textTheme.titleLarge),
+          Text('Storage Categories',
+              style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 14),
           _categoryGrid(crossAxisCount: 4),
           const SizedBox(height: 28),
@@ -335,10 +361,11 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             Text('Recent Files', style: Theme.of(context).textTheme.titleLarge),
             TextButton(
-              onPressed: () => Navigator.of(context)
-                  .pushNamed(AppRouter.browser),
+              onPressed: () =>
+                  Navigator.of(context).pushNamed(AppRouter.browser),
               child: Text('View All',
-                  style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w600)),
+                  style: TextStyle(
+                      color: AppTheme.primary, fontWeight: FontWeight.w600)),
             ),
           ]),
           const SizedBox(height: 8),
@@ -359,8 +386,10 @@ class _HomeScreenState extends State<HomeScreen> {
         slivers: [
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            sliver: SliverList(delegate: SliverChildListDelegate([
-              if (uploadState is UploadInProgress) _uploadProgressCard(uploadState),
+            sliver: SliverList(
+                delegate: SliverChildListDelegate([
+              if (uploadState is UploadInProgress)
+                _uploadProgressCard(uploadState),
               if (!isUploading)
                 _mobileUploadBanner(isUploading)
                     .animate()
@@ -369,26 +398,34 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 16),
 
               // Storage ring card
-              _glassCard(child: Column(children: [
+              _glassCard(
+                      child: Column(children: [
                 Center(
                   child: SizedBox(
                     width: 180,
                     height: 180,
-                    child: StorageRing(usedMb: _meta?.storageUsedMb ?? 0, limitMb: double.maxFinite),
+                    child: StorageRing(
+                        usedMb: _meta?.storageUsedMb ?? 0,
+                        limitMb: double.maxFinite),
                   ),
                 ),
                 const SizedBox(height: 12),
                 _statRow(),
-              ])).animate()
+              ]))
+                  .animate()
                   .fadeIn(duration: 400.ms, delay: 100.ms)
                   .slideY(begin: 0.1, end: 0),
               const SizedBox(height: 20),
 
               // Categories header
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Text('Categories', style: Theme.of(context).textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700)),
-              ]).animate()
+                Text('Categories',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700)),
+              ])
+                  .animate()
                   .fadeIn(duration: 400.ms, delay: 200.ms)
                   .slideY(begin: 0.1, end: 0),
               const SizedBox(height: 12),
@@ -403,14 +440,34 @@ class _HomeScreenState extends State<HomeScreen> {
                 (ctx, i) {
                   if (_meta == null) return const SizedBox.shrink();
                   final cats = [
-                    _CatData('Images', Icons.image_rounded, _meta!.categories['images'] ?? CategoryStat(count: 0, sizeMb: 0),
-                        const LinearGradient(colors: [Color(0xFF6C63FF), Color(0xFF3B82F6)])),
-                    _CatData('Videos', Icons.video_library_rounded, _meta!.categories['videos'] ?? CategoryStat(count: 0, sizeMb: 0),
-                        const LinearGradient(colors: [Color(0xFFEC4899), Color(0xFFA855F7)])),
-                    _CatData('Documents', Icons.description_rounded, _meta!.categories['docs'] ?? CategoryStat(count: 0, sizeMb: 0),
-                        const LinearGradient(colors: [Color(0xFFF59E0B), Color(0xFFEF4444)])),
-                    _CatData('Others', Icons.folder_rounded, _meta!.categories['others'] ?? CategoryStat(count: 0, sizeMb: 0),
-                        const LinearGradient(colors: [Color(0xFF10B981), Color(0xFF0088CC)])),
+                    _CatData(
+                        'Images',
+                        Icons.image_rounded,
+                        _meta!.categories['images'] ??
+                            CategoryStat(count: 0, sizeMb: 0),
+                        const LinearGradient(
+                            colors: [Color(0xFF6C63FF), Color(0xFF3B82F6)])),
+                    _CatData(
+                        'Videos',
+                        Icons.video_library_rounded,
+                        _meta!.categories['videos'] ??
+                            CategoryStat(count: 0, sizeMb: 0),
+                        const LinearGradient(
+                            colors: [Color(0xFFEC4899), Color(0xFFA855F7)])),
+                    _CatData(
+                        'Documents',
+                        Icons.description_rounded,
+                        _meta!.categories['docs'] ??
+                            CategoryStat(count: 0, sizeMb: 0),
+                        const LinearGradient(
+                            colors: [Color(0xFFF59E0B), Color(0xFFEF4444)])),
+                    _CatData(
+                        'Others',
+                        Icons.folder_rounded,
+                        _meta!.categories['others'] ??
+                            CategoryStat(count: 0, sizeMb: 0),
+                        const LinearGradient(
+                            colors: [Color(0xFF10B981), Color(0xFF0088CC)])),
                   ];
                   return _CategoryCard(data: cats[i])
                       .animate()
@@ -420,7 +477,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 childCount: _meta == null ? 0 : 4,
               ),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2, mainAxisSpacing: 12, crossAxisSpacing: 12,
+                crossAxisCount: 2,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
                 childAspectRatio: 1.6,
               ),
             ),
@@ -429,19 +488,28 @@ class _HomeScreenState extends State<HomeScreen> {
           // Recent files
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
-            sliver: SliverList(delegate: SliverChildListDelegate([
+            sliver: SliverList(
+                    delegate: SliverChildListDelegate([
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Text('Recent Files', style: Theme.of(context).textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700)),
+                Text('Recent Files',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700)),
                 TextButton(
-                  onPressed: () => Navigator.of(context).pushNamed(AppRouter.browser),
-                  child: Text('View All', style: TextStyle(color: AppTheme.primary,
-                      fontWeight: FontWeight.w600, fontSize: 13)),
+                  onPressed: () =>
+                      Navigator.of(context).pushNamed(AppRouter.browser),
+                  child: Text('View All',
+                      style: TextStyle(
+                          color: AppTheme.primary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13)),
                 ),
               ]),
               const SizedBox(height: 8),
               _recentFilesCard(),
-            ])).animate()
+            ]))
+                .animate()
                 .fadeIn(duration: 400.ms, delay: 300.ms)
                 .slideY(begin: 0.1, end: 0),
           ),
@@ -458,13 +526,15 @@ class _HomeScreenState extends State<HomeScreen> {
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             colors: [AppTheme.primary, Color(0xFF8B5CF6), Color(0xFFA78BFA)],
-            begin: Alignment.topLeft, end: Alignment.bottomRight,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
-              color: AppTheme.primary.withAlpha(90),
-              blurRadius: 20, offset: const Offset(0, 8)),
+                color: AppTheme.primary.withAlpha(90),
+                blurRadius: 20,
+                offset: const Offset(0, 8)),
           ],
         ),
         child: Stack(
@@ -491,29 +561,40 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             Row(children: [
               Container(
-                width: 52, height: 52,
+                width: 52,
+                height: 52,
                 decoration: BoxDecoration(
                   color: Colors.white.withAlpha(35),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: const Icon(Icons.cloud_upload_rounded, color: Colors.white, size: 28),
+                child: const Icon(Icons.cloud_upload_rounded,
+                    color: Colors.white, size: 28),
               ),
               const SizedBox(width: 16),
-              Expanded(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Upload a File',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16)),
-                const SizedBox(height: 3),
-                Text('Videos, images, docs — unlimited storage',
-                    style: TextStyle(color: Colors.white.withAlpha(200), fontSize: 12.5)),
-              ])),
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    const Text('Upload a File',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16)),
+                    const SizedBox(height: 3),
+                    Text('Videos, images, docs — unlimited storage',
+                        style: TextStyle(
+                            color: Colors.white.withAlpha(200),
+                            fontSize: 12.5)),
+                  ])),
               Container(
-                width: 36, height: 36,
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
                   color: Colors.white.withAlpha(25),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18),
+                child: const Icon(Icons.arrow_forward_rounded,
+                    color: Colors.white, size: 18),
               ),
             ]),
           ],
@@ -532,7 +613,8 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             const SizedBox(
-              width: 18, height: 18,
+              width: 18,
+              height: 18,
               child: CircularProgressIndicator(
                 strokeWidth: 2.5,
                 valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primary),
@@ -546,7 +628,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             Text('${(state.progress * 100).toStringAsFixed(0)}%',
                 style: const TextStyle(
-                    color: AppTheme.primary, fontWeight: FontWeight.w700, fontSize: 14)),
+                    color: AppTheme.primary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14)),
           ]),
           const SizedBox(height: 12),
           ClipRRect(
@@ -554,7 +638,8 @@ class _HomeScreenState extends State<HomeScreen> {
             child: LinearProgressIndicator(
               value: state.progress,
               minHeight: 6,
-              backgroundColor: isDark ? const Color(0xFF2A2A45) : const Color(0xFFE8E4FF),
+              backgroundColor:
+                  isDark ? const Color(0xFF2A2A45) : const Color(0xFFE8E4FF),
               valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
             ),
           ),
@@ -565,37 +650,59 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _statRow() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final hive = ServiceLocator.instance.isInitialized ? ServiceLocator.instance.hive : null;
-    final div = Container(width: 1, height: 36,
+    final hive = ServiceLocator.instance.isInitialized
+        ? ServiceLocator.instance.hive
+        : null;
+    final div = Container(
+        width: 1,
+        height: 36,
         color: isDark ? const Color(0xFF2A2A45) : const Color(0xFFE0DFFF));
     return Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-      _statPill(Icons.insert_drive_file_rounded, '${hive?.totalFiles ?? 0}', 'Files', AppTheme.primary),
+      _statPill(Icons.insert_drive_file_rounded, '${hive?.totalFiles ?? 0}',
+          'Files', AppTheme.primary),
       div,
-      _statPill(Icons.cloud_done_outlined, _formatSize(_meta?.storageUsedMb ?? 0), 'Used', AppTheme.secondary),
+      _statPill(Icons.cloud_done_outlined,
+          _formatSize(_meta?.storageUsedMb ?? 0), 'Used', AppTheme.secondary),
       div,
-      _statPill(Icons.all_inclusive_rounded, '∞', 'Limit', const Color(0xFF10B981)),
+      _statPill(
+          Icons.all_inclusive_rounded, '∞', 'Limit', const Color(0xFF10B981)),
     ]);
   }
 
-  Widget _statPill(IconData icon, String val, String sub, Color color) => Column(
-    children: [
-      Icon(icon, color: color, size: 18),
-      const SizedBox(height: 4),
-      Text(val, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-      Text(sub, style: Theme.of(context).textTheme.bodySmall),
-    ],
-  );
+  Widget _statPill(IconData icon, String val, String sub, Color color) =>
+      Column(
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(height: 4),
+          Text(val,
+              style:
+                  const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+          Text(sub, style: Theme.of(context).textTheme.bodySmall),
+        ],
+      );
 
   Widget _categoryGrid({required int crossAxisCount}) {
     if (_meta == null) return const SizedBox.shrink();
     final cats = [
-      _CatData('Images', Icons.image_rounded, _meta!.categories['images'] ?? CategoryStat(count: 0, sizeMb: 0),
+      _CatData(
+          'Images',
+          Icons.image_rounded,
+          _meta!.categories['images'] ?? CategoryStat(count: 0, sizeMb: 0),
           const LinearGradient(colors: [Color(0xFF6C63FF), Color(0xFF3B82F6)])),
-      _CatData('Videos', Icons.video_library_rounded, _meta!.categories['videos'] ?? CategoryStat(count: 0, sizeMb: 0),
+      _CatData(
+          'Videos',
+          Icons.video_library_rounded,
+          _meta!.categories['videos'] ?? CategoryStat(count: 0, sizeMb: 0),
           const LinearGradient(colors: [Color(0xFFEC4899), Color(0xFFA855F7)])),
-      _CatData('Documents', Icons.description_rounded, _meta!.categories['docs'] ?? CategoryStat(count: 0, sizeMb: 0),
+      _CatData(
+          'Documents',
+          Icons.description_rounded,
+          _meta!.categories['docs'] ?? CategoryStat(count: 0, sizeMb: 0),
           const LinearGradient(colors: [Color(0xFFF59E0B), Color(0xFFEF4444)])),
-      _CatData('Others', Icons.folder_rounded, _meta!.categories['others'] ?? CategoryStat(count: 0, sizeMb: 0),
+      _CatData(
+          'Others',
+          Icons.folder_rounded,
+          _meta!.categories['others'] ?? CategoryStat(count: 0, sizeMb: 0),
           const LinearGradient(colors: [Color(0xFF10B981), Color(0xFF0088CC)])),
     ];
     return GridView.count(
@@ -660,12 +767,14 @@ class _HomeScreenState extends State<HomeScreen> {
             Row(
               children: [
                 Container(
-                  width: 44, height: 44,
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
                     color: AppTheme.primary.withAlpha(25),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.file_present_rounded, color: AppTheme.primary, size: 24),
+                  child: const Icon(Icons.file_present_rounded,
+                      color: AppTheme.primary, size: 24),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -677,7 +786,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis),
                       const SizedBox(height: 4),
-                      Text(file.formattedSize, style: Theme.of(context).textTheme.bodySmall),
+                      Text(file.formattedSize,
+                          style: Theme.of(context).textTheme.bodySmall),
                     ],
                   ),
                 ),
@@ -687,8 +797,10 @@ class _HomeScreenState extends State<HomeScreen> {
             const Divider(),
             const SizedBox(height: 12),
             ListTile(
-              leading: const Icon(Icons.download_rounded, color: AppTheme.success),
-              title: const Text('Download Directly', style: TextStyle(fontWeight: FontWeight.w600)),
+              leading:
+                  const Icon(Icons.download_rounded, color: AppTheme.success),
+              title: const Text('Download Directly',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
               subtitle: const Text('Download and open the file immediately'),
               onTap: () {
                 Navigator.pop(ctx);
@@ -696,8 +808,10 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.downloading_rounded, color: AppTheme.primary),
-              title: const Text('Download in Background', style: TextStyle(fontWeight: FontWeight.w600)),
+              leading: const Icon(Icons.downloading_rounded,
+                  color: AppTheme.primary),
+              title: const Text('Download in Background',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
               subtitle: const Text('Add to queue and download in background'),
               onTap: () {
                 Navigator.pop(ctx);
@@ -721,9 +835,10 @@ class _HomeScreenState extends State<HomeScreen> {
       _showProgressDialog(file.name, notifier, () => dialogOpen = false);
 
       try {
-        final bytes = await download.downloadFile(
-          file, (p, s) { notifier.value = (progress: p, status: s); });
-        
+        final bytes = await download.downloadFile(file, (p, s) {
+          notifier.value = (progress: p, status: s);
+        });
+
         if (dialogOpen && mounted) {
           Navigator.pop(context);
           dialogOpen = false;
@@ -745,24 +860,26 @@ class _HomeScreenState extends State<HomeScreen> {
       final notifier = ValueNotifier<({double progress, String status})>(
           (progress: 0.0, status: 'Starting…'));
       var dialogOpen = true;
-      
+
       _showProgressDialog(file.name, notifier, () => dialogOpen = false);
 
       try {
-        final bytes = await download.downloadFile(
-          file, (p, s) { notifier.value = (progress: p, status: s); });
-        
+        final bytes = await download.downloadFile(file, (p, s) {
+          notifier.value = (progress: p, status: s);
+        });
+
         notifier.value = (progress: 0.95, status: 'Saving file…');
-        
+
         final saveResult = await download.saveAndOpen(bytes, file.name);
-        
+
         if (dialogOpen && mounted) {
           Navigator.pop(context);
           dialogOpen = false;
         }
 
         if (saveResult.success) {
-          await ServiceLocator.instance.downloadQueue.addCompletedJob(file, saveResult.savedPath);
+          await ServiceLocator.instance.downloadQueue
+              .addCompletedJob(file, saveResult.savedPath);
           _snack('✅ Saved to downloads: ${file.name}', success: true);
         } else {
           _snack('❌ Save failed: ${saveResult.message}');
@@ -782,9 +899,8 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (ctx) => AlertDialog(
           title: const Text('Download Large File'),
           content: Text(
-            '"${file.name}" is a large file (${file.formattedSize}). '
-            'Would you like to add it to the background downloads queue?'
-          ),
+              '"${file.name}" is a large file (${file.formattedSize}). '
+              'Would you like to add it to the background downloads queue?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -794,9 +910,11 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: () => Navigator.pop(ctx, true),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primary,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
-              child: const Text('Download in Background', style: TextStyle(color: Colors.white)),
+              child: const Text('Download in Background',
+                  style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
@@ -833,16 +951,21 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _showProgressDialog(String name, ValueNotifier<({double progress, String status})> notifier, VoidCallback onClosed) {
+  void _showProgressDialog(
+      String name,
+      ValueNotifier<({double progress, String status})> notifier,
+      VoidCallback onClosed) {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) => ValueListenableBuilder(
         valueListenable: notifier,
         builder: (context, state, __) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Text(name,
-              maxLines: 1, overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 14)),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             ClipRRect(
@@ -850,7 +973,8 @@ class _HomeScreenState extends State<HomeScreen> {
               child: LinearProgressIndicator(
                 value: state.progress == 0 ? null : state.progress,
                 minHeight: 6,
-                valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
+                valueColor:
+                    const AlwaysStoppedAnimation<Color>(AppTheme.primary),
               ),
             ),
             const SizedBox(height: 12),
@@ -858,7 +982,8 @@ class _HomeScreenState extends State<HomeScreen> {
             if (state.progress > 0) ...[
               const SizedBox(height: 4),
               Text('${(state.progress * 100).toStringAsFixed(0)}%',
-                  style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w700)),
+                  style: const TextStyle(
+                      color: AppTheme.primary, fontWeight: FontWeight.w700)),
             ],
           ]),
         ),
@@ -867,63 +992,74 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _emptyState() => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 40),
-    child: Column(children: [
-      Container(
-        width: 88, height: 88,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: LinearGradient(
-            colors: [AppTheme.primary.withAlpha(30), const Color(0xFFA78BFA).withAlpha(30)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: Column(children: [
+          Container(
+            width: 88,
+            height: 88,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [
+                  AppTheme.primary.withAlpha(30),
+                  const Color(0xFFA78BFA).withAlpha(30)
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: const Icon(Icons.cloud_upload_outlined,
+                size: 42, color: AppTheme.primary),
           ),
-        ),
-        child: const Icon(Icons.cloud_upload_outlined, size: 42, color: AppTheme.primary),
-      ),
-      const SizedBox(height: 20),
-      ShaderMask(
-        shaderCallback: (bounds) => const LinearGradient(
-          colors: [AppTheme.primary, Color(0xFFA78BFA)],
-        ).createShader(bounds),
-        child: Text('No files yet',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800, color: Colors.white)),
-      ),
-      const SizedBox(height: 8),
-      Text('Upload your first file to get started',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).textTheme.bodySmall?.color)),
-      const SizedBox(height: 20),
-      SizedBox(
-        height: 44,
-        child: ElevatedButton.icon(
-          onPressed: _pickAndUpload,
-          icon: const Icon(Icons.add_rounded, size: 20),
-          label: const Text('Upload File', style: TextStyle(fontWeight: FontWeight.w600)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppTheme.primary,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 24),
+          const SizedBox(height: 20),
+          ShaderMask(
+            shaderCallback: (bounds) => const LinearGradient(
+              colors: [AppTheme.primary, Color(0xFFA78BFA)],
+            ).createShader(bounds),
+            child: Text('No files yet',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800, color: Colors.white)),
           ),
-        ),
-      ),
-    ]),
-  );
+          const SizedBox(height: 8),
+          Text('Upload your first file to get started',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).textTheme.bodySmall?.color)),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 44,
+            child: ElevatedButton.icon(
+              onPressed: _pickAndUpload,
+              icon: const Icon(Icons.add_rounded, size: 20),
+              label: const Text('Upload File',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+              ),
+            ),
+          ),
+        ]),
+      );
 
-  FloatingActionButton _buildFab(bool isUploading) => FloatingActionButton.extended(
-    onPressed: isUploading ? null : _pickAndUpload,
-    icon: const Icon(Icons.cloud_upload_rounded),
-    label: const Text('Upload', style: TextStyle(fontWeight: FontWeight.w600)),
-    backgroundColor: isUploading ? Colors.grey : AppTheme.primary,
-    foregroundColor: Colors.white,
-  );
-
+  FloatingActionButton _buildFab(bool isUploading) =>
+      FloatingActionButton.extended(
+        onPressed: isUploading ? null : _pickAndUpload,
+        icon: const Icon(Icons.cloud_upload_rounded),
+        label:
+            const Text('Upload', style: TextStyle(fontWeight: FontWeight.w600)),
+        backgroundColor: isUploading ? Colors.grey : AppTheme.primary,
+        foregroundColor: Colors.white,
+      );
 
   // ── Helpers ───────────────────────────────────────────────────────────────
-  Widget _glassCard({required Widget child, EdgeInsetsGeometry? padding, Color? borderColor}) {
+  Widget _glassCard(
+      {required Widget child,
+      EdgeInsetsGeometry? padding,
+      Color? borderColor}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       width: double.infinity,
@@ -977,7 +1113,8 @@ class _CategoryCard extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            width: 38, height: 38,
+            width: 38,
+            height: 38,
             decoration: BoxDecoration(
               gradient: data.gradient,
               borderRadius: BorderRadius.circular(10),
@@ -1007,7 +1144,8 @@ class _RecentTile extends StatelessWidget {
   final dynamic file;
   final bool isLast;
   final VoidCallback onTap;
-  const _RecentTile({required this.file, required this.isLast, required this.onTap});
+  const _RecentTile(
+      {required this.file, required this.isLast, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1015,9 +1153,11 @@ class _RecentTile extends StatelessWidget {
     return Column(
       children: [
         ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           leading: Container(
-            width: 44, height: 44,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
               color: _color().withAlpha(25),
               borderRadius: BorderRadius.circular(12),
@@ -1035,8 +1175,12 @@ class _RecentTile extends StatelessWidget {
           onTap: onTap,
         ),
         if (!isLast)
-          Divider(indent: 74, endIndent: 16, height: 1,
-              color: isDark ? const Color(0xFF2A2A45) : const Color(0xFFE8E4FF)),
+          Divider(
+              indent: 74,
+              endIndent: 16,
+              height: 1,
+              color:
+                  isDark ? const Color(0xFF2A2A45) : const Color(0xFFE8E4FF)),
       ],
     );
   }

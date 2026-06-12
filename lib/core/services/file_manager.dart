@@ -159,7 +159,9 @@ class FileManagerService {
         record.metadataFileId,
       );
     } catch (e) {
-      AppLogger.w('Could not fetch metadata for $fileId — deleting from cache only. Error: $e', tag: 'FileManager');
+      AppLogger.w(
+          'Could not fetch metadata for $fileId — deleting from cache only. Error: $e',
+          tag: 'FileManager');
       // If we can't fetch metadata, still clean up local cache
       await _hive.deleteFile(fileId);
       return;

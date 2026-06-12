@@ -27,11 +27,12 @@ class DownloadQueueService {
   /// ValueNotifier / ValueListenable to expose the list of jobs
   ValueListenable<Box<DownloadJob>> get listenable => _box.listenable();
 
-  List<DownloadJob> get allJobs => _box.values.toList()
-    ..sort((a, b) => b.addedAt.compareTo(a.addedAt));
+  List<DownloadJob> get allJobs =>
+      _box.values.toList()..sort((a, b) => b.addedAt.compareTo(a.addedAt));
 
-  List<DownloadJob> get activeJobs =>
-      _box.values.where((j) => j.status == 'queued' || j.status == 'downloading').toList();
+  List<DownloadJob> get activeJobs => _box.values
+      .where((j) => j.status == 'queued' || j.status == 'downloading')
+      .toList();
 
   List<DownloadJob> get completedJobs =>
       _box.values.where((j) => j.status == 'completed').toList();
@@ -45,11 +46,13 @@ class DownloadQueueService {
 
     if (existingJob != null) {
       if (existingJob.status == 'completed') {
-        AppLogger.i('File already downloaded: ${file.name}', tag: 'DownloadQueue');
+        AppLogger.i('File already downloaded: ${file.name}',
+            tag: 'DownloadQueue');
         return;
       }
       // If already queued or downloading, do nothing
-      if (existingJob.status == 'queued' || existingJob.status == 'downloading') {
+      if (existingJob.status == 'queued' ||
+          existingJob.status == 'downloading') {
         return;
       }
       // Resume/retry failed or cancelled job
@@ -173,7 +176,8 @@ class DownloadQueueService {
     }
 
     try {
-      final bytes = await _downloadService.downloadFile(fileRecord, (progress, status) async {
+      final bytes = await _downloadService.downloadFile(fileRecord,
+          (progress, status) async {
         if (isCancelled(fileId)) {
           throw Exception('Cancelled');
         }

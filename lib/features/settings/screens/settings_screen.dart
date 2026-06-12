@@ -38,7 +38,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 60),
-        children: isMobile ? _buildMobileContent(isDark) : _buildDesktopContent(isDark),
+        children: isMobile
+            ? _buildMobileContent(isDark)
+            : _buildDesktopContent(isDark),
       ),
     );
   }
@@ -48,39 +50,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return [
       _SectionHeader('About'),
       _GlassCard(children: [
-        _InfoTile(Icons.cloud_done_rounded, AppTheme.primary,
-            'TelStorage', 'Telegram-powered unlimited cloud storage'),
+        _InfoTile(Icons.cloud_done_rounded, AppTheme.primary, 'TelStorage',
+            'Telegram-powered unlimited cloud storage'),
         _Divider(isDark),
         _InfoTile(Icons.all_inclusive_rounded, AppTheme.success,
             'Storage Limit', 'Unlimited — no caps, ever'),
         _Divider(isDark),
-        _InfoTile(Icons.lock_rounded, AppTheme.secondary,
-            'Security', 'Files live in your private Telegram channel'),
+        _InfoTile(Icons.lock_rounded, AppTheme.secondary, 'Security',
+            'Files live in your private Telegram channel'),
       ]),
       const SizedBox(height: 24),
-
       _SectionHeader('Storage'),
       _GlassCard(children: [
         _ActionTile(
-          Icons.sync_rounded, const Color(0xFF6C63FF),
-          'Sync Files', 'Pull latest file list from Telegram',
+          Icons.sync_rounded,
+          const Color(0xFF6C63FF),
+          'Sync Files',
+          'Pull latest file list from Telegram',
           _syncing ? null : () => _syncFiles(context),
           trailing: _syncing
               ? const SizedBox(
-                  width: 20, height: 20,
+                  width: 20,
+                  height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : null,
         ),
         _Divider(isDark),
         _ActionTile(
-          Icons.folder_open_rounded, const Color(0xFFF59E0B),
-          'Browse Files', 'Open the file browser',
+          Icons.folder_open_rounded,
+          const Color(0xFFF59E0B),
+          'Browse Files',
+          'Open the file browser',
           () => Navigator.of(context).pushNamed(AppRouter.browser),
         ),
       ]),
       const SizedBox(height: 24),
-
       _SectionHeader('Appearance'),
       _GlassCard(children: [
         _ActionTile(
@@ -97,14 +102,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ]),
       const SizedBox(height: 24),
-
       _SectionHeader('Account'),
       _GlassCard(
         borderColor: AppTheme.error.withAlpha(80),
         children: [
           _ActionTile(
-            Icons.logout_rounded, AppTheme.error,
-            'Log Out', 'Your files remain safely on Telegram',
+            Icons.logout_rounded,
+            AppTheme.error,
+            'Log Out',
+            'Your files remain safely on Telegram',
             () => _logout(),
             titleColor: AppTheme.error,
           ),
@@ -128,7 +134,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return child
           .animate()
           .fadeIn(delay: delay, duration: 350.ms, curve: Curves.easeOut)
-          .slideY(begin: 0.08, end: 0, delay: delay, duration: 350.ms, curve: Curves.easeOut);
+          .slideY(
+              begin: 0.08,
+              end: 0,
+              delay: delay,
+              duration: 350.ms,
+              curve: Curves.easeOut);
     }
 
     return [
@@ -140,20 +151,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
       animated(_SectionHeader('Storage')),
       animated(_GlassCard(children: [
         _ActionTile(
-          Icons.sync_rounded, const Color(0xFF6C63FF),
-          'Sync Files', 'Pull latest file list from Telegram',
+          Icons.sync_rounded,
+          const Color(0xFF6C63FF),
+          'Sync Files',
+          'Pull latest file list from Telegram',
           _syncing ? null : () => _syncFiles(context),
           trailing: _syncing
               ? const SizedBox(
-                  width: 20, height: 20,
+                  width: 20,
+                  height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : null,
         ),
         _Divider(isDark),
         _ActionTile(
-          Icons.folder_open_rounded, const Color(0xFFF59E0B),
-          'Browse Files', 'Open the file browser',
+          Icons.folder_open_rounded,
+          const Color(0xFFF59E0B),
+          'Browse Files',
+          'Open the file browser',
           () {
             final shell = MobileShell.of(context);
             if (shell != null) {
@@ -172,8 +188,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _InfoTile(Icons.all_inclusive_rounded, AppTheme.success,
             'Storage Limit', 'Unlimited — no caps, ever'),
         _Divider(isDark),
-        _InfoTile(Icons.lock_rounded, AppTheme.secondary,
-            'Security', 'Files live in your private Telegram channel'),
+        _InfoTile(Icons.lock_rounded, AppTheme.secondary, 'Security',
+            'Files live in your private Telegram channel'),
       ])),
       const SizedBox(height: 24),
 
@@ -201,8 +217,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         borderColor: AppTheme.error.withAlpha(80),
         children: [
           _ActionTile(
-            Icons.logout_rounded, AppTheme.error,
-            'Log Out', 'Your files remain safely on Telegram',
+            Icons.logout_rounded,
+            AppTheme.error,
+            'Log Out',
+            'Your files remain safely on Telegram',
             () => _logout(),
             titleColor: AppTheme.error,
           ),
@@ -298,7 +316,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     setState(() => _syncing = true);
     try {
-      final result = await ServiceLocator.instance.syncService.syncFromTelegram();
+      final result =
+          await ServiceLocator.instance.syncService.syncFromTelegram();
       if (!mounted) return;
       final msg = result.hasChanges
           ? 'Sync complete: +${result.added} added, −${result.removed} removed'
@@ -333,13 +352,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         content: const Text(
             'Your files are safely stored on Telegram. You can log back in anytime.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.error,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
             ),
             child: const Text('Log out'),
           ),
@@ -361,12 +383,14 @@ class _SectionHeader extends StatelessWidget {
   const _SectionHeader(this.text);
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(left: 4, bottom: 10),
-    child: Text(text.toUpperCase(),
-        style: const TextStyle(
-          color: AppTheme.primary,
-          fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.2)),
-  );
+        padding: const EdgeInsets.only(left: 4, bottom: 10),
+        child: Text(text.toUpperCase(),
+            style: const TextStyle(
+                color: AppTheme.primary,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.2)),
+      );
 }
 
 class _GlassCard extends StatelessWidget {
@@ -394,16 +418,18 @@ class _Divider extends StatelessWidget {
   const _Divider(this.isDark);
   @override
   Widget build(BuildContext context) => Divider(
-      indent: 56, height: 1,
+      indent: 56,
+      height: 1,
       color: isDark ? const Color(0xFF2A2A45) : const Color(0xFFE8E4FF));
 }
 
 Widget _iconBox(IconData icon, Color color) => Container(
-  width: 36, height: 36,
-  decoration: BoxDecoration(
-      color: color.withAlpha(25), borderRadius: BorderRadius.circular(10)),
-  child: Icon(icon, color: color, size: 20),
-);
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+          color: color.withAlpha(25), borderRadius: BorderRadius.circular(10)),
+      child: Icon(icon, color: color, size: 20),
+    );
 
 class _InfoTile extends StatelessWidget {
   final IconData icon;
@@ -412,10 +438,10 @@ class _InfoTile extends StatelessWidget {
   const _InfoTile(this.icon, this.color, this.title, this.subtitle);
   @override
   Widget build(BuildContext context) => ListTile(
-    leading: _iconBox(icon, color),
-    title: Text(title, style: Theme.of(context).textTheme.labelLarge),
-    subtitle: Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-  );
+        leading: _iconBox(icon, color),
+        title: Text(title, style: Theme.of(context).textTheme.labelLarge),
+        subtitle: Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+      );
 }
 
 class _ActionTile extends StatelessWidget {
@@ -425,16 +451,19 @@ class _ActionTile extends StatelessWidget {
   final VoidCallback? onTap;
   final Color? titleColor;
   final Widget? trailing;
-  const _ActionTile(this.icon, this.color, this.title, this.subtitle,
-      this.onTap, {this.titleColor, this.trailing});
+  const _ActionTile(
+      this.icon, this.color, this.title, this.subtitle, this.onTap,
+      {this.titleColor, this.trailing});
   @override
   Widget build(BuildContext context) => ListTile(
-    leading: _iconBox(icon, color),
-    title: Text(title,
-        style: Theme.of(context).textTheme.labelLarge
-            ?.copyWith(color: titleColor)),
-    subtitle: Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-    trailing: trailing ?? const Icon(Icons.chevron_right_rounded, size: 20),
-    onTap: onTap,
-  );
+        leading: _iconBox(icon, color),
+        title: Text(title,
+            style: Theme.of(context)
+                .textTheme
+                .labelLarge
+                ?.copyWith(color: titleColor)),
+        subtitle: Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+        trailing: trailing ?? const Icon(Icons.chevron_right_rounded, size: 20),
+        onTap: onTap,
+      );
 }

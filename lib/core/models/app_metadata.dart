@@ -1,5 +1,3 @@
-
-
 /// Represents the pinned .metadata.json file on Telegram
 /// This is the source of truth for storage stats and folder tree
 class AppMetadata {
@@ -60,7 +58,8 @@ class AppMetadata {
       'metadata_message_id': metadataMessageId,
       'folders': folders.map((f) => f.toJson()).toList(),
       'files': files.map((f) => f.toJson()).toList(),
-      'categories': categories.map((key, value) => MapEntry(key, value.toJson())),
+      'categories':
+          categories.map((key, value) => MapEntry(key, value.toJson())),
       'last_synced': lastSynced.toIso8601String(),
     };
   }
@@ -70,7 +69,7 @@ class AppMetadata {
 /// Allows rebuilding the local Hive cache from Telegram on first install
 /// or after clearing app data.
 class FileRef {
-  final String fileId;     // our internal UUID
+  final String fileId; // our internal UUID
   final String metaFileId; // Telegram file_id of the per-file .json (permanent)
   final String name;
   final String? folderId;

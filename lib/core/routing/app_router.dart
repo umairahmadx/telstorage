@@ -8,13 +8,13 @@ import '../../shared/widgets/mobile_shell.dart';
 import '../services/auth_service.dart';
 
 class AppRouter {
-  static const String splash    = '/';
-  static const String login     = '/login';
-  static const String register  = '/register';
-  static const String home      = '/home';
-  static const String browser   = '/browser';
+  static const String splash = '/';
+  static const String login = '/login';
+  static const String register = '/register';
+  static const String home = '/home';
+  static const String browser = '/browser';
   static const String downloads = '/downloads';
-  static const String settings  = '/settings';
+  static const String settings = '/settings';
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -54,7 +54,8 @@ class AppRouter {
         const begin = Offset(0.08, 0.0);
         const end = Offset.zero;
         const curve = Curves.easeOutCubic;
-        final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+        final tween =
+            Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
         return SlideTransition(
           position: animation.drive(tween),
           child: FadeTransition(
@@ -74,7 +75,8 @@ class FallbackRedirectorScreen extends StatefulWidget {
   const FallbackRedirectorScreen({super.key});
 
   @override
-  State<FallbackRedirectorScreen> createState() => _FallbackRedirectorScreenState();
+  State<FallbackRedirectorScreen> createState() =>
+      _FallbackRedirectorScreenState();
 }
 
 class _FallbackRedirectorScreenState extends State<FallbackRedirectorScreen> {

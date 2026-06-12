@@ -69,7 +69,9 @@ class _StorageRingState extends State<StorageRing>
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    _isUnlimited ? '∞' : '${(_percent * 100).toStringAsFixed(0)}%',
+                    _isUnlimited
+                        ? '∞'
+                        : '${(_percent * 100).toStringAsFixed(0)}%',
                     style: Theme.of(context).textTheme.displayLarge?.copyWith(
                           fontSize: _isUnlimited ? 44 : 36,
                           fontWeight: FontWeight.w800,
@@ -85,7 +87,9 @@ class _StorageRingState extends State<StorageRing>
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   Text(
-                    _isUnlimited ? 'Storage' : 'of ${_formatSize(widget.limitMb)}',
+                    _isUnlimited
+                        ? 'Storage'
+                        : 'of ${_formatSize(widget.limitMb)}',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
@@ -109,7 +113,8 @@ class _RingPainter extends CustomPainter {
   final bool isDark;
   final bool isUnlimited;
 
-  _RingPainter({required this.percent, required this.isDark, required this.isUnlimited});
+  _RingPainter(
+      {required this.percent, required this.isDark, required this.isUnlimited});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -119,9 +124,7 @@ class _RingPainter extends CustomPainter {
 
     // Track
     final trackPaint = Paint()
-      ..color = isDark
-          ? const Color(0xFF2A2A45)
-          : const Color(0xFFE8E4FF)
+      ..color = isDark ? const Color(0xFF2A2A45) : const Color(0xFFE8E4FF)
       ..style = PaintingStyle.stroke
       ..strokeWidth = sw
       ..strokeCap = StrokeCap.round;

@@ -15,9 +15,11 @@ class NotificationService {
   Future<void> init() async {
     if (_initialized) return;
 
-    AppLogger.i('Initializing NotificationService...', tag: 'NotificationService');
+    AppLogger.i('Initializing NotificationService...',
+        tag: 'NotificationService');
 
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,
@@ -33,13 +35,16 @@ class NotificationService {
       await _notificationsPlugin.initialize(
         settings: initSettings,
         onDidReceiveNotificationResponse: (details) {
-          AppLogger.d('Notification tapped: ${details.payload}', tag: 'NotificationService');
+          AppLogger.d('Notification tapped: ${details.payload}',
+              tag: 'NotificationService');
         },
       );
       _initialized = true;
-      AppLogger.i('NotificationService initialized successfully', tag: 'NotificationService');
+      AppLogger.i('NotificationService initialized successfully',
+          tag: 'NotificationService');
     } catch (e) {
-      AppLogger.e('Failed to initialize NotificationService: $e', tag: 'NotificationService', error: e);
+      AppLogger.e('Failed to initialize NotificationService: $e',
+          tag: 'NotificationService', error: e);
     }
   }
 
@@ -48,16 +53,16 @@ class NotificationService {
   Future<void> requestPermissions() async {
     try {
       // Android 13+ permission request
-      final androidImplementation = _notificationsPlugin
-          .resolvePlatformSpecificImplementation<
+      final androidImplementation =
+          _notificationsPlugin.resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>();
       if (androidImplementation != null) {
         await androidImplementation.requestNotificationsPermission();
       }
 
       // iOS permission request
-      final iosImplementation = _notificationsPlugin
-          .resolvePlatformSpecificImplementation<
+      final iosImplementation =
+          _notificationsPlugin.resolvePlatformSpecificImplementation<
               IOSFlutterLocalNotificationsPlugin>();
       if (iosImplementation != null) {
         await iosImplementation.requestPermissions(
@@ -67,7 +72,8 @@ class NotificationService {
         );
       }
     } catch (e) {
-      AppLogger.w('Failed to request notification permissions: $e', tag: 'NotificationService');
+      AppLogger.w('Failed to request notification permissions: $e',
+          tag: 'NotificationService');
     }
   }
 
@@ -107,7 +113,8 @@ class NotificationService {
         payload: payload,
       );
     } catch (e) {
-      AppLogger.e('Failed to show notification: $e', tag: 'NotificationService', error: e);
+      AppLogger.e('Failed to show notification: $e',
+          tag: 'NotificationService', error: e);
     }
   }
 }

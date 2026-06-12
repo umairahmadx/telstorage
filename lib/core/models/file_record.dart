@@ -18,7 +18,8 @@ class FileRecord extends HiveObject {
   int metadataMessageId; // Telegram message_id of the .json (for deletion)
 
   @HiveField(9)
-  String? metadataFileId; // Telegram file_id of the .json (permanent — use for download)
+  String?
+      metadataFileId; // Telegram file_id of the .json (permanent — use for download)
 
   @HiveField(4)
   double sizeMb;

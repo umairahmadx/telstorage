@@ -8,7 +8,8 @@ class ThemeService {
 
   static const String _themeKey = 'user_theme_mode';
   late SharedPreferences _prefs;
-  final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(ThemeMode.system);
+  final ValueNotifier<ThemeMode> themeModeNotifier =
+      ValueNotifier(ThemeMode.system);
 
   /// Initialize preference loading.
   Future<void> init() async {

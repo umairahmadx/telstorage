@@ -27,7 +27,8 @@ class SaveResult {
   final String? savedPath;
   final String message;
   final bool success;
-  const SaveResult({this.savedPath, required this.message, required this.success});
+  const SaveResult(
+      {this.savedPath, required this.message, required this.success});
 }
 
 /// Handles file download pipeline — non-blocking, works on Web / Android / iOS.
@@ -63,20 +64,22 @@ class DownloadService {
       }
 
       // Step 2: Parse metadata
-      final fileMeta = jsonDecode(utf8.decode(metaBytes)) as Map<String, dynamic>;
-      final isZipped   = fileMeta['is_zipped'] as bool? ?? false;
-      final chunks     = (fileMeta['chunks'] as List)
+      final fileMeta =
+          jsonDecode(utf8.decode(metaBytes)) as Map<String, dynamic>;
+      final isZipped = fileMeta['is_zipped'] as bool? ?? false;
+      final chunks = (fileMeta['chunks'] as List)
           .map((c) => ChunkInfo.fromJson(c as Map<String, dynamic>))
           .toList();
       final expectedHash = fileMeta['sha256'] as String;
 
-      AppLogger.d('${chunks.length} part(s), is_zipped: $isZipped', tag: 'DownloadService');
+      AppLogger.d('${chunks.length} part(s), is_zipped: $isZipped',
+          tag: 'DownloadService');
 
       // Step 3: Download all parts
       final builder = BytesBuilder(copy: false);
       for (var i = 0; i < chunks.length; i++) {
-        final part    = chunks[i];
-        final label   = part.partName ?? 'part ${i + 1}';
+        final part = chunks[i];
+        final label = part.partName ?? 'part ${i + 1}';
         final partPct = i / chunks.length;
 
         onProgress(
@@ -102,7 +105,8 @@ class DownloadService {
       onProgress(0.80, 'Verifying integrity… 0%');
       final actualHash = await _sha256Chunked(
         assembled,
-        (pct) => onProgress(0.80 + pct * 0.12, 'Verifying… ${(pct * 100).toInt()}%'),
+        (pct) =>
+            onProgress(0.80 + pct * 0.12, 'Verifying… ${(pct * 100).toInt()}%'),
       );
 
       Uint8List finalBytes;
@@ -126,7 +130,9 @@ class DownloadService {
       }
 
       onProgress(1.0, 'Download complete!');
-      AppLogger.i('${record.name} — ${(finalBytes.length / 1048576).toStringAsFixed(2)} MB', tag: 'DownloadService');
+      AppLogger.i(
+          '${record.name} — ${(finalBytes.length / 1048576).toStringAsFixed(2)} MB',
+          tag: 'DownloadService');
       return finalBytes;
     } catch (e) {
       AppLogger.e('Download failed: $e', tag: 'DownloadService', error: e);
@@ -177,7 +183,7 @@ class DownloadService {
   ) async {
     const chunkSize = 1024 * 1024;
     final output = AccumulatorSink<Digest>();
-    final input  = sha256.startChunkedConversion(output);
+    final input = sha256.startChunkedConversion(output);
 
     for (var offset = 0; offset < data.length; offset += chunkSize) {
       final end = (offset + chunkSize).clamp(0, data.length);

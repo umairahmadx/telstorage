@@ -3,9 +3,9 @@
 /// For large files (> 45 MB) there are multiple zip parts:
 ///   e.g. video.zip.001, video.zip.002, …
 class ChunkInfo {
-  final int index;       // 1-based
-  final int messageId;   // Telegram message_id (for deletion)
-  final String? fileId;  // Telegram file_id (permanent — use for download)
+  final int index; // 1-based
+  final int messageId; // Telegram message_id (for deletion)
+  final String? fileId; // Telegram file_id (permanent — use for download)
   final double sizeMb;
   final String? partName; // Filename of this part on Telegram channel
 

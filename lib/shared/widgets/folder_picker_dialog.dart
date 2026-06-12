@@ -48,7 +48,8 @@ class _FolderPickerSheet extends StatelessWidget {
           // ── Handle ───────────────────────────────────────────────────────
           const SizedBox(height: 12),
           Container(
-            width: 40, height: 4,
+            width: 40,
+            height: 4,
             decoration: BoxDecoration(
               color: isDark ? Colors.white24 : Colors.black12,
               borderRadius: BorderRadius.circular(2),
@@ -60,7 +61,8 @@ class _FolderPickerSheet extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Row(
               children: [
-                const Icon(Icons.drive_file_move_rounded, color: AppTheme.primary),
+                const Icon(Icons.drive_file_move_rounded,
+                    color: AppTheme.primary),
                 const SizedBox(width: 10),
                 Text(title, style: Theme.of(context).textTheme.titleMedium),
               ],
@@ -81,12 +83,12 @@ class _FolderPickerSheet extends StatelessWidget {
                   onTap: () => Navigator.pop(context, null),
                 ),
                 ...folders.map((f) => _FolderItem(
-                  icon: Icons.folder_rounded,
-                  name: f.name,
-                  color: AppTheme.warning,
-                  isSelected: f.id == currentFolderId,
-                  onTap: () => Navigator.pop(context, f.id),
-                )),
+                      icon: Icons.folder_rounded,
+                      name: f.name,
+                      color: AppTheme.warning,
+                      isSelected: f.id == currentFolderId,
+                      onTap: () => Navigator.pop(context, f.id),
+                    )),
                 if (folders.isEmpty)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
@@ -125,7 +127,8 @@ class _FolderItem extends StatelessWidget {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 24),
       leading: Container(
-        width: 36, height: 36,
+        width: 36,
+        height: 36,
         decoration: BoxDecoration(
           color: color.withAlpha(30),
           borderRadius: BorderRadius.circular(10),
@@ -134,7 +137,8 @@ class _FolderItem extends StatelessWidget {
       ),
       title: Text(name, style: Theme.of(context).textTheme.labelLarge),
       trailing: isSelected
-          ? const Icon(Icons.check_circle_rounded, color: AppTheme.primary, size: 20)
+          ? const Icon(Icons.check_circle_rounded,
+              color: AppTheme.primary, size: 20)
           : null,
       onTap: onTap,
     );

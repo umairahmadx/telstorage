@@ -76,7 +76,8 @@ class _DesktopRail extends StatelessWidget {
                     ),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.cloud_done_rounded, color: Colors.white, size: 22),
+                  child: const Icon(Icons.cloud_done_rounded,
+                      color: Colors.white, size: 22),
                 ),
                 if (isWide) ...[
                   const SizedBox(width: 12),
@@ -97,14 +98,16 @@ class _DesktopRail extends StatelessWidget {
             label: 'Home',
             isSelected: selectedIndex == 0,
             isWide: isWide,
-            onTap: () => Navigator.of(context).pushReplacementNamed(AppRouter.home),
+            onTap: () =>
+                Navigator.of(context).pushReplacementNamed(AppRouter.home),
           ),
           _NavItem(
             icon: Icons.folder_rounded,
             label: 'Files',
             isSelected: selectedIndex == 1,
             isWide: isWide,
-            onTap: () => Navigator.of(context).pushReplacementNamed(AppRouter.browser),
+            onTap: () =>
+                Navigator.of(context).pushReplacementNamed(AppRouter.browser),
           ),
           _NavItem(
             icon: Icons.settings_outlined,
@@ -159,9 +162,7 @@ class _NavItem extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
       child: Material(
-        color: isSelected
-            ? AppTheme.primary.withAlpha(30)
-            : Colors.transparent,
+        color: isSelected ? AppTheme.primary.withAlpha(30) : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -188,7 +189,8 @@ class _NavItem extends StatelessWidget {
                       color: isSelected
                           ? accent
                           : (isDark ? Colors.white70 : Colors.black87),
-                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                      fontWeight:
+                          isSelected ? FontWeight.w700 : FontWeight.w500,
                       fontSize: 14,
                     ),
                   ),

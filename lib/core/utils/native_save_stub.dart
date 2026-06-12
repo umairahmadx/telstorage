@@ -5,11 +5,7 @@ class NativeSaveResult {
   final String? savedPath;
   final String message;
   final bool success;
-  const NativeSaveResult({
-    this.savedPath,
-    required this.message,
-    required this.success,
-  });
+  const NativeSaveResult({this.savedPath, required this.message, required this.success});
 }
 
 Future<NativeSaveResult> saveNative(Uint8List bytes, String filename) =>

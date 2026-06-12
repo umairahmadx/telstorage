@@ -65,9 +65,7 @@ class ServiceLocator {
 
     if (token == null || channelId == null) {
       _initFuture = null;
-      throw Exception(
-        'Bot credentials not found in secure storage. Please log in again.',
-      );
+      throw Exception('Bot credentials not found in secure storage. Please log in again.');
     }
 
     try {
@@ -80,20 +78,14 @@ class ServiceLocator {
       _syncService = SyncService(_metadata, _telegram, _hive);
       _uploadService = UploadService(_telegram, _metadata, _hive);
       _downloadService = DownloadService(_telegram);
-      _downloadQueue = DownloadQueueService(
-        _downloadService,
-        AppConstants.downloadsBox,
-      );
+      _downloadQueue = DownloadQueueService(_downloadService, AppConstants.downloadsBox);
       _fileManager = FileManagerService(_metadata, _telegram, _hive);
 
       await NotificationService.instance.init();
       await NotificationService.instance.requestPermissions();
 
       _initialized = true;
-      AppLogger.i(
-        'ServiceLocator initialized successfully',
-        tag: 'ServiceLocator',
-      );
+      AppLogger.i('ServiceLocator initialized successfully', tag: 'ServiceLocator');
     } catch (e) {
       _initFuture = null;
       rethrow;

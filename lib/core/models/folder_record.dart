@@ -35,6 +35,11 @@ class FolderRecord extends HiveObject {
   }
 
   Folder toFolder() {
-    return Folder(id: id, name: name, parentId: parentId, createdAt: createdAt);
+    return Folder(
+      id: id,
+      name: name,
+      parentId: parentId,
+      createdAt: createdAt,
+    );
   }
 }

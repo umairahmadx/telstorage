@@ -46,9 +46,7 @@ class UploadCubit extends Cubit<UploadState> {
       return;
     }
 
-    emit(
-      UploadInProgress(progress: 0.0, status: 'Preparing...', fileName: name),
-    );
+    emit(UploadInProgress(progress: 0.0, status: 'Preparing...', fileName: name));
     try {
       await ServiceLocator.instance.uploadService.uploadFile(
         bytes,
@@ -56,20 +54,11 @@ class UploadCubit extends Cubit<UploadState> {
         folderId,
         (progress, status) {
           if (!isClosed) {
-            emit(
-              UploadInProgress(
-                progress: progress,
-                status: status,
-                fileName: name,
-              ),
-            );
+            emit(UploadInProgress(progress: progress, status: status, fileName: name));
           }
         },
       );
-      AppLogger.i(
-        'UploadCubit: $name uploaded successfully',
-        tag: 'UploadCubit',
-      );
+      AppLogger.i('UploadCubit: $name uploaded successfully', tag: 'UploadCubit');
       emit(UploadSuccess(name));
     } catch (e) {
       AppLogger.e('UploadCubit: upload failed', tag: 'UploadCubit', error: e);

@@ -46,10 +46,7 @@ class SyncCubit extends Cubit<SyncState> {
           }
         },
       );
-      AppLogger.i(
-        'SyncCubit: sync complete — ${result.added} added, ${result.removed} removed',
-        tag: 'SyncCubit',
-      );
+      AppLogger.i('SyncCubit: sync complete — ${result.added} added, ${result.removed} removed', tag: 'SyncCubit');
       emit(SyncSuccess(result));
     } catch (e) {
       AppLogger.e('SyncCubit: sync failed', tag: 'SyncCubit', error: e);

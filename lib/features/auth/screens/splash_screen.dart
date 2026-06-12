@@ -85,33 +85,36 @@ class _SplashScreenState extends State<SplashScreen>
                   children: [
                     // Logo with gradient container
                     Container(
-                          width: 88,
-                          height: 88,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: isDark
-                                  ? const [AppTheme.primary, Color(0xFFA78BFA)]
-                                  : const [Colors.white24, Colors.white38],
-                            ),
-                            borderRadius: BorderRadius.circular(24),
-                            boxShadow: [
-                              BoxShadow(
-                                color: isDark
-                                    ? AppTheme.primary.withAlpha(80)
-                                    : Colors.black.withAlpha(30),
-                                blurRadius: 28,
-                                offset: const Offset(0, 10),
-                              ),
-                            ],
+                      width: 88,
+                      height: 88,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: isDark
+                              ? const [AppTheme.primary, Color(0xFFA78BFA)]
+                              : const [Colors.white24, Colors.white38],
+                        ),
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: isDark
+                                ? AppTheme.primary.withAlpha(80)
+                                : Colors.black.withAlpha(30),
+                            blurRadius: 28,
+                            offset: const Offset(0, 10),
                           ),
-                          child: Icon(
-                            Icons.cloud_done_rounded,
-                            color: Colors.white,
-                            size: 44,
-                          ),
-                        )
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.cloud_done_rounded,
+                        color: Colors.white,
+                        size: 44,
+                      ),
+                    )
                         .animate()
-                        .fadeIn(duration: 600.ms, curve: Curves.easeOutCubic)
+                        .fadeIn(
+                          duration: 600.ms,
+                          curve: Curves.easeOutCubic,
+                        )
                         .scale(
                           begin: const Offset(0.8, 0.8),
                           end: const Offset(1.0, 1.0),
@@ -122,16 +125,19 @@ class _SplashScreenState extends State<SplashScreen>
 
                     // App name
                     Text(
-                          'TelStorage',
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                            letterSpacing: -0.5,
-                          ),
-                        )
+                      'TelStorage',
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        letterSpacing: -0.5,
+                      ),
+                    )
                         .animate()
-                        .fadeIn(delay: 300.ms, duration: 500.ms)
+                        .fadeIn(
+                          delay: 300.ms,
+                          duration: 500.ms,
+                        )
                         .slideY(
                           begin: 0.3,
                           end: 0,
@@ -143,16 +149,19 @@ class _SplashScreenState extends State<SplashScreen>
 
                     // Subtitle
                     Text(
-                          'Unlimited Cloud Storage',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w400,
-                            color: Colors.white70,
-                            letterSpacing: 0.3,
-                          ),
-                        )
+                      'Unlimited Cloud Storage',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w400,
+                        color: Colors.white70,
+                        letterSpacing: 0.3,
+                      ),
+                    )
                         .animate()
-                        .fadeIn(delay: 500.ms, duration: 500.ms)
+                        .fadeIn(
+                          delay: 500.ms,
+                          duration: 500.ms,
+                        )
                         .slideY(
                           begin: 0.3,
                           end: 0,
@@ -174,7 +183,10 @@ class _SplashScreenState extends State<SplashScreen>
                               : Colors.white.withAlpha(200),
                         ),
                       ),
-                    ).animate().fadeIn(delay: 800.ms, duration: 400.ms),
+                    ).animate().fadeIn(
+                          delay: 800.ms,
+                          duration: 400.ms,
+                        ),
                   ],
                 ),
               ),
@@ -186,11 +198,14 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Widget _glowCircle(double size, Color color) => ImageFiltered(
-    imageFilter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
-    child: Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-    ),
-  );
+        imageFilter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+      );
 }

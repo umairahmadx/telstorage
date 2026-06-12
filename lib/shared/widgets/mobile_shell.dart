@@ -73,7 +73,10 @@ class _MobileNavBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
 
-  const _MobileNavBar({required this.currentIndex, required this.onTap});
+  const _MobileNavBar({
+    required this.currentIndex,
+    required this.onTap,
+  });
 
   static const _items = [
     _NavItemData(Icons.home_rounded, 'Home'),

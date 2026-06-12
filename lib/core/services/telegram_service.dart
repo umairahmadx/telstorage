@@ -20,36 +20,30 @@ class TelegramService {
   }
 
   /// Upload a file (chunk or metadata json) → returns message_id and file_id
-  Future<Map<String, dynamic>> uploadBytesWithFileId(
-    Uint8List bytes,
-    String filename,
-  ) async {
+  Future<Map<String, dynamic>> uploadBytesWithFileId(Uint8List bytes, String filename) async {
     try {
-      AppLogger.d(
-        'Uploading: $filename (${bytes.length} bytes)',
-        tag: 'TelegramService',
-      );
-
+      AppLogger.d('Uploading: $filename (${bytes.length} bytes)', tag: 'TelegramService');
+      
       final formData = FormData.fromMap({
         'chat_id': _channelId,
         'document': MultipartFile.fromBytes(bytes, filename: filename),
       });
 
       final res = await _dio.post('$_base/sendDocument', data: formData);
-
+      
       if (res.data['ok'] != true) {
         throw Exception('Upload failed: ${res.data['description']}');
       }
-
+      
       final result = res.data['result'];
       final messageId = result['message_id'] as int;
       final fileId = result['document']['file_id'] as String;
-
-      AppLogger.d(
-        'Uploaded successfully, message_id: $messageId, file_id: $fileId',
-        tag: 'TelegramService',
-      );
-      return {'message_id': messageId, 'file_id': fileId};
+      
+      AppLogger.d('Uploaded successfully, message_id: $messageId, file_id: $fileId', tag: 'TelegramService');
+      return {
+        'message_id': messageId,
+        'file_id': fileId,
+      };
     } catch (e) {
       AppLogger.e('Upload failed: $e', tag: 'TelegramService', error: e);
       throw Exception('Failed to upload file: $e');
@@ -65,11 +59,8 @@ class TelegramService {
   /// Download file bytes by file_id (preferred method)
   Future<Uint8List> downloadByFileId(String fileId) async {
     try {
-      AppLogger.d(
-        'Downloading file with file_id: $fileId',
-        tag: 'TelegramService',
-      );
-
+      AppLogger.d('Downloading file with file_id: $fileId', tag: 'TelegramService');
+      
       // Step 1: Get file path using file_id
       AppLogger.d('Getting file path...', tag: 'TelegramService');
       final filePathRes = await _dio.get(
@@ -82,21 +73,16 @@ class TelegramService {
 
       // Step 2: Download the actual file
       final fileUrl = '$_fileBase/$filePath';
-
+      
       // On web, use your own Cloudflare Worker proxy
-      final workerUrl =
-          dotenv.env['WORKER_URL'] ??
-          'https://telstorage-proxy.umair-ahmed-64422.workers.dev';
-
-      final downloadUrl = kIsWeb
+      final workerUrl = dotenv.env['WORKER_URL'] ?? 'https://telstorage-proxy.umair-ahmed-64422.workers.dev';
+      
+      final downloadUrl = kIsWeb 
           ? '$workerUrl?url=${Uri.encodeComponent(fileUrl)}'
           : fileUrl;
-
-      AppLogger.d(
-        'Downloading from: ${kIsWeb ? "proxy" : "direct"}',
-        tag: 'TelegramService',
-      );
-
+      
+      AppLogger.d('Downloading from: ${kIsWeb ? "proxy" : "direct"}', tag: 'TelegramService');
+      
       final fileRes = await _dio.get(
         downloadUrl,
         options: Options(responseType: ResponseType.bytes),
@@ -114,16 +100,13 @@ class TelegramService {
   /// Download file bytes by message_id (legacy - requires lookup)
   Future<Uint8List> downloadBytes(int messageId) async {
     try {
-      AppLogger.d(
-        'Starting download for message_id: $messageId',
-        tag: 'TelegramService',
-      );
-
+      AppLogger.d('Starting download for message_id: $messageId', tag: 'TelegramService');
+      
       // Step 1: Get file_id from the message
       AppLogger.d('Fetching file_id from message...', tag: 'TelegramService');
       final fileId = await getFileIdFromMessage(messageId);
       AppLogger.d('Got file_id: $fileId', tag: 'TelegramService');
-
+      
       // Step 2: Download using file_id
       return await downloadByFileId(fileId);
     } catch (e) {
@@ -132,12 +115,16 @@ class TelegramService {
     }
   }
 
+
   /// Delete a message (used for cleanup)
   Future<void> deleteMessage(int messageId) async {
     try {
       await _dio.post(
         '$_base/deleteMessage',
-        data: {'chat_id': _channelId, 'message_id': messageId},
+        data: {
+          'chat_id': _channelId,
+          'message_id': messageId,
+        },
       );
     } catch (e) {
       // Ignore errors - message might already be deleted
@@ -149,10 +136,7 @@ class TelegramService {
   /// Used to discover the pinned metadata file_id on a fresh device.
   Future<String> getFileIdOfMessage(int messageId) async {
     try {
-      AppLogger.d(
-        'Getting file_id for message $messageId via forward...',
-        tag: 'TelegramService',
-      );
+      AppLogger.d('Getting file_id for message $messageId via forward...', tag: 'TelegramService');
       // Forward the message to the same channel to get a fresh message object
       final fwdRes = await _dio.post(
         '$_base/forwardMessage',
@@ -164,7 +148,9 @@ class TelegramService {
       );
 
       if (fwdRes.data['ok'] != true) {
-        throw Exception('forwardMessage failed: ${fwdRes.data['description']}');
+        throw Exception(
+          'forwardMessage failed: ${fwdRes.data['description']}',
+        );
       }
 
       final fwdMsg = fwdRes.data['result'];
@@ -181,11 +167,7 @@ class TelegramService {
       AppLogger.d('Got file_id: $fileId', tag: 'TelegramService');
       return fileId;
     } catch (e) {
-      AppLogger.e(
-        'getFileIdOfMessage failed: $e',
-        tag: 'TelegramService',
-        error: e,
-      );
+      AppLogger.e('getFileIdOfMessage failed: $e', tag: 'TelegramService', error: e);
       throw Exception('Failed to get file_id of message $messageId: $e');
     }
   }
@@ -201,17 +183,17 @@ class TelegramService {
           'disable_notification': true,
         },
       );
-
+      
       if (response.data['ok'] != true) {
         throw Exception('Pin failed: ${response.data['description']}');
       }
     } catch (e) {
       // Check if it's a permission error
-      if (e.toString().contains('not enough rights') ||
+      if (e.toString().contains('not enough rights') || 
           e.toString().contains('CHAT_ADMIN_REQUIRED')) {
         throw Exception(
           'Bot needs admin permission to pin messages. '
-          'Please make your bot an admin in the channel with "Pin Messages" permission.',
+          'Please make your bot an admin in the channel with "Pin Messages" permission.'
         );
       }
       throw Exception('Failed to pin message: $e');

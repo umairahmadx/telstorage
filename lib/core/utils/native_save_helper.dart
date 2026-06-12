@@ -16,11 +16,7 @@ class NativeSaveResult {
   final String? savedPath;
   final String message;
   final bool success;
-  const NativeSaveResult({
-    this.savedPath,
-    required this.message,
-    required this.success,
-  });
+  const NativeSaveResult({this.savedPath, required this.message, required this.success});
 }
 
 /// Save [bytes] as [filename] to the platform's public Downloads/Files location.
@@ -73,7 +69,7 @@ Future<NativeSaveResult> _saveAndroid(Uint8List bytes, String filename) async {
   } catch (e) {
     // Fallback to app Documents
     try {
-      final dir = await getApplicationDocumentsDirectory();
+      final dir  = await getApplicationDocumentsDirectory();
       final subfolder = getSubfolderForExtension(filename);
       final targetDir = Directory(p.join(dir.path, 'TelStorage', subfolder));
       await targetDir.create(recursive: true);
@@ -96,7 +92,7 @@ Future<NativeSaveResult> _saveAndroid(Uint8List bytes, String filename) async {
 Future<NativeSaveResult> _saveIos(Uint8List bytes, String filename) async {
   try {
     // Save to Documents — visible in iOS Files app (UIFileSharingEnabled=true)
-    final dir = await getApplicationDocumentsDirectory();
+    final dir  = await getApplicationDocumentsDirectory();
     final subfolder = getSubfolderForExtension(filename);
     final targetDir = Directory(p.join(dir.path, 'TelStorage', subfolder));
     await targetDir.create(recursive: true);
@@ -127,18 +123,14 @@ Future<NativeSaveResult> _saveIos(Uint8List bytes, String filename) async {
 
 Future<NativeSaveResult> _saveDesktop(Uint8List bytes, String filename) async {
   try {
-    final dir =
-        await getDownloadsDirectory() ??
-        await getApplicationDocumentsDirectory();
+    final dir  = await getDownloadsDirectory() ?? await getApplicationDocumentsDirectory();
     final subfolder = getSubfolderForExtension(filename);
     final targetDir = Directory(p.join(dir.path, 'TelStorage', subfolder));
     await targetDir.create(recursive: true);
 
     final file = File(p.join(targetDir.path, filename));
     await file.writeAsBytes(bytes);
-    try {
-      await OpenFile.open(file.path);
-    } catch (_) {}
+    try { await OpenFile.open(file.path); } catch (_) {}
     return NativeSaveResult(
       success: true,
       savedPath: file.path,

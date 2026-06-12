@@ -52,17 +52,13 @@ class UploadService {
       final mimeType = lookupMimeType(name) ?? 'application/octet-stream';
       final sizeMb = bytes.length / 1048576;
 
-      AppLogger.d(
-        'Size: ${sizeMb.toStringAsFixed(2)} MB',
-        tag: 'UploadService',
-      );
+      AppLogger.d('Size: ${sizeMb.toStringAsFixed(2)} MB', tag: 'UploadService');
 
       // ── Step 1: SHA-256 in chunks (non-blocking) ───────────────────────────
       onProgress(0.03, 'Verifying file… 0%');
       final hash = await _sha256Chunked(
         bytes,
-        (pct) =>
-            onProgress(0.03 + pct * 0.07, 'Verifying… ${(pct * 100).toInt()}%'),
+        (pct) => onProgress(0.03 + pct * 0.07, 'Verifying… ${(pct * 100).toInt()}%'),
       );
 
       final chunkInfos = <ChunkInfo>[];
@@ -73,23 +69,18 @@ class UploadService {
         AppLogger.d('Small file — uploading directly', tag: 'UploadService');
 
         final result = await _telegram.uploadBytesWithFileId(bytes, name);
-        chunkInfos.add(
-          ChunkInfo(
-            index: 1,
-            messageId: result['message_id'] as int,
-            fileId: result['file_id'] as String,
-            sizeMb: sizeMb,
-            partName: name,
-          ),
-        );
+        chunkInfos.add(ChunkInfo(
+          index: 1,
+          messageId: result['message_id'] as int,
+          fileId: result['file_id'] as String,
+          sizeMb: sizeMb,
+          partName: name,
+        ));
         onProgress(0.85, 'Uploaded!');
       } else {
         // ── Large file: ZIP (store) → split → upload parts ────────────────────
         onProgress(0.12, 'Packaging file…');
-        AppLogger.d(
-          'Large file — wrapping in ZIP (store mode)',
-          tag: 'UploadService',
-        );
+        AppLogger.d('Large file — wrapping in ZIP (store mode)', tag: 'UploadService');
 
         // STORE mode = no DEFLATE compression → near-instant, no CPU freeze.
         // Videos/images are already compressed, DEFLATE would give 0% savings.
@@ -97,10 +88,7 @@ class UploadService {
         final parts = _splitBytes(zipBytes);
         final baseName = name.replaceAll(RegExp(r'\.[^.]+$'), '');
 
-        AppLogger.d(
-          'ZIP size: ${(zipBytes.length / 1048576).toStringAsFixed(2)} MB, ${parts.length} part(s)',
-          tag: 'UploadService',
-        );
+        AppLogger.d('ZIP size: ${(zipBytes.length / 1048576).toStringAsFixed(2)} MB, ${parts.length} part(s)', tag: 'UploadService');
 
         for (var i = 0; i < parts.length; i++) {
           final partName = parts.length == 1
@@ -111,24 +99,16 @@ class UploadService {
             0.15 + (i / parts.length * 0.68),
             'Uploading part ${i + 1}/${parts.length}…',
           );
-          AppLogger.d(
-            'Part ${i + 1}/${parts.length}: "$partName" (${(parts[i].length / 1048576).toStringAsFixed(2)} MB)',
-            tag: 'UploadService',
-          );
+          AppLogger.d('Part ${i + 1}/${parts.length}: "$partName" (${(parts[i].length / 1048576).toStringAsFixed(2)} MB)', tag: 'UploadService');
 
-          final result = await _telegram.uploadBytesWithFileId(
-            parts[i],
-            partName,
-          );
-          chunkInfos.add(
-            ChunkInfo(
-              index: i + 1,
-              messageId: result['message_id'] as int,
-              fileId: result['file_id'] as String,
-              sizeMb: parts[i].length / 1048576,
-              partName: partName,
-            ),
-          );
+          final result = await _telegram.uploadBytesWithFileId(parts[i], partName);
+          chunkInfos.add(ChunkInfo(
+            index: i + 1,
+            messageId: result['message_id'] as int,
+            fileId: result['file_id'] as String,
+            sizeMb: parts[i].length / 1048576,
+            partName: partName,
+          ));
 
           // Brief pause between uploads to respect Telegram rate limits
           await Future.delayed(
@@ -167,7 +147,7 @@ class UploadService {
 
       onProgress(1.0, 'Upload complete!');
       AppLogger.i('Upload complete: $name', tag: 'UploadService');
-
+      
       await NotificationService.instance.showNotification(
         id: name.hashCode,
         title: 'Upload Complete',

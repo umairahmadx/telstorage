@@ -108,14 +108,12 @@ class FileManagerService {
     final ref = appMeta.files.where((f) => f.fileId == fileId).firstOrNull;
     if (ref != null) {
       appMeta.files.removeWhere((f) => f.fileId == fileId);
-      appMeta.files.add(
-        FileRef(
-          fileId: fileId,
-          metaFileId: newMetaFileId,
-          name: newName,
-          folderId: ref.folderId,
-        ),
-      );
+      appMeta.files.add(FileRef(
+        fileId: fileId,
+        metaFileId: newMetaFileId,
+        name: newName,
+        folderId: ref.folderId,
+      ));
       await _meta.update(appMeta);
     }
   }
@@ -161,10 +159,7 @@ class FileManagerService {
         record.metadataFileId,
       );
     } catch (e) {
-      AppLogger.w(
-        'Could not fetch metadata for $fileId — deleting from cache only. Error: $e',
-        tag: 'FileManager',
-      );
+      AppLogger.w('Could not fetch metadata for $fileId — deleting from cache only. Error: $e', tag: 'FileManager');
       // If we can't fetch metadata, still clean up local cache
       await _hive.deleteFile(fileId);
       return;

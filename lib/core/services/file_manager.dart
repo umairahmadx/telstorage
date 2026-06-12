@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:uuid/uuid.dart';
 import '../models/app_metadata.dart';
 import '../models/folder_record.dart';
+import '../utils/app_logger.dart';
 import 'hive_service.dart';
 import 'metadata_service.dart';
 import 'telegram_service.dart';
@@ -138,6 +139,7 @@ class FileManagerService {
     await _hive.updateFile(
       fileId,
       folderId: newFolderId,
+      clearFolderId: newFolderId == null,
       metadataMsgId: newMsgId,
       metadataFileId: newMetaFileId,
     );
@@ -157,10 +159,7 @@ class FileManagerService {
         record.metadataFileId,
       );
     } catch (e) {
-      print(
-        '⚠️  [FileManager] Could not fetch metadata for $fileId — '
-        'deleting from cache only. Error: $e',
-      );
+      AppLogger.w('Could not fetch metadata for $fileId — deleting from cache only. Error: $e', tag: 'FileManager');
       // If we can't fetch metadata, still clean up local cache
       await _hive.deleteFile(fileId);
       return;
@@ -185,6 +184,6 @@ class FileManagerService {
 
     // ── Step 5: Remove from local cache ─────────────────────────────────────
     await _hive.deleteFile(fileId);
-    print('✅ [FileManager] File $fileId deleted successfully');
+    AppLogger.i('File $fileId deleted successfully', tag: 'FileManager');
   }
 }

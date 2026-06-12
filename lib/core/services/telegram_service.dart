@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../constants/app_constants.dart';
+import '../utils/app_logger.dart';
 
 /// All raw Telegram Bot API calls
 class TelegramService {
@@ -21,7 +22,7 @@ class TelegramService {
   /// Upload a file (chunk or metadata json) → returns message_id and file_id
   Future<Map<String, dynamic>> uploadBytesWithFileId(Uint8List bytes, String filename) async {
     try {
-      print('📤 [TelegramService] Uploading: $filename (${bytes.length} bytes)');
+      AppLogger.d('Uploading: $filename (${bytes.length} bytes)', tag: 'TelegramService');
       
       final formData = FormData.fromMap({
         'chat_id': _channelId,
@@ -38,13 +39,13 @@ class TelegramService {
       final messageId = result['message_id'] as int;
       final fileId = result['document']['file_id'] as String;
       
-      print('✅ [TelegramService] Uploaded successfully, message_id: $messageId, file_id: $fileId');
+      AppLogger.d('Uploaded successfully, message_id: $messageId, file_id: $fileId', tag: 'TelegramService');
       return {
         'message_id': messageId,
         'file_id': fileId,
       };
     } catch (e) {
-      print('❌ [TelegramService] Upload failed: $e');
+      AppLogger.e('Upload failed: $e', tag: 'TelegramService', error: e);
       throw Exception('Failed to upload file: $e');
     }
   }
@@ -58,17 +59,17 @@ class TelegramService {
   /// Download file bytes by file_id (preferred method)
   Future<Uint8List> downloadByFileId(String fileId) async {
     try {
-      print('📥 [TelegramService] Downloading file with file_id: $fileId');
+      AppLogger.d('Downloading file with file_id: $fileId', tag: 'TelegramService');
       
       // Step 1: Get file path using file_id
-      print('📥 [TelegramService] Getting file path...');
+      AppLogger.d('Getting file path...', tag: 'TelegramService');
       final filePathRes = await _dio.get(
         '$_base/getFile',
         queryParameters: {'file_id': fileId},
       );
 
       final filePath = filePathRes.data['result']['file_path'] as String;
-      print('📥 [TelegramService] Got file path: $filePath');
+      AppLogger.d('Got file path: $filePath', tag: 'TelegramService');
 
       // Step 2: Download the actual file
       final fileUrl = '$_fileBase/$filePath';
@@ -80,7 +81,7 @@ class TelegramService {
           ? '$workerUrl?url=${Uri.encodeComponent(fileUrl)}'
           : fileUrl;
       
-      print('📥 [TelegramService] Downloading from: ${kIsWeb ? "Cloudflare Worker proxy" : "direct"}');
+      AppLogger.d('Downloading from: ${kIsWeb ? "proxy" : "direct"}', tag: 'TelegramService');
       
       final fileRes = await _dio.get(
         downloadUrl,
@@ -88,10 +89,10 @@ class TelegramService {
       );
 
       final bytes = Uint8List.fromList(fileRes.data as List<int>);
-      print('📥 [TelegramService] Downloaded ${bytes.length} bytes');
+      AppLogger.d('Downloaded ${bytes.length} bytes', tag: 'TelegramService');
       return bytes;
     } catch (e) {
-      print('❌ [TelegramService] Download failed: $e');
+      AppLogger.e('Download failed: $e', tag: 'TelegramService', error: e);
       throw Exception('Failed to download file: $e');
     }
   }
@@ -99,17 +100,17 @@ class TelegramService {
   /// Download file bytes by message_id (legacy - requires lookup)
   Future<Uint8List> downloadBytes(int messageId) async {
     try {
-      print('📥 [TelegramService] Starting download for message_id: $messageId');
+      AppLogger.d('Starting download for message_id: $messageId', tag: 'TelegramService');
       
       // Step 1: Get file_id from the message
-      print('📥 [TelegramService] Fetching file_id from message...');
+      AppLogger.d('Fetching file_id from message...', tag: 'TelegramService');
       final fileId = await getFileIdFromMessage(messageId);
-      print('📥 [TelegramService] Got file_id: $fileId');
+      AppLogger.d('Got file_id: $fileId', tag: 'TelegramService');
       
       // Step 2: Download using file_id
       return await downloadByFileId(fileId);
     } catch (e) {
-      print('❌ [TelegramService] Download failed: $e');
+      AppLogger.e('Download failed: $e', tag: 'TelegramService', error: e);
       throw Exception('Failed to download file: $e');
     }
   }
@@ -135,10 +136,7 @@ class TelegramService {
   /// Used to discover the pinned metadata file_id on a fresh device.
   Future<String> getFileIdOfMessage(int messageId) async {
     try {
-      print(
-        '🔍 [TelegramService] Getting file_id for message $messageId '
-        'via forward...',
-      );
+      AppLogger.d('Getting file_id for message $messageId via forward...', tag: 'TelegramService');
       // Forward the message to the same channel to get a fresh message object
       final fwdRes = await _dio.post(
         '$_base/forwardMessage',
@@ -166,10 +164,10 @@ class TelegramService {
         throw Exception('Pinned message has no document');
       }
 
-      print('✅ [TelegramService] Got file_id: $fileId');
+      AppLogger.d('Got file_id: $fileId', tag: 'TelegramService');
       return fileId;
     } catch (e) {
-      print('❌ [TelegramService] getFileIdOfMessage failed: $e');
+      AppLogger.e('getFileIdOfMessage failed: $e', tag: 'TelegramService', error: e);
       throw Exception('Failed to get file_id of message $messageId: $e');
     }
   }
@@ -221,49 +219,7 @@ class TelegramService {
     }
   }
 
-  /// Get file_id from a document message (needed for downloads)
   Future<String> getFileIdFromMessage(int messageId) async {
-    try {
-      print('🔍 [TelegramService] Looking for file_id for message_id: $messageId');
-      
-      // Use getUpdates to fetch recent message history
-      final res = await _dio.get(
-        '$_base/getUpdates',
-        queryParameters: {
-          'offset': -1, // Get recent updates
-          'limit': 100,
-          'allowed_updates': ['channel_post', 'message'],
-        },
-      );
-
-      print('🔍 [TelegramService] Got ${res.data['result'].length} updates');
-      
-      final updates = res.data['result'] as List;
-      for (final update in updates) {
-        final message = update['channel_post'] ?? update['message'];
-        if (message != null && message['message_id'] == messageId) {
-          final document = message['document'];
-          if (document != null) {
-            final fileId = document['file_id'] as String;
-            print('✅ [TelegramService] Found file_id: $fileId');
-            return fileId;
-          }
-        }
-      }
-
-      print('❌ [TelegramService] Message $messageId not found in recent updates');
-      print('💡 [TelegramService] Trying alternative method: fetching chat history...');
-      
-      // Alternative: Try to get the message directly via chat history
-      // This requires the message to be recent enough
-      throw Exception(
-        'Message $messageId not found in recent updates. '
-        'The message might be too old or the bot needs to receive new updates. '
-        'Try sending a test message to the channel first.'
-      );
-    } catch (e) {
-      print('❌ [TelegramService] Failed to get file_id: $e');
-      throw Exception('Failed to get file_id: $e');
-    }
+    return getFileIdOfMessage(messageId);
   }
 }

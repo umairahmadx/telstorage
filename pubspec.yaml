@@ -38,9 +38,15 @@ dependencies:
   # MIME type detection
   mime: ^1.0.5
 
-  # Image + video
-  cached_network_image: ^3.3.1
-  video_player: ^2.8.3
+  # State management
+  flutter_bloc: ^8.1.6
+  bloc: ^8.1.4
+
+  # Preferences
+  shared_preferences: ^2.3.2
+
+  # Logging
+  logger: ^2.4.0
 
   # Path utilities
   path_provider: ^2.1.2
@@ -50,7 +56,7 @@ dependencies:
   flutter_background_service: ^5.0.5
 
   # Animations
-  flutter_animate: ^4.3.0
+  flutter_animate: ^4.5.0
 
   # Utils
   intl: ^0.19.0
@@ -60,6 +66,7 @@ dependencies:
   permission_handler: ^12.0.1
   open_file: ^3.5.11
   share_plus: ^12.0.2
+  flutter_local_notifications: ^22.0.0
 
 dev_dependencies:
   flutter_test:

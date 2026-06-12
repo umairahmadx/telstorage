@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../constants/app_constants.dart';
+import 'service_locator.dart';
 
 /// Handles authentication via Google Apps Script
 class AuthService {
@@ -39,8 +40,26 @@ class AuthService {
     String botToken,
     String channelId,
   ) async {
-    // Registration removed - add users directly to Google Sheet
-    return {'success': false, 'message': 'Please contact admin to register'};
+    try {
+      final res = await _dio.get(
+        AppConstants.scriptUrl,
+        queryParameters: {
+          'action': 'register',
+          'email': email,
+          'password': password,
+          'bot_token': botToken,
+          'channel_id': channelId,
+        },
+      );
+      if (res.data['success'] == true) {
+        await _storage.write(key: 'bot_token', value: botToken);
+        await _storage.write(key: 'channel_id', value: channelId);
+        await _storage.write(key: 'email', value: email);
+      }
+      return res.data as Map<String, dynamic>;
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
   }
 
   Future<bool> isLoggedIn() async {
@@ -49,6 +68,7 @@ class AuthService {
   }
 
   Future<void> logout() async {
+    ServiceLocator.instance.reset();
     await _storage.deleteAll();
   }
 

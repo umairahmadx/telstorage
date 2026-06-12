@@ -1,6 +1,8 @@
 import 'dart:convert';
 import '../models/file_record.dart';
 import '../models/folder_record.dart';
+import '../utils/app_logger.dart';
+import '../utils/connectivity.dart';
 import 'hive_service.dart';
 import 'metadata_service.dart';
 import 'telegram_service.dart';
@@ -27,20 +29,24 @@ class SyncService {
     int added = 0;
     int removed = 0;
 
+    if (!await Connectivity.hasConnection()) {
+      throw OfflineException('Cannot sync: no internet connection.');
+    }
+
     try {
       onProgress?.call(0.0, 'Connecting to Telegram...');
-      print('🔄 [SyncService] Starting full sync from Telegram...');
+      AppLogger.d('Starting full sync from Telegram...', tag: 'SyncService');
 
       final appMeta = await _metadata.fetch();
 
       // ── Folders: add missing ──────────────────────────────────────────────
       onProgress?.call(0.05, 'Syncing folders...');
-      print('🔄 [SyncService] ${appMeta.folders.length} folder(s) on Telegram');
+      AppLogger.d('${appMeta.folders.length} folder(s) on Telegram', tag: 'SyncService');
       for (final folder in appMeta.folders) {
         if (_hive.getFolder(folder.id) == null) {
           await _hive.saveFolder(FolderRecord.fromFolder(folder));
           added++;
-          print('➕ [SyncService] Added folder: ${folder.name}');
+          AppLogger.d('Added folder: ${folder.name}', tag: 'SyncService');
         }
       }
 
@@ -52,13 +58,13 @@ class SyncService {
         if (!telegramFolderIds.contains(local.id)) {
           await _hive.deleteFolder(local.id);
           removed++;
-          print('➖ [SyncService] Removed stale folder: ${local.name}');
+          AppLogger.d('Removed stale folder: ${local.name}', tag: 'SyncService');
         }
       }
 
       // ── Files: build index of what Telegram knows about ───────────────────
       final fileRefs = appMeta.files;
-      print('🔄 [SyncService] ${fileRefs.length} file(s) on Telegram');
+      AppLogger.d('${fileRefs.length} file(s) on Telegram', tag: 'SyncService');
 
       // Add files that are on Telegram but not in local Hive
       for (var i = 0; i < fileRefs.length; i++) {
@@ -69,24 +75,21 @@ class SyncService {
         );
 
         if (_hive.getFile(ref.fileId) != null) {
-          print('⏭️  [SyncService] ${ref.name} already cached');
+          AppLogger.d('${ref.name} already cached', tag: 'SyncService');
           continue;
         }
 
         try {
-          print(
-            '📥 [SyncService] Fetching index for ${ref.name} '
-            '(meta file_id: ${ref.metaFileId})',
-          );
+          AppLogger.d('Fetching index for ${ref.name} (meta file_id: ${ref.metaFileId})', tag: 'SyncService');
           final bytes = await _telegram.downloadByFileId(ref.metaFileId);
           final fileMeta =
               jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
           fileMeta['metadata_file_id'] = ref.metaFileId;
           await _hive.saveFile(FileRecord.fromMap(fileMeta));
           added++;
-          print('✅ [SyncService] Synced: ${ref.name}');
+          AppLogger.i('Synced: ${ref.name}', tag: 'SyncService');
         } catch (e) {
-          print('⚠️  [SyncService] Could not sync ${ref.name}: $e');
+          AppLogger.w('Could not sync ${ref.name}: $e', tag: 'SyncService');
         }
       }
 
@@ -98,19 +101,16 @@ class SyncService {
         if (!telegramFileIds.contains(local.fileId)) {
           await _hive.deleteFile(local.fileId);
           removed++;
-          print('➖ [SyncService] Removed stale file: ${local.name}');
+          AppLogger.d('Removed stale file: ${local.name}', tag: 'SyncService');
         }
       }
 
       onProgress?.call(1.0, 'Sync complete!');
-      print(
-        '✅ [SyncService] Done — +$added added, -$removed removed. '
-        'Local: ${_hive.totalFiles} files, ${_hive.totalFolders} folders',
-      );
+      AppLogger.i('Sync done — +$added added, -$removed removed. Local: ${_hive.totalFiles} files, ${_hive.totalFolders} folders', tag: 'SyncService');
 
       return SyncResult(added: added, removed: removed);
     } catch (e) {
-      print('❌ [SyncService] Sync failed: $e');
+      AppLogger.e('Sync failed: $e', tag: 'SyncService', error: e);
       rethrow;
     }
   }

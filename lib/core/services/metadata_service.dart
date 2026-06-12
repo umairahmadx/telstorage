@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../constants/app_constants.dart';
 import '../models/app_metadata.dart';
+import '../utils/app_logger.dart';
 import 'telegram_service.dart';
 
 /// Manages the pinned .metadata.json on Telegram.
@@ -24,21 +25,21 @@ class MetadataService {
 
   /// Fetch current metadata.  Works on any device — no prior local state needed.
   Future<AppMetadata> fetch() async {
-    print('📖 [MetadataService] Fetching metadata...');
+    AppLogger.d('Fetching metadata...', tag: 'MetadataService');
 
     // Fast path: we already know the file_id from a previous session
     final cachedFileId = await _storage.read(key: 'metadata_file_id');
     if (cachedFileId != null) {
-      print('📖 [MetadataService] Using cached file_id: $cachedFileId');
+      AppLogger.d('Using cached file_id: $cachedFileId', tag: 'MetadataService');
       return _downloadMeta(cachedFileId);
     }
 
     // Slow path: discover via the channel's pinned message
-    print('📖 [MetadataService] No local cache — checking pinned message...');
+    AppLogger.d('No local cache — checking pinned message...', tag: 'MetadataService');
     try {
       final pinnedMsgId = await _telegram.getPinnedMessageId();
       final fileId = await _telegram.getFileIdOfMessage(pinnedMsgId);
-      print('📖 [MetadataService] Found pinned metadata, file_id: $fileId');
+      AppLogger.d('Found pinned metadata, file_id: $fileId', tag: 'MetadataService');
 
       // Cache it so next startup is fast
       await _storage.write(key: 'metadata_file_id', value: fileId);
@@ -50,7 +51,7 @@ class MetadataService {
       return _downloadMeta(fileId);
     } catch (e) {
       // No pinned message → first-time setup for this channel
-      print('📖 [MetadataService] No pinned message — first-time setup');
+      AppLogger.d('No pinned message — first-time setup', tag: 'MetadataService');
       final email = await _storage.read(key: 'email') ?? 'unknown@user.com';
       await initMetadata(email);
 
@@ -64,16 +65,13 @@ class MetadataService {
     final oldMsgId = meta.metadataMessageId;
     meta.lastSynced = DateTime.now();
 
-    print('🔄 [MetadataService] Uploading updated metadata...');
+    AppLogger.d('Uploading updated metadata...', tag: 'MetadataService');
     final bytes = Uint8List.fromList(utf8.encode(jsonEncode(meta.toJson())));
     final result =
         await _telegram.uploadBytesWithFileId(bytes, '.metadata.json');
     final newMsgId = result['message_id'] as int;
     final newFileId = result['file_id'] as String;
-    print(
-      '🔄 [MetadataService] Uploaded → message_id: $newMsgId, '
-      'file_id: $newFileId',
-    );
+    AppLogger.d('Uploaded → message_id: $newMsgId, file_id: $newFileId', tag: 'MetadataService');
 
     // Pin the new message so any device can discover it
     await _telegram.pinMessage(newMsgId);
@@ -87,12 +85,12 @@ class MetadataService {
 
     // Delete old metadata message
     if (oldMsgId > 0) {
-      print('🔄 [MetadataService] Deleting old message: $oldMsgId');
+      AppLogger.d('Deleting old message: $oldMsgId', tag: 'MetadataService');
       await _telegram.deleteMessage(oldMsgId);
     }
 
     meta.metadataMessageId = newMsgId;
-    print('✅ [MetadataService] Metadata updated successfully');
+    AppLogger.i('Metadata updated successfully', tag: 'MetadataService');
   }
 
   /// Add a file to metadata (increment stats + register FileRef for sync).
@@ -148,7 +146,7 @@ class MetadataService {
   // ── First-time setup ───────────────────────────────────────────────────────
 
   Future<void> initMetadata(String ownerEmail) async {
-    print('🔧 [MetadataService] Initializing metadata for: $ownerEmail');
+    AppLogger.d('Initializing metadata for: $ownerEmail', tag: 'MetadataService');
     final meta = AppMetadata(
       owner: ownerEmail,
       storageLimitMb: AppConstants.defaultStorageLimitMb,
@@ -176,16 +174,13 @@ class MetadataService {
 
     await _storage.write(key: 'metadata_message_id', value: msgId.toString());
     await _storage.write(key: 'metadata_file_id', value: fileId);
-    print(
-      '✅ [MetadataService] Initialized — message_id: $msgId, '
-      'file_id: $fileId',
-    );
+    AppLogger.i('Initialized — message_id: $msgId, file_id: $fileId', tag: 'MetadataService');
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   Future<AppMetadata> _downloadMeta(String fileId) async {
-    print('📖 [MetadataService] Downloading metadata (file_id: $fileId)...');
+    AppLogger.d('Downloading metadata (file_id: $fileId)...', tag: 'MetadataService');
     final bytes = await _telegram.downloadByFileId(fileId);
     final json = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
     final meta = AppMetadata.fromJson(json);
@@ -194,7 +189,7 @@ class MetadataService {
     final msgIdStr = await _storage.read(key: 'metadata_message_id');
     meta.metadataMessageId = int.tryParse(msgIdStr ?? '') ?? 0;
 
-    print('✅ [MetadataService] Metadata fetched — ${meta.files.length} file(s)');
+    AppLogger.d('Metadata fetched — ${meta.files.length} file(s)', tag: 'MetadataService');
     return meta;
   }
 

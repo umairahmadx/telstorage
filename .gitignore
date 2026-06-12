@@ -11,7 +11,8 @@
 .svn/
 .swiftpm/
 migrate_working_dir/
-
+Future.md
+TODO.md
 # Environment files
 .env
 .env.production

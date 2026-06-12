@@ -1,37 +1,37 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'file_record.dart';
+part of 'download_job.dart';
 
 // **************************************************************************
 // TypeAdapterGenerator
 // **************************************************************************
 
-class FileRecordAdapter extends TypeAdapter<FileRecord> {
+class DownloadJobAdapter extends TypeAdapter<DownloadJob> {
   @override
-  final int typeId = 0;
+  final int typeId = 2;
 
   @override
-  FileRecord read(BinaryReader reader) {
+  DownloadJob read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
-    return FileRecord(
+    return DownloadJob(
       fileId: fields[0] as String,
       name: fields[1] as String,
-      folderId: fields[2] as String?,
-      metadataMessageId: fields[3] as int,
-      metadataFileId: fields[9] as String?,
-      sizeMb: fields[4] as double,
-      mimeType: fields[5] as String,
-      uploadedAt: fields[6] as DateTime,
-      chunkCount: fields[7] as int,
-      sha256Hash: fields[8] as String,
+      mimeType: fields[2] as String,
+      sizeMb: fields[3] as double,
+      progress: fields[4] as double,
+      status: fields[5] as String,
+      localPath: fields[6] as String?,
+      error: fields[7] as String?,
+      addedAt: fields[8] as DateTime,
+      completedAt: fields[9] as DateTime?,
     );
   }
 
   @override
-  void write(BinaryWriter writer, FileRecord obj) {
+  void write(BinaryWriter writer, DownloadJob obj) {
     writer
       ..writeByte(10)
       ..writeByte(0)
@@ -39,21 +39,21 @@ class FileRecordAdapter extends TypeAdapter<FileRecord> {
       ..writeByte(1)
       ..write(obj.name)
       ..writeByte(2)
-      ..write(obj.folderId)
-      ..writeByte(3)
-      ..write(obj.metadataMessageId)
-      ..writeByte(9)
-      ..write(obj.metadataFileId)
-      ..writeByte(4)
-      ..write(obj.sizeMb)
-      ..writeByte(5)
       ..write(obj.mimeType)
+      ..writeByte(3)
+      ..write(obj.sizeMb)
+      ..writeByte(4)
+      ..write(obj.progress)
+      ..writeByte(5)
+      ..write(obj.status)
       ..writeByte(6)
-      ..write(obj.uploadedAt)
+      ..write(obj.localPath)
       ..writeByte(7)
-      ..write(obj.chunkCount)
+      ..write(obj.error)
       ..writeByte(8)
-      ..write(obj.sha256Hash);
+      ..write(obj.addedAt)
+      ..writeByte(9)
+      ..write(obj.completedAt);
   }
 
   @override
@@ -62,7 +62,7 @@ class FileRecordAdapter extends TypeAdapter<FileRecord> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is FileRecordAdapter &&
+      other is DownloadJobAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }

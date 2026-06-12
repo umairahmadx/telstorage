@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/chunk_info.dart';
 import '../models/file_record.dart';
+import '../utils/app_logger.dart';
 import '../utils/web_download.dart'
     if (dart.library.io) '../utils/web_download_stub.dart';
 import '../utils/native_save_helper.dart'
@@ -51,7 +52,7 @@ class DownloadService {
   ) async {
     try {
       onProgress(0.0, 'Reading file index…');
-      print('📥 [DownloadService] Downloading: ${record.name}');
+      AppLogger.d('Downloading: ${record.name}', tag: 'DownloadService');
 
       // Step 1: Fetch per-file metadata JSON
       final Uint8List metaBytes;
@@ -69,7 +70,7 @@ class DownloadService {
           .toList();
       final expectedHash = fileMeta['sha256'] as String;
 
-      print('📥 [DownloadService] ${chunks.length} part(s), is_zipped: $isZipped');
+      AppLogger.d('${chunks.length} part(s), is_zipped: $isZipped', tag: 'DownloadService');
 
       // Step 3: Download all parts
       final builder = BytesBuilder(copy: false);
@@ -109,7 +110,7 @@ class DownloadService {
       if (isZipped) {
         // Step 6a: Extract ZIP (STORE mode = instant byte unpack)
         onProgress(0.93, 'Extracting…');
-        print('📥 [DownloadService] Extracting ZIP…');
+        AppLogger.d('Extracting ZIP…', tag: 'DownloadService');
         await Future.delayed(Duration.zero);
         final archive = ZipDecoder().decodeBytes(assembled);
         if (archive.isEmpty) throw Exception('ZIP archive is empty');
@@ -125,13 +126,10 @@ class DownloadService {
       }
 
       onProgress(1.0, 'Download complete!');
-      print(
-        '✅ [DownloadService] ${record.name} — '
-        '${(finalBytes.length / 1048576).toStringAsFixed(2)} MB',
-      );
+      AppLogger.i('${record.name} — ${(finalBytes.length / 1048576).toStringAsFixed(2)} MB', tag: 'DownloadService');
       return finalBytes;
     } catch (e) {
-      print('❌ [DownloadService] Download failed: $e');
+      AppLogger.e('Download failed: $e', tag: 'DownloadService', error: e);
       throw Exception('Download failed: $e');
     }
   }

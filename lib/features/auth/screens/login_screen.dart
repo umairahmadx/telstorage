@@ -278,17 +278,6 @@ class _LoginScreenState extends State<LoginScreen>
           ),
         ),
         const SizedBox(height: 24),
-        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Text("Don't have an account? ",
-              style: Theme.of(context).textTheme.bodyMedium),
-          GestureDetector(
-            onTap: () => Navigator.of(context).pushNamed(AppRouter.register),
-            child: Text('Register',
-                style: TextStyle(
-                    color: AppTheme.primary, fontWeight: FontWeight.w700)),
-          ),
-        ]),
-        const SizedBox(height: 8),
       ]),
     );
   }

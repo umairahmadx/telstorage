@@ -1,4 +1,5 @@
-import 'package:hive/hive.dart';
+import 'package:flutter/foundation.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../constants/app_constants.dart';
 import '../models/file_record.dart';
 import '../models/folder_record.dart';
@@ -10,6 +11,9 @@ class HiveService {
 
   Box<FileRecord> get _files => Hive.box<FileRecord>(AppConstants.filesBox);
   Box<FolderRecord> get _folders => Hive.box<FolderRecord>(AppConstants.foldersBox);
+
+  ValueListenable<Box<FileRecord>> get filesListenable => _files.listenable();
+  ValueListenable<Box<FolderRecord>> get foldersListenable => _folders.listenable();
 
   // ── File Operations ──────────────────────────────────────
 
@@ -31,10 +35,15 @@ class HiveService {
     await _files.put(record.fileId, record);
   }
 
+  /// Sentinel value meaning "move to root" when passed as [folderId].
+  static const String kRootFolderId = '__root__';
+
   Future<void> updateFile(
     String fileId, {
     String? name,
+    /// Pass [HiveService.kRootFolderId] to move the file to the root folder.
     String? folderId,
+    bool clearFolderId = false,
     int? metadataMsgId,
     String? metadataFileId,
   }) async {
@@ -42,7 +51,13 @@ class HiveService {
     if (record == null) return;
 
     if (name != null) record.name = name;
-    if (folderId != null) record.folderId = folderId;
+    if (clearFolderId) {
+      record.folderId = null;
+    } else if (folderId != null && folderId != kRootFolderId) {
+      record.folderId = folderId;
+    } else if (folderId == kRootFolderId) {
+      record.folderId = null;
+    }
     if (metadataMsgId != null) record.metadataMessageId = metadataMsgId;
     if (metadataFileId != null) record.metadataFileId = metadataFileId;
 

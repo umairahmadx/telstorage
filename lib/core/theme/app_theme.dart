@@ -114,6 +114,28 @@ class AppTheme {
         textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600),
       ),
     ),
+    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      backgroundColor: lightSurface,
+      selectedItemColor: primary,
+      unselectedItemColor: Color(0xFF9CA3AF),
+      type: BottomNavigationBarType.fixed,
+      elevation: 0,
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: lightSurface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      elevation: 8,
+    ),
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ),
+    bottomSheetTheme: const BottomSheetThemeData(
+      backgroundColor: lightSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+    ),
   );
 
   // ── Dark theme ──────────────────────────────────────────────────────────────
@@ -185,6 +207,28 @@ class AppTheme {
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600),
+      ),
+    ),
+    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      backgroundColor: darkSurface,
+      selectedItemColor: primary,
+      unselectedItemColor: Color(0xFF6B7280),
+      type: BottomNavigationBarType.fixed,
+      elevation: 0,
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: darkCard,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      elevation: 8,
+    ),
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ),
+    bottomSheetTheme: const BottomSheetThemeData(
+      backgroundColor: darkSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
     ),
   );

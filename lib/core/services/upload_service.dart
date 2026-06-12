@@ -8,8 +8,11 @@ import 'package:uuid/uuid.dart';
 import '../constants/app_constants.dart';
 import '../models/chunk_info.dart';
 import '../models/file_record.dart';
+import '../utils/app_logger.dart';
+import '../utils/connectivity.dart';
 import 'hive_service.dart';
 import 'metadata_service.dart';
+import 'notification_service.dart';
 import 'telegram_service.dart';
 
 /// Handles file upload pipeline — non-blocking on Flutter web (single JS thread).
@@ -37,15 +40,19 @@ class UploadService {
     String? folderId,
     Function(double progress, String status) onProgress,
   ) async {
+    if (!await Connectivity.hasConnection()) {
+      throw OfflineException('Cannot upload: no internet connection.');
+    }
+
     try {
-      print('📤 [UploadService] Starting upload for: $name');
+      AppLogger.d('Starting upload for: $name', tag: 'UploadService');
       onProgress(0.0, 'Preparing…');
 
       final fileId = const Uuid().v4();
       final mimeType = lookupMimeType(name) ?? 'application/octet-stream';
       final sizeMb = bytes.length / 1048576;
 
-      print('📤 [UploadService] Size: ${sizeMb.toStringAsFixed(2)} MB');
+      AppLogger.d('Size: ${sizeMb.toStringAsFixed(2)} MB', tag: 'UploadService');
 
       // ── Step 1: SHA-256 in chunks (non-blocking) ───────────────────────────
       onProgress(0.03, 'Verifying file… 0%');
@@ -59,7 +66,7 @@ class UploadService {
       if (bytes.length <= _partSize) {
         // ── Small file: upload directly ───────────────────────────────────────
         onProgress(0.12, 'Uploading "$name"…');
-        print('📤 [UploadService] Small file — uploading directly');
+        AppLogger.d('Small file — uploading directly', tag: 'UploadService');
 
         final result = await _telegram.uploadBytesWithFileId(bytes, name);
         chunkInfos.add(ChunkInfo(
@@ -73,7 +80,7 @@ class UploadService {
       } else {
         // ── Large file: ZIP (store) → split → upload parts ────────────────────
         onProgress(0.12, 'Packaging file…');
-        print('📤 [UploadService] Large file — wrapping in ZIP (store mode)');
+        AppLogger.d('Large file — wrapping in ZIP (store mode)', tag: 'UploadService');
 
         // STORE mode = no DEFLATE compression → near-instant, no CPU freeze.
         // Videos/images are already compressed, DEFLATE would give 0% savings.
@@ -81,11 +88,7 @@ class UploadService {
         final parts = _splitBytes(zipBytes);
         final baseName = name.replaceAll(RegExp(r'\.[^.]+$'), '');
 
-        print(
-          '📤 [UploadService] ZIP size: '
-          '${(zipBytes.length / 1048576).toStringAsFixed(2)} MB, '
-          '${parts.length} part(s)',
-        );
+        AppLogger.d('ZIP size: ${(zipBytes.length / 1048576).toStringAsFixed(2)} MB, ${parts.length} part(s)', tag: 'UploadService');
 
         for (var i = 0; i < parts.length; i++) {
           final partName = parts.length == 1
@@ -96,10 +99,7 @@ class UploadService {
             0.15 + (i / parts.length * 0.68),
             'Uploading part ${i + 1}/${parts.length}…',
           );
-          print(
-            '📤 [UploadService] Part ${i + 1}/${parts.length}: '
-            '"$partName" (${(parts[i].length / 1048576).toStringAsFixed(2)} MB)',
-          );
+          AppLogger.d('Part ${i + 1}/${parts.length}: "$partName" (${(parts[i].length / 1048576).toStringAsFixed(2)} MB)', tag: 'UploadService');
 
           final result = await _telegram.uploadBytesWithFileId(parts[i], partName);
           chunkInfos.add(ChunkInfo(
@@ -146,9 +146,15 @@ class UploadService {
       await _hive.saveFile(FileRecord.fromMap(fileMeta));
 
       onProgress(1.0, 'Upload complete!');
-      print('✅ [UploadService] Done: $name');
+      AppLogger.i('Upload complete: $name', tag: 'UploadService');
+      
+      await NotificationService.instance.showNotification(
+        id: name.hashCode,
+        title: 'Upload Complete',
+        body: '$name has been successfully uploaded.',
+      );
     } catch (e) {
-      print('❌ [UploadService] Failed: $e');
+      AppLogger.e('Upload failed: $e', tag: 'UploadService', error: e);
       throw Exception('Upload failed: $e');
     }
   }

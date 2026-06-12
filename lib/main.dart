@@ -6,6 +6,8 @@ import 'app.dart';
 import 'core/constants/app_constants.dart';
 import 'core/models/file_record.dart';
 import 'core/models/folder_record.dart';
+import 'core/models/download_job.dart';
+import 'core/services/theme_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,8 +23,13 @@ Future<void> main() async {
   await Hive.initFlutter();
   Hive.registerAdapter(FileRecordAdapter());
   Hive.registerAdapter(FolderRecordAdapter());
+  Hive.registerAdapter(DownloadJobAdapter());
   await Hive.openBox<FileRecord>(AppConstants.filesBox);
   await Hive.openBox<FolderRecord>(AppConstants.foldersBox);
+  await Hive.openBox<DownloadJob>(AppConstants.downloadsBox);
+
+  // Initialize Theme Service
+  await ThemeService.instance.init();
 
   runApp(const TelStorageApp());
 }

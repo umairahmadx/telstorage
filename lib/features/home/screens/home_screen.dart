@@ -1,17 +1,19 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/models/app_metadata.dart';
+import '../../../core/models/file_record.dart';
 import '../../../core/routing/app_router.dart';
-import '../../../core/services/auth_service.dart';
-import '../../../core/services/hive_service.dart';
-import '../../../core/services/telegram_service.dart';
-import '../../../core/services/metadata_service.dart';
-import '../../../core/services/upload_service.dart';
-import '../../../core/services/sync_service.dart';
+import '../../../core/services/service_locator.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/utils/responsive.dart';
 import '../../../shared/widgets/app_shell.dart';
+import '../../../shared/widgets/mobile_shell.dart';
 import '../../../shared/widgets/storage_ring.dart';
+import '../../storage/bloc/sync_cubit.dart';
+import '../../upload/bloc/upload_cubit.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,100 +22,56 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final _telegram = TelegramService();
-  late final MetadataService _metadata;
-  late final UploadService _upload;
-  late final SyncService _sync;
-  final _hive = HiveService.instance;
-
+  late final SyncCubit _syncCubit;
+  late final UploadCubit _uploadCubit;
   AppMetadata? _meta;
-  bool _isLoading    = true;
-  bool _isSyncing    = false;
-  String _syncStatus = '';
-  bool _isUploading  = false;
-  double _uploadPct  = 0;
-  String _uploadStatus = '';
 
   @override
   void initState() {
     super.initState();
-    _initServices();
+    _syncCubit = SyncCubit();
+    _uploadCubit = UploadCubit();
+    _initAndSync();
   }
 
-  Future<void> _initServices() async {
+  @override
+  void dispose() {
+    _syncCubit.close();
+    _uploadCubit.close();
+    super.dispose();
+  }
+
+  Future<void> _initAndSync() async {
     try {
-      final token     = await AuthService.instance.getToken();
-      final channelId = await AuthService.instance.getChannelId();
-      if (token == null || channelId == null) {
-        if (!mounted) return;
-        Navigator.of(context).pushReplacementNamed(AppRouter.login);
-        return;
-      }
-      await _telegram.init(token, channelId);
-      _metadata = MetadataService(_telegram);
-      _upload   = UploadService(_telegram, _metadata, _hive);
-      _sync     = SyncService(_metadata, _telegram, _hive);
-      await _syncFromTelegram();
+      await ServiceLocator.instance.init();
+      _syncCubit.sync().then((_) => _loadMeta());
     } catch (e) {
       if (!mounted) return;
-      _snack('Error initializing: $e');
-      setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _syncFromTelegram() async {
-    setState(() { _isLoading = true; _isSyncing = true; _syncStatus = 'Syncing…'; });
-    SyncResult? result;
-    try {
-      result = await _sync.syncFromTelegram(
-        onProgress: (_, s) { if (mounted) setState(() => _syncStatus = s); },
-      );
-    } catch (_) {}
-    finally {
-      if (mounted) setState(() => _isSyncing = false);
-    }
-    await _loadMeta();
-    if (result != null && result.hasChanges && mounted) {
-      final parts = <String>[];
-      if (result.added > 0)   parts.add('+${result.added} new');
-      if (result.removed > 0) parts.add('-${result.removed} removed');
-      _snack('Synced: ${parts.join(', ')}', success: true);
+      if (e.toString().contains('credentials')) {
+        Navigator.of(context).pushReplacementNamed(AppRouter.login);
+      } else {
+        _snack('Error initializing: $e');
+      }
     }
   }
 
   Future<void> _loadMeta() async {
-    setState(() => _isLoading = true);
     try {
-      final m = await _metadata.fetch();
-      setState(() { _meta = m; _isLoading = false; });
+      final m = await ServiceLocator.instance.metadata.fetch();
+      if (mounted) setState(() => _meta = m);
     } catch (e) {
-      setState(() => _isLoading = false);
       if (!mounted) return;
-      String msg = 'Sync error: $e';
-      if (e.toString().contains('No pinned')) msg = 'Initializing storage… Retry.';
-      _snack(msg);
+      _snack('Could not load storage info: $e');
     }
   }
 
   Future<void> _pickAndUpload() async {
-    final result = await FilePicker.platform.pickFiles(withData: true);
-    if (result == null || result.files.isEmpty) return;
-    final file = result.files.first;
+    final picked = await FilePicker.platform.pickFiles(withData: true);
+    if (picked == null || picked.files.isEmpty) return;
+    final file = picked.files.first;
     if (file.bytes == null) { _snack('Could not read file'); return; }
 
-    setState(() { _isUploading = true; _uploadPct = 0; _uploadStatus = 'Starting…'; });
-    try {
-      await _upload.uploadFile(
-        file.bytes!, file.name, null,
-        (p, s) { if (mounted) setState(() { _uploadPct = p; _uploadStatus = s; }); },
-      );
-      _snack('✅ ${file.name} uploaded!', success: true);
-      await _loadMeta();
-    } catch (e) {
-      _snack('Upload failed: $e');
-    } finally {
-      if (mounted) setState(() => _isUploading = false);
-    }
+    _uploadCubit.upload(bytes: file.bytes!, name: file.name, folderId: null);
   }
 
   void _snack(String msg, {bool success = false}) {
@@ -127,34 +85,57 @@ class _HomeScreenState extends State<HomeScreen> {
     ));
   }
 
+
   @override
   Widget build(BuildContext context) {
     final isMobile = Responsive.isMobile(context);
-    final content  = _isLoading ? _buildLoading() : _buildContent();
-
-    if (isMobile) {
-      return Scaffold(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        appBar: _mobileAppBar(),
-        body: content,
-        floatingActionButton: _buildFab(),
-        bottomNavigationBar: _buildBottomNav(),
-      );
-    }
-
-    // Desktop: shell wraps content
-    return AppShell(
-      selectedIndex: 0,
-      child: Scaffold(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        appBar: _desktopTopBar(),
-        body: content,
-        floatingActionButton: _buildFab(),
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider.value(value: _syncCubit),
+        BlocProvider.value(value: _uploadCubit),
+      ],
+      child: BlocConsumer<UploadCubit, UploadState>(
+        listener: (ctx, state) {
+          if (state is UploadSuccess) {
+            _snack('${state.fileName} uploaded!', success: true);
+            _loadMeta();
+            _uploadCubit.reset();
+          } else if (state is UploadError) {
+            _snack('Upload failed: ${state.message}');
+            _uploadCubit.reset();
+          }
+        },
+        builder: (ctx, uploadState) {
+          return BlocBuilder<SyncCubit, SyncState>(
+            builder: (ctx, syncState) {
+              final isUploading = uploadState is UploadInProgress;
+              final content = _buildContent(uploadState);
+              if (isMobile) {
+                return Scaffold(
+                  backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+                  appBar: _mobileAppBar(isUploading),
+                  body: content,
+                  floatingActionButton: _buildFab(isUploading),
+                );
+              }
+              return AppShell(
+                selectedIndex: 0,
+                child: Scaffold(
+                  backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+                  appBar: _desktopTopBar(isUploading),
+                  body: content,
+                  floatingActionButton: _buildFab(isUploading),
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }
 
-  PreferredSizeWidget _mobileAppBar() => PreferredSize(
+
+  PreferredSizeWidget _mobileAppBar(bool isUploading) => PreferredSize(
     preferredSize: const Size.fromHeight(64),
     child: Container(
       decoration: BoxDecoration(
@@ -167,70 +148,91 @@ class _HomeScreenState extends State<HomeScreen> {
         bottom: false,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Row(children: [
-            Container(
-              width: 36, height: 36,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(colors: [AppTheme.primary, Color(0xFFA78BFA)]),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.cloud_done_rounded, color: Colors.white, size: 20),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('TelStorage',
-                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
-                Text(_isSyncing ? _syncStatus : 'Your cloud drive',
-                    style: Theme.of(context).textTheme.bodySmall,
-                    overflow: TextOverflow.ellipsis),
-              ]),
-            ),
-            if (_isSyncing)
-              const SizedBox(width: 20, height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary))
-            else
-              IconButton(
-                icon: const Icon(Icons.sync_rounded, size: 22),
-                tooltip: 'Sync',
-                onPressed: _syncFromTelegram,
-              ),
-            IconButton(
-              icon: const Icon(Icons.settings_outlined, size: 22),
-              onPressed: () => Navigator.of(context).pushNamed(AppRouter.settings),
-            ),
-          ]),
+          child: BlocBuilder<SyncCubit, SyncState>(
+            builder: (ctx, syncState) {
+              final isSyncing = syncState is SyncInProgress;
+              final statusText = syncState is SyncInProgress ? syncState.status : 'Your cloud drive';
+              return Row(children: [
+                Container(
+                  width: 36, height: 36,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [AppTheme.primary, Color(0xFFA78BFA)]),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.cloud_done_rounded, color: Colors.white, size: 20),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Text('TelStorage',
+                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
+                    Text(statusText,
+                        style: Theme.of(context).textTheme.bodySmall,
+                        overflow: TextOverflow.ellipsis),
+                  ]),
+                ),
+                if (isSyncing)
+                  const SizedBox(width: 20, height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary))
+                else
+                  IconButton(
+                    icon: const Icon(Icons.sync_rounded, size: 22),
+                    tooltip: 'Sync',
+                    onPressed: () => _syncCubit.sync().then((_) => _loadMeta()),
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.settings_outlined, size: 22),
+                  onPressed: () {
+                    final shell = MobileShell.of(context);
+                    if (shell != null) {
+                      shell.switchTab(3); // Settings tab
+                    } else {
+                      Navigator.of(context).pushNamed(AppRouter.settings);
+                    }
+                  },
+                ),
+              ]);
+            },
+          ),
         ),
       ),
     ),
   );
 
-  AppBar _desktopTopBar() => AppBar(
+  AppBar _desktopTopBar(bool isUploading) => AppBar(
     automaticallyImplyLeading: false,
     title: Text('Dashboard', style: Theme.of(context).textTheme.headlineSmall),
     actions: [
-      if (_isSyncing)
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-          child: Row(children: [
-            const SizedBox(width: 18, height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary)),
-            const SizedBox(width: 8),
-            Text(_syncStatus, style: Theme.of(context).textTheme.bodySmall),
-          ]),
-        )
-      else
-        TextButton.icon(
-          onPressed: _syncFromTelegram,
-          icon: const Icon(Icons.sync_rounded, size: 18),
-          label: const Text('Sync'),
-          style: TextButton.styleFrom(foregroundColor: AppTheme.primary),
-        ),
+      BlocBuilder<SyncCubit, SyncState>(
+        builder: (ctx, syncState) {
+          if (syncState is SyncInProgress) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+              child: Row(children: [
+                const SizedBox(width: 18, height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary)),
+                const SizedBox(width: 8),
+                Text(syncState.status,
+                    style: Theme.of(context).textTheme.bodySmall),
+              ]),
+            );
+          }
+          return TextButton.icon(
+            onPressed: () => _syncCubit.sync().then((_) => _loadMeta()),
+            icon: const Icon(Icons.sync_rounded, size: 18),
+            label: const Text('Sync'),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.primary),
+          );
+        },
+      ),
       const SizedBox(width: 8),
     ],
   );
 
+
   Widget _buildLoading() {
+    final syncState = _syncCubit.state;
+    final statusText = syncState is SyncInProgress ? syncState.status : 'Loading…';
     return Center(
       child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
         const SizedBox(
@@ -241,19 +243,25 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(height: 20),
-        Text(_syncStatus.isEmpty ? 'Loading…' : _syncStatus,
+        Text(statusText,
             style: Theme.of(context).textTheme.bodyMedium),
       ]),
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildContent(UploadState uploadState) {
+    final isSyncing = _syncCubit.state is SyncInProgress;
+    final isLoading = isSyncing && _meta == null;
+    if (isLoading) return _buildLoading();
     final isDesktop = Responsive.isDesktop(context);
-    return isDesktop ? _buildDesktopLayout() : _buildMobileLayout();
+    return isDesktop
+        ? _buildDesktopLayout(uploadState)
+        : _buildMobileLayout(uploadState);
   }
 
   // ── DESKTOP LAYOUT ────────────────────────────────────────────────────────
-  Widget _buildDesktopLayout() {
+  Widget _buildDesktopLayout(UploadState uploadState) {
+    final isUploading = uploadState is UploadInProgress;
     return RefreshIndicator(
       color: AppTheme.primary,
       onRefresh: _loadMeta,
@@ -262,7 +270,7 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: const EdgeInsets.fromLTRB(28, 20, 28, 40),
         child: Column(children: [
           // Upload progress
-          if (_isUploading) _uploadProgressCard(),
+          if (uploadState is UploadInProgress) _uploadProgressCard(uploadState),
           // Top row: storage ring + stats + quick upload
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             // Storage ring card
@@ -294,7 +302,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       height: 48,
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: _isUploading ? null : _pickAndUpload,
+                        onPressed: isUploading ? null : _pickAndUpload,
                         icon: const Icon(Icons.cloud_upload_rounded, size: 20),
                         label: const Text('Choose file to upload',
                             style: TextStyle(fontWeight: FontWeight.w600)),
@@ -341,7 +349,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ── MOBILE LAYOUT ─────────────────────────────────────────────────────────
-  Widget _buildMobileLayout() {
+  Widget _buildMobileLayout(UploadState uploadState) {
+    final isUploading = uploadState is UploadInProgress;
     return RefreshIndicator(
       color: AppTheme.primary,
       onRefresh: _loadMeta,
@@ -351,25 +360,37 @@ class _HomeScreenState extends State<HomeScreen> {
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             sliver: SliverList(delegate: SliverChildListDelegate([
-              if (_isUploading) _uploadProgressCard(),
-
-              // Upload CTA banner
-              if (!_isUploading) _mobileUploadBanner(),
+              if (uploadState is UploadInProgress) _uploadProgressCard(uploadState),
+              if (!isUploading)
+                _mobileUploadBanner(isUploading)
+                    .animate()
+                    .fadeIn(duration: 400.ms)
+                    .slideY(begin: 0.1, end: 0),
               const SizedBox(height: 16),
 
               // Storage ring card
               _glassCard(child: Column(children: [
-                StorageRing(usedMb: _meta?.storageUsedMb ?? 0, limitMb: double.maxFinite),
+                Center(
+                  child: SizedBox(
+                    width: 180,
+                    height: 180,
+                    child: StorageRing(usedMb: _meta?.storageUsedMb ?? 0, limitMb: double.maxFinite),
+                  ),
+                ),
                 const SizedBox(height: 12),
                 _statRow(),
-              ])),
+              ])).animate()
+                  .fadeIn(duration: 400.ms, delay: 100.ms)
+                  .slideY(begin: 0.1, end: 0),
               const SizedBox(height: 20),
 
               // Categories header
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                 Text('Categories', style: Theme.of(context).textTheme.titleMedium
                     ?.copyWith(fontWeight: FontWeight.w700)),
-              ]),
+              ]).animate()
+                  .fadeIn(duration: 400.ms, delay: 200.ms)
+                  .slideY(begin: 0.1, end: 0),
               const SizedBox(height: 12),
             ])),
           ),
@@ -382,16 +403,19 @@ class _HomeScreenState extends State<HomeScreen> {
                 (ctx, i) {
                   if (_meta == null) return const SizedBox.shrink();
                   final cats = [
-                    _CatData('Images', Icons.image_rounded, _meta!.categories['images']!,
+                    _CatData('Images', Icons.image_rounded, _meta!.categories['images'] ?? CategoryStat(count: 0, sizeMb: 0),
                         const LinearGradient(colors: [Color(0xFF6C63FF), Color(0xFF3B82F6)])),
-                    _CatData('Videos', Icons.video_library_rounded, _meta!.categories['videos']!,
+                    _CatData('Videos', Icons.video_library_rounded, _meta!.categories['videos'] ?? CategoryStat(count: 0, sizeMb: 0),
                         const LinearGradient(colors: [Color(0xFFEC4899), Color(0xFFA855F7)])),
-                    _CatData('Documents', Icons.description_rounded, _meta!.categories['docs']!,
+                    _CatData('Documents', Icons.description_rounded, _meta!.categories['docs'] ?? CategoryStat(count: 0, sizeMb: 0),
                         const LinearGradient(colors: [Color(0xFFF59E0B), Color(0xFFEF4444)])),
-                    _CatData('Others', Icons.folder_rounded, _meta!.categories['others']!,
+                    _CatData('Others', Icons.folder_rounded, _meta!.categories['others'] ?? CategoryStat(count: 0, sizeMb: 0),
                         const LinearGradient(colors: [Color(0xFF10B981), Color(0xFF0088CC)])),
                   ];
-                  return _CategoryCard(data: cats[i]);
+                  return _CategoryCard(data: cats[i])
+                      .animate()
+                      .fadeIn(duration: 400.ms, delay: (200 + (i * 50)).ms)
+                      .slideY(begin: 0.1, end: 0);
                 },
                 childCount: _meta == null ? 0 : 4,
               ),
@@ -404,7 +428,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
           // Recent files
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 120),
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
             sliver: SliverList(delegate: SliverChildListDelegate([
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                 Text('Recent Files', style: Theme.of(context).textTheme.titleMedium
@@ -417,52 +441,89 @@ class _HomeScreenState extends State<HomeScreen> {
               ]),
               const SizedBox(height: 8),
               _recentFilesCard(),
-            ])),
+            ])).animate()
+                .fadeIn(duration: 400.ms, delay: 300.ms)
+                .slideY(begin: 0.1, end: 0),
           ),
         ],
       ),
     );
   }
 
-  Widget _mobileUploadBanner() {
+  Widget _mobileUploadBanner(bool isUploading) {
     return GestureDetector(
-      onTap: _isUploading ? null : _pickAndUpload,
+      onTap: isUploading ? null : _pickAndUpload,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [AppTheme.primary, Color(0xFF8B5CF6)],
-            begin: Alignment.centerLeft, end: Alignment.centerRight,
+            colors: [AppTheme.primary, Color(0xFF8B5CF6), Color(0xFFA78BFA)],
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
           ),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(
-            color: AppTheme.primary.withAlpha(80),
-            blurRadius: 16, offset: const Offset(0, 6))],
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.primary.withAlpha(90),
+              blurRadius: 20, offset: const Offset(0, 8)),
+          ],
         ),
-        child: Row(children: [
-          Container(
-            width: 42, height: 42,
-            decoration: BoxDecoration(
-              color: Colors.white.withAlpha(30),
-              borderRadius: BorderRadius.circular(12)),
-            child: const Icon(Icons.cloud_upload_rounded, color: Colors.white, size: 24),
-          ),
-          const SizedBox(width: 14),
-          Expanded(child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Upload a File',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
-            const Text('Videos, images, docs, anything',
-                style: TextStyle(color: Colors.white70, fontSize: 12)),
-          ])),
-          const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white70, size: 16),
-        ]),
+        child: Stack(
+          children: [
+            // Shimmer overlay
+            Positioned.fill(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(18),
+                child: ShaderMask(
+                  shaderCallback: (bounds) => LinearGradient(
+                    colors: [
+                      Colors.white.withAlpha(0),
+                      Colors.white.withAlpha(30),
+                      Colors.white.withAlpha(0),
+                    ],
+                    stops: const [0.0, 0.5, 1.0],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ).createShader(bounds),
+                  blendMode: BlendMode.srcATop,
+                  child: Container(color: Colors.white.withAlpha(8)),
+                ),
+              ),
+            ),
+            Row(children: [
+              Container(
+                width: 52, height: 52,
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(35),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.cloud_upload_rounded, color: Colors.white, size: 28),
+              ),
+              const SizedBox(width: 16),
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Upload a File',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16)),
+                const SizedBox(height: 3),
+                Text('Videos, images, docs — unlimited storage',
+                    style: TextStyle(color: Colors.white.withAlpha(200), fontSize: 12.5)),
+              ])),
+              Container(
+                width: 36, height: 36,
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(25),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18),
+              ),
+            ]),
+          ],
+        ),
       ),
     );
   }
 
   // ── Shared widgets ────────────────────────────────────────────────────────
-  Widget _uploadProgressCard() {
+  Widget _uploadProgressCard(UploadInProgress state) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -479,19 +540,19 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(_uploadStatus,
+              child: Text(state.status,
                   style: Theme.of(context).textTheme.labelLarge,
                   overflow: TextOverflow.ellipsis),
             ),
-            Text('${(_uploadPct * 100).toStringAsFixed(0)}%',
-                style: TextStyle(
+            Text('${(state.progress * 100).toStringAsFixed(0)}%',
+                style: const TextStyle(
                     color: AppTheme.primary, fontWeight: FontWeight.w700, fontSize: 14)),
           ]),
           const SizedBox(height: 12),
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
-              value: _uploadPct,
+              value: state.progress,
               minHeight: 6,
               backgroundColor: isDark ? const Color(0xFF2A2A45) : const Color(0xFFE8E4FF),
               valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
@@ -504,10 +565,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _statRow() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hive = ServiceLocator.instance.isInitialized ? ServiceLocator.instance.hive : null;
     final div = Container(width: 1, height: 36,
         color: isDark ? const Color(0xFF2A2A45) : const Color(0xFFE0DFFF));
     return Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-      _statPill(Icons.insert_drive_file_rounded, '${_hive.totalFiles}', 'Files', AppTheme.primary),
+      _statPill(Icons.insert_drive_file_rounded, '${hive?.totalFiles ?? 0}', 'Files', AppTheme.primary),
       div,
       _statPill(Icons.cloud_done_outlined, _formatSize(_meta?.storageUsedMb ?? 0), 'Used', AppTheme.secondary),
       div,
@@ -527,13 +589,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _categoryGrid({required int crossAxisCount}) {
     if (_meta == null) return const SizedBox.shrink();
     final cats = [
-      _CatData('Images', Icons.image_rounded, _meta!.categories['images']!,
+      _CatData('Images', Icons.image_rounded, _meta!.categories['images'] ?? CategoryStat(count: 0, sizeMb: 0),
           const LinearGradient(colors: [Color(0xFF6C63FF), Color(0xFF3B82F6)])),
-      _CatData('Videos', Icons.video_library_rounded, _meta!.categories['videos']!,
+      _CatData('Videos', Icons.video_library_rounded, _meta!.categories['videos'] ?? CategoryStat(count: 0, sizeMb: 0),
           const LinearGradient(colors: [Color(0xFFEC4899), Color(0xFFA855F7)])),
-      _CatData('Documents', Icons.description_rounded, _meta!.categories['docs']!,
+      _CatData('Documents', Icons.description_rounded, _meta!.categories['docs'] ?? CategoryStat(count: 0, sizeMb: 0),
           const LinearGradient(colors: [Color(0xFFF59E0B), Color(0xFFEF4444)])),
-      _CatData('Others', Icons.folder_rounded, _meta!.categories['others']!,
+      _CatData('Others', Icons.folder_rounded, _meta!.categories['others'] ?? CategoryStat(count: 0, sizeMb: 0),
           const LinearGradient(colors: [Color(0xFF10B981), Color(0xFF0088CC)])),
     ];
     return GridView.count(
@@ -548,7 +610,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _recentFilesCard() {
-    final files = _hive.recentFiles(5);
+    final files = ServiceLocator.instance.isInitialized
+        ? ServiceLocator.instance.hive.recentFiles(5)
+        : <dynamic>[];
     if (files.isEmpty) {
       return _glassCard(child: _emptyState());
     }
@@ -560,65 +624,303 @@ class _HomeScreenState extends State<HomeScreen> {
           return _RecentTile(
             file: e.value,
             isLast: isLast,
-            onTap: () => Navigator.of(context).pushNamed(AppRouter.browser),
+            onTap: () => _showDownloadOptions(e.value),
           );
         }).toList(),
       ),
     );
   }
 
-  Widget _emptyState() => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 40),
-    child: Column(children: [
-      Container(
-        width: 72, height: 72,
-        decoration: BoxDecoration(
-            color: AppTheme.primary.withAlpha(25), shape: BoxShape.circle),
-        child: const Icon(Icons.cloud_upload_outlined, size: 36, color: AppTheme.primary),
-      ),
-      const SizedBox(height: 16),
-      Text('No files yet', style: Theme.of(context).textTheme.titleMedium),
-      const SizedBox(height: 6),
-      Text('Tap the Upload button to get started',
-          style: Theme.of(context).textTheme.bodySmall),
-    ]),
-  );
-
-  FloatingActionButton _buildFab() => FloatingActionButton.extended(
-    onPressed: _isUploading ? null : _pickAndUpload,
-    icon: const Icon(Icons.cloud_upload_rounded),
-    label: const Text('Upload', style: TextStyle(fontWeight: FontWeight.w600)),
-    backgroundColor: _isUploading ? Colors.grey : AppTheme.primary,
-    foregroundColor: Colors.white,
-  );
-
-  Widget _buildBottomNav() {
+  Future<void> _showDownloadOptions(FileRecord file) async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
-        border: Border(top: BorderSide(
-            color: isDark ? const Color(0xFF2A2A45) : const Color(0xFFE0DFFF))),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withAlpha(isDark ? 40 : 15),
-              blurRadius: 20, offset: const Offset(0, -4)),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: 60,
-          child: Row(children: [
-            _BottomNavItem(Icons.home_rounded, 'Home', true, () {}),
-            _BottomNavItem(Icons.folder_rounded, 'Files', false,
-                () => Navigator.of(context).pushNamed(AppRouter.browser)),
-            _BottomNavItem(Icons.settings_outlined, 'Settings', false,
-                () => Navigator.of(context).pushNamed(AppRouter.settings)),
-          ]),
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          color: isDark ? AppTheme.darkCard : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white24 : Colors.black12,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Container(
+                  width: 44, height: 44,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withAlpha(25),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.file_present_rounded, color: AppTheme.primary, size: 24),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(file.name,
+                          style: Theme.of(context).textTheme.titleLarge,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 4),
+                      Text(file.formattedSize, style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            const Divider(),
+            const SizedBox(height: 12),
+            ListTile(
+              leading: const Icon(Icons.download_rounded, color: AppTheme.success),
+              title: const Text('Download Directly', style: TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: const Text('Download and open the file immediately'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _downloadDirectly(file);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.downloading_rounded, color: AppTheme.primary),
+              title: const Text('Download in Background', style: TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: const Text('Add to queue and download in background'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _downloadInBackground(file);
+              },
+            ),
+            const SizedBox(height: 16),
+          ],
         ),
       ),
     );
   }
+
+  Future<void> _downloadDirectly(FileRecord file) async {
+    final download = ServiceLocator.instance.downloadService;
+    if (kIsWeb) {
+      final notifier = ValueNotifier<({double progress, String status})>(
+          (progress: 0.0, status: 'Starting…'));
+      var dialogOpen = true;
+
+      _showProgressDialog(file.name, notifier, () => dialogOpen = false);
+
+      try {
+        final bytes = await download.downloadFile(
+          file, (p, s) { notifier.value = (progress: p, status: s); });
+        
+        if (dialogOpen && mounted) {
+          Navigator.pop(context);
+          dialogOpen = false;
+        }
+
+        await download.saveFile(bytes, file.name);
+        _snack('✅ ${file.name} — download started!', success: true);
+      } catch (e) {
+        if (dialogOpen && mounted) Navigator.pop(context);
+        _snack('❌ Download failed: $e');
+      } finally {
+        notifier.dispose();
+      }
+      return;
+    }
+
+    // Native: check file size (19 MB limit)
+    if (file.sizeMb <= 19.0) {
+      final notifier = ValueNotifier<({double progress, String status})>(
+          (progress: 0.0, status: 'Starting…'));
+      var dialogOpen = true;
+      
+      _showProgressDialog(file.name, notifier, () => dialogOpen = false);
+
+      try {
+        final bytes = await download.downloadFile(
+          file, (p, s) { notifier.value = (progress: p, status: s); });
+        
+        notifier.value = (progress: 0.95, status: 'Saving file…');
+        
+        final saveResult = await download.saveAndOpen(bytes, file.name);
+        
+        if (dialogOpen && mounted) {
+          Navigator.pop(context);
+          dialogOpen = false;
+        }
+
+        if (saveResult.success) {
+          await ServiceLocator.instance.downloadQueue.addCompletedJob(file, saveResult.savedPath);
+          _snack('✅ Saved to downloads: ${file.name}', success: true);
+        } else {
+          _snack('❌ Save failed: ${saveResult.message}');
+        }
+      } catch (e) {
+        if (dialogOpen && mounted) {
+          Navigator.pop(context);
+          dialogOpen = false;
+        }
+        _snack('❌ Download failed: $e');
+      } finally {
+        notifier.dispose();
+      }
+    } else {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Download Large File'),
+          content: Text(
+            '"${file.name}" is a large file (${file.formattedSize}). '
+            'Would you like to add it to the background downloads queue?'
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Download in Background', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed == true && mounted) {
+        _downloadInBackground(file);
+      }
+    }
+  }
+
+  Future<void> _downloadInBackground(FileRecord file) async {
+    await ServiceLocator.instance.downloadQueue.enqueueDownload(file);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('"${file.name}" added to download queue'),
+        action: SnackBarAction(
+          label: 'View',
+          textColor: Colors.white,
+          onPressed: () {
+            final shell = MobileShell.of(context);
+            if (shell != null) {
+              shell.switchTab(2); // Downloads tab is index 2
+            } else {
+              Navigator.of(context).pushNamed(AppRouter.downloads);
+            }
+          },
+        ),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      ),
+    );
+  }
+
+  void _showProgressDialog(String name, ValueNotifier<({double progress, String status})> notifier, VoidCallback onClosed) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => ValueListenableBuilder(
+        valueListenable: notifier,
+        builder: (context, state, __) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text(name,
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 14)),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: state.progress == 0 ? null : state.progress,
+                minHeight: 6,
+                valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(state.status, style: Theme.of(context).textTheme.bodySmall),
+            if (state.progress > 0) ...[
+              const SizedBox(height: 4),
+              Text('${(state.progress * 100).toStringAsFixed(0)}%',
+                  style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w700)),
+            ],
+          ]),
+        ),
+      ),
+    ).then((_) => onClosed());
+  }
+
+  Widget _emptyState() => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 40),
+    child: Column(children: [
+      Container(
+        width: 88, height: 88,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            colors: [AppTheme.primary.withAlpha(30), const Color(0xFFA78BFA).withAlpha(30)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: const Icon(Icons.cloud_upload_outlined, size: 42, color: AppTheme.primary),
+      ),
+      const SizedBox(height: 20),
+      ShaderMask(
+        shaderCallback: (bounds) => const LinearGradient(
+          colors: [AppTheme.primary, Color(0xFFA78BFA)],
+        ).createShader(bounds),
+        child: Text('No files yet',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800, color: Colors.white)),
+      ),
+      const SizedBox(height: 8),
+      Text('Upload your first file to get started',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).textTheme.bodySmall?.color)),
+      const SizedBox(height: 20),
+      SizedBox(
+        height: 44,
+        child: ElevatedButton.icon(
+          onPressed: _pickAndUpload,
+          icon: const Icon(Icons.add_rounded, size: 20),
+          label: const Text('Upload File', style: TextStyle(fontWeight: FontWeight.w600)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.primary,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+          ),
+        ),
+      ),
+    ]),
+  );
+
+  FloatingActionButton _buildFab(bool isUploading) => FloatingActionButton.extended(
+    onPressed: isUploading ? null : _pickAndUpload,
+    icon: const Icon(Icons.cloud_upload_rounded),
+    label: const Text('Upload', style: TextStyle(fontWeight: FontWeight.w600)),
+    backgroundColor: isUploading ? Colors.grey : AppTheme.primary,
+    foregroundColor: Colors.white,
+  );
+
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   Widget _glassCard({required Widget child, EdgeInsetsGeometry? padding, Color? borderColor}) {
@@ -763,40 +1065,5 @@ class _RecentTile extends StatelessWidget {
     if (diff.inDays == 1) return 'Yesterday';
     if (diff.inDays < 7) return '${diff.inDays}d ago';
     return '${d.day}/${d.month}/${d.year}';
-  }
-}
-
-class _BottomNavItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-  const _BottomNavItem(this.icon, this.label, this.selected, this.onTap);
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-            decoration: BoxDecoration(
-              color: selected ? AppTheme.primary.withAlpha(25) : Colors.transparent,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Icon(icon,
-                color: selected ? AppTheme.primary : Colors.grey, size: 23),
-          ),
-          const SizedBox(height: 2),
-          Text(label, style: TextStyle(
-              fontSize: 10,
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              color: selected ? AppTheme.primary : Colors.grey)),
-        ]),
-      ),
-    );
   }
 }

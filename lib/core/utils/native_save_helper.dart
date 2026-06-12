@@ -8,6 +8,8 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
+import 'app_logger.dart';
+import 'file_category_helper.dart';
 
 /// Result from a native save operation.
 class NativeSaveResult {
@@ -46,9 +48,13 @@ Future<NativeSaveResult> _saveAndroid(Uint8List bytes, String filename) async {
     }
 
     final dlPath = await _androidDownloadsPath();
-    final file = File(p.join(dlPath, filename));
+    final subfolder = getSubfolderForExtension(filename);
+    final targetDir = Directory(p.join(dlPath, 'TelStorage', subfolder));
+    await targetDir.create(recursive: true);
+
+    final file = File(p.join(targetDir.path, filename));
     await file.writeAsBytes(bytes);
-    print('✅ [SaveHelper] Android: saved to ${file.path}');
+    AppLogger.i('Android: saved to ${file.path}', tag: 'SaveHelper');
 
     // Try to open the file — allows user to see it immediately
     try {
@@ -58,18 +64,22 @@ Future<NativeSaveResult> _saveAndroid(Uint8List bytes, String filename) async {
     return NativeSaveResult(
       success: true,
       savedPath: file.path,
-      message: '✅ Saved to Downloads: $filename',
+      message: '✅ Saved to Downloads: TelStorage/$subfolder/$filename',
     );
   } catch (e) {
     // Fallback to app Documents
     try {
       final dir  = await getApplicationDocumentsDirectory();
-      final file = File(p.join(dir.path, filename));
+      final subfolder = getSubfolderForExtension(filename);
+      final targetDir = Directory(p.join(dir.path, 'TelStorage', subfolder));
+      await targetDir.create(recursive: true);
+
+      final file = File(p.join(targetDir.path, filename));
       await file.writeAsBytes(bytes);
       return NativeSaveResult(
         success: true,
         savedPath: file.path,
-        message: '✅ Saved to app storage: $filename',
+        message: '✅ Saved to app storage: TelStorage/$subfolder/$filename',
       );
     } catch (e2) {
       return NativeSaveResult(success: false, message: '❌ Save failed: $e2');
@@ -83,9 +93,13 @@ Future<NativeSaveResult> _saveIos(Uint8List bytes, String filename) async {
   try {
     // Save to Documents — visible in iOS Files app (UIFileSharingEnabled=true)
     final dir  = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dir.path, filename));
+    final subfolder = getSubfolderForExtension(filename);
+    final targetDir = Directory(p.join(dir.path, 'TelStorage', subfolder));
+    await targetDir.create(recursive: true);
+
+    final file = File(p.join(targetDir.path, filename));
     await file.writeAsBytes(bytes);
-    print('✅ [SaveHelper] iOS: saved to ${file.path}');
+    AppLogger.i('iOS: saved to ${file.path}', tag: 'SaveHelper');
 
     // Show share sheet so user can "Save to Files", "Save to Photos", AirDrop…
     await SharePlus.instance.share(
@@ -110,13 +124,17 @@ Future<NativeSaveResult> _saveIos(Uint8List bytes, String filename) async {
 Future<NativeSaveResult> _saveDesktop(Uint8List bytes, String filename) async {
   try {
     final dir  = await getDownloadsDirectory() ?? await getApplicationDocumentsDirectory();
-    final file = File(p.join(dir.path, filename));
+    final subfolder = getSubfolderForExtension(filename);
+    final targetDir = Directory(p.join(dir.path, 'TelStorage', subfolder));
+    await targetDir.create(recursive: true);
+
+    final file = File(p.join(targetDir.path, filename));
     await file.writeAsBytes(bytes);
     try { await OpenFile.open(file.path); } catch (_) {}
     return NativeSaveResult(
       success: true,
       savedPath: file.path,
-      message: '✅ Saved to ${dir.path}',
+      message: '✅ Saved to TelStorage/$subfolder',
     );
   } catch (e) {
     return NativeSaveResult(success: false, message: '❌ Save failed: $e');

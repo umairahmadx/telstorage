@@ -50,8 +50,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return [
       const _SectionHeader('About'),
       _GlassCard(children: [
-        const _InfoTile(Icons.cloud_done_rounded, AppTheme.primary, 'TelStorage',
-            'Telegram-powered unlimited cloud storage'),
+        const _InfoTile(Icons.cloud_done_rounded, AppTheme.primary,
+            'TelStorage', 'Telegram-powered unlimited cloud storage'),
         _Divider(isDark),
         const _InfoTile(Icons.all_inclusive_rounded, AppTheme.success,
             'Storage Limit', 'Unlimited — no caps, ever'),

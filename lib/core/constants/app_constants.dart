@@ -5,8 +5,7 @@ class AppConstants {
   AppConstants._();
 
   // Google Apps Script URL — loaded dynamically from .env
-  static String get scriptUrl =>
-      dotenv.env['SCRIPT_URL'] ?? '';
+  static String get scriptUrl => dotenv.env['SCRIPT_URL'] ?? '';
 
   // Telegram Bot API base URL — token is injected at runtime
   static const String telegramApiBase = 'https://api.telegram.org/bot';

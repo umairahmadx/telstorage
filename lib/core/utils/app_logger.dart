@@ -28,7 +28,14 @@ class AppLogger {
   static void w(String message, {String? tag, Object? error}) =>
       _logger.w(tag != null ? '[$tag] $message' : message, error: error);
 
-  static void e(String message, {String? tag, Object? error, StackTrace? stackTrace}) =>
-      _logger.e(tag != null ? '[$tag] $message' : message,
-          error: error, stackTrace: stackTrace);
+  static void e(
+    String message, {
+    String? tag,
+    Object? error,
+    StackTrace? stackTrace,
+  }) => _logger.e(
+    tag != null ? '[$tag] $message' : message,
+    error: error,
+    stackTrace: stackTrace,
+  );
 }

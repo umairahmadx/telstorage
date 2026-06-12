@@ -1,5 +1,3 @@
-
-
 /// Represents the pinned .metadata.json file on Telegram
 /// This is the source of truth for storage stats and folder tree
 class AppMetadata {
@@ -32,15 +30,18 @@ class AppMetadata {
       storageUsedMb: (json['storage_used_mb'] as num).toDouble(),
       totalFiles: json['total_files'] as int,
       metadataMessageId: json['metadata_message_id'] as int? ?? 0,
-      folders: (json['folders'] as List?)
+      folders:
+          (json['folders'] as List?)
               ?.map((f) => Folder.fromJson(f as Map<String, dynamic>))
               .toList() ??
           [],
-      files: (json['files'] as List?)
+      files:
+          (json['files'] as List?)
               ?.map((f) => FileRef.fromJson(f as Map<String, dynamic>))
               .toList() ??
           [],
-      categories: (json['categories'] as Map<String, dynamic>?)?.map(
+      categories:
+          (json['categories'] as Map<String, dynamic>?)?.map(
             (key, value) => MapEntry(
               key,
               CategoryStat.fromJson(value as Map<String, dynamic>),
@@ -60,7 +61,9 @@ class AppMetadata {
       'metadata_message_id': metadataMessageId,
       'folders': folders.map((f) => f.toJson()).toList(),
       'files': files.map((f) => f.toJson()).toList(),
-      'categories': categories.map((key, value) => MapEntry(key, value.toJson())),
+      'categories': categories.map(
+        (key, value) => MapEntry(key, value.toJson()),
+      ),
       'last_synced': lastSynced.toIso8601String(),
     };
   }
@@ -70,7 +73,7 @@ class AppMetadata {
 /// Allows rebuilding the local Hive cache from Telegram on first install
 /// or after clearing app data.
 class FileRef {
-  final String fileId;     // our internal UUID
+  final String fileId; // our internal UUID
   final String metaFileId; // Telegram file_id of the per-file .json (permanent)
   final String name;
   final String? folderId;
@@ -137,10 +140,7 @@ class CategoryStat {
   int count;
   double sizeMb;
 
-  CategoryStat({
-    required this.count,
-    required this.sizeMb,
-  });
+  CategoryStat({required this.count, required this.sizeMb});
 
   factory CategoryStat.fromJson(Map<String, dynamic> json) {
     return CategoryStat(
@@ -150,9 +150,6 @@ class CategoryStat {
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'count': count,
-      'size_mb': sizeMb,
-    };
+    return {'count': count, 'size_mb': sizeMb};
   }
 }

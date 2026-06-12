@@ -14,7 +14,7 @@ String getSubfolderForExtension(String filename) {
     case 'heic':
     case 'heif':
       return 'photo';
-    
+
     // Videos
     case 'mp4':
     case 'mkv':

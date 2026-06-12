@@ -48,26 +48,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// Desktop layout — unchanged from original
   List<Widget> _buildDesktopContent(bool isDark) {
     return [
-      _SectionHeader('About'),
+      const _SectionHeader('About'),
       _GlassCard(children: [
-        _InfoTile(Icons.cloud_done_rounded, AppTheme.primary, 'TelStorage',
+        const _InfoTile(Icons.cloud_done_rounded, AppTheme.primary, 'TelStorage',
             'Telegram-powered unlimited cloud storage'),
         _Divider(isDark),
-        _InfoTile(Icons.all_inclusive_rounded, AppTheme.success,
+        const _InfoTile(Icons.all_inclusive_rounded, AppTheme.success,
             'Storage Limit', 'Unlimited — no caps, ever'),
         _Divider(isDark),
-        _InfoTile(Icons.lock_rounded, AppTheme.secondary, 'Security',
+        const _InfoTile(Icons.lock_rounded, AppTheme.secondary, 'Security',
             'Files live in your private Telegram channel'),
       ]),
       const SizedBox(height: 24),
-      _SectionHeader('Storage'),
+      const _SectionHeader('Storage'),
       _GlassCard(children: [
         _ActionTile(
           Icons.sync_rounded,
           const Color(0xFF6C63FF),
           'Sync Files',
           'Pull latest file list from Telegram',
-          _syncing ? null : () => _syncFiles(context),
+          _syncing ? null : () => _syncFiles(),
           trailing: _syncing
               ? const SizedBox(
                   width: 20,
@@ -86,7 +86,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ]),
       const SizedBox(height: 24),
-      _SectionHeader('Appearance'),
+      const _SectionHeader('Appearance'),
       _GlassCard(children: [
         _ActionTile(
           isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
@@ -97,12 +97,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           trailing: Switch(
             value: isDark,
             onChanged: (_) => ThemeService.instance.toggleTheme(context),
-            activeColor: AppTheme.primary,
+            activeThumbColor: AppTheme.primary,
           ),
         ),
       ]),
       const SizedBox(height: 24),
-      _SectionHeader('Account'),
+      const _SectionHeader('Account'),
       _GlassCard(
         borderColor: AppTheme.error.withAlpha(80),
         children: [
@@ -148,14 +148,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       const SizedBox(height: 24),
 
       // Storage section
-      animated(_SectionHeader('Storage')),
+      animated(const _SectionHeader('Storage')),
       animated(_GlassCard(children: [
         _ActionTile(
           Icons.sync_rounded,
           const Color(0xFF6C63FF),
           'Sync Files',
           'Pull latest file list from Telegram',
-          _syncing ? null : () => _syncFiles(context),
+          _syncing ? null : () => _syncFiles(),
           trailing: _syncing
               ? const SizedBox(
                   width: 20,
@@ -183,18 +183,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       const SizedBox(height: 24),
 
       // About section (moved after Storage)
-      animated(_SectionHeader('About')),
+      animated(const _SectionHeader('About')),
       animated(_GlassCard(children: [
-        _InfoTile(Icons.all_inclusive_rounded, AppTheme.success,
+        const _InfoTile(Icons.all_inclusive_rounded, AppTheme.success,
             'Storage Limit', 'Unlimited — no caps, ever'),
         _Divider(isDark),
-        _InfoTile(Icons.lock_rounded, AppTheme.secondary, 'Security',
+        const _InfoTile(Icons.lock_rounded, AppTheme.secondary, 'Security',
             'Files live in your private Telegram channel'),
       ])),
       const SizedBox(height: 24),
 
       // Appearance section
-      animated(_SectionHeader('Appearance')),
+      animated(const _SectionHeader('Appearance')),
       animated(_GlassCard(children: [
         _ActionTile(
           isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
@@ -205,14 +205,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           trailing: Switch(
             value: isDark,
             onChanged: (_) => ThemeService.instance.toggleTheme(context),
-            activeColor: AppTheme.primary,
+            activeThumbColor: AppTheme.primary,
           ),
         ),
       ])),
       const SizedBox(height: 24),
 
       // Account section
-      animated(_SectionHeader('Account')),
+      animated(const _SectionHeader('Account')),
       animated(_GlassCard(
         borderColor: AppTheme.error.withAlpha(80),
         children: [
@@ -306,8 +306,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<void> _syncFiles(BuildContext context) async {
+  Future<void> _syncFiles() async {
     if (!ServiceLocator.instance.isInitialized) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Please log in first to sync'),
         behavior: SnackBarBehavior.floating,

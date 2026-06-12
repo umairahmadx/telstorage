@@ -31,6 +31,12 @@ jobs:
           cache: true
           # Optional: cache-key: "flutter-:os:-:channel:-:version:-:arch:-:hash:"
 
+      # 3.5 Create .env file from Secrets
+      - name: Create .env file
+        run: |
+          echo "SCRIPT_URL=${{ secrets.SCRIPT_URL }}" > .env
+          echo "WORKER_URL=${{ secrets.WORKER_URL }}" >> .env
+
       # 4. Install Dependencies
       - name: Install Dependencies
         run: flutter pub get

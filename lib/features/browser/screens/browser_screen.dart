@@ -1017,7 +1017,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
   Widget _sectionLabel(String text) => Padding(
         padding: const EdgeInsets.only(bottom: 8, top: 4, left: 2),
         child: Text(text.toUpperCase(),
-            style: TextStyle(
+            style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
                 color: AppTheme.primary,
@@ -1118,6 +1118,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
         await _confirm('Delete $totalCount items?', 'This cannot be undone.');
     if (!ok) return;
 
+    if (!mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1170,6 +1171,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
       title: 'Move ${_selectedFileIds.length} files to…',
     );
 
+    if (!mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1328,6 +1330,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
       if (confirmed == true && mounted) {
         await ServiceLocator.instance.downloadQueue.enqueueDownload(file);
 
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('"${file.name}" added to download queue'),
@@ -1646,11 +1649,13 @@ class _FileTile extends StatelessWidget {
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
                 onSelected: (v) {
-                  if (v == 'rename')
+                  if (v == 'rename') {
                     onRename();
-                  else if (v == 'delete')
+                  } else if (v == 'delete') {
                     onDelete();
-                  else if (v == 'move') onMove?.call();
+                  } else if (v == 'move') {
+                    onMove?.call();
+                  }
                 },
                 itemBuilder: (_) => [
                   const PopupMenuItem(
@@ -1770,9 +1775,11 @@ class _FolderTile extends StatelessWidget {
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
                 onSelected: (v) {
-                  if (v == 'rename')
+                  if (v == 'rename') {
                     onRename();
-                  else if (v == 'delete') onDelete();
+                  } else if (v == 'delete') {
+                    onDelete();
+                  }
                 },
                 itemBuilder: (_) => [
                   const PopupMenuItem(

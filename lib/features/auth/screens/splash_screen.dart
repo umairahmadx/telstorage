@@ -104,7 +104,7 @@ class _SplashScreenState extends State<SplashScreen>
                           ),
                         ],
                       ),
-                      child: Icon(
+                      child: const Icon(
                         Icons.cloud_done_rounded,
                         color: Colors.white,
                         size: 44,
@@ -124,7 +124,7 @@ class _SplashScreenState extends State<SplashScreen>
                     const SizedBox(height: 28),
 
                     // App name
-                    Text(
+                    const Text(
                       'TelStorage',
                       style: TextStyle(
                         fontSize: 32,
@@ -148,7 +148,7 @@ class _SplashScreenState extends State<SplashScreen>
                     const SizedBox(height: 8),
 
                     // Subtitle
-                    Text(
+                    const Text(
                       'Unlimited Cloud Storage',
                       style: TextStyle(
                         fontSize: 15,

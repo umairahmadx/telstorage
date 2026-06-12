@@ -2,7 +2,7 @@
 // Uses an anchor element with the `download` attribute so the file goes
 // straight to the browser's download bar — no OS save dialog.
 
-// ignore: avoid_web_libraries_in_flutter
+// ignore: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'dart:html' as html;
 import 'dart:typed_data';
 

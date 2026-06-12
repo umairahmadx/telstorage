@@ -160,9 +160,9 @@ class _RegisterScreenState extends State<RegisterScreen>
           border: Border.all(color: AppTheme.primary.withAlpha(60)),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            const Icon(Icons.info_outline, color: AppTheme.primary, size: 18),
-            const SizedBox(width: 8),
+          const Row(children: [
+            Icon(Icons.info_outline, color: AppTheme.primary, size: 18),
+            SizedBox(width: 8),
             Text('Quick Setup',
                 style: TextStyle(
                     color: AppTheme.primary,
@@ -230,15 +230,15 @@ class _RegisterScreenState extends State<RegisterScreen>
                 child: Row(children: [
                   _logoBox(size: 44, radius: 12, iconSize: 24),
                   const SizedBox(width: 12),
-                  Column(
+                  const Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('Create Account',
-                            style: const TextStyle(
+                            style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 22,
                                 fontWeight: FontWeight.w800)),
-                        const Text('Set up in under a minute',
+                        Text('Set up in under a minute',
                             style:
                                 TextStyle(color: Colors.white70, fontSize: 13)),
                       ]),
@@ -397,7 +397,7 @@ class _RegisterScreenState extends State<RegisterScreen>
               style: Theme.of(context).textTheme.bodyMedium),
           GestureDetector(
             onTap: () => Navigator.of(context).pop(),
-            child: Text('Sign in',
+            child: const Text('Sign in',
                 style: TextStyle(
                     color: AppTheme.primary, fontWeight: FontWeight.w700)),
           ),
@@ -440,7 +440,7 @@ class _RegisterScreenState extends State<RegisterScreen>
       );
 
   Widget _sectionLabel(String text) => Text(text.toUpperCase(),
-      style: TextStyle(
+      style: const TextStyle(
           color: AppTheme.primary,
           fontSize: 11,
           fontWeight: FontWeight.w700,

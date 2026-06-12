@@ -363,7 +363,7 @@ class _HomeScreenState extends State<HomeScreen> {
             TextButton(
               onPressed: () =>
                   Navigator.of(context).pushNamed(AppRouter.browser),
-              child: Text('View All',
+              child: const Text('View All',
                   style: TextStyle(
                       color: AppTheme.primary, fontWeight: FontWeight.w600)),
             ),
@@ -499,7 +499,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 TextButton(
                   onPressed: () =>
                       Navigator.of(context).pushNamed(AppRouter.browser),
-                  child: Text('View All',
+                  child: const Text('View All',
                       style: TextStyle(
                           color: AppTheme.primary,
                           fontWeight: FontWeight.w600,
@@ -1095,7 +1095,7 @@ class _CatData {
 
 class _CategoryCard extends StatelessWidget {
   final _CatData data;
-  const _CategoryCard({super.key, required this.data});
+  const _CategoryCard({required this.data});
 
   @override
   Widget build(BuildContext context) {

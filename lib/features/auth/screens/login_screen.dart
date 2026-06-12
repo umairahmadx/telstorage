@@ -192,8 +192,8 @@ class _LoginScreenState extends State<LoginScreen>
                                   fontSize: 32,
                                   fontWeight: FontWeight.w800)),
                       const SizedBox(height: 6),
-                      Text('Sign in to your cloud drive',
-                          style: const TextStyle(
+                      const Text('Sign in to your cloud drive',
+                          style: TextStyle(
                               color: Colors.white70, fontSize: 15)),
                     ],
                   ),

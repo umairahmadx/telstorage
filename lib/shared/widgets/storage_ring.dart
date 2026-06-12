@@ -132,7 +132,7 @@ class _RingPainter extends CustomPainter {
 
     // Glow (soft shadow behind arc)
     final glowPaint = Paint()
-      ..color = AppTheme.primary.withOpacity(0.25)
+      ..color = AppTheme.primary.withValues(alpha: 0.25)
       ..style = PaintingStyle.stroke
       ..strokeWidth = sw + 8
       ..strokeCap = StrokeCap.round

@@ -253,6 +253,27 @@ flutter pub get
 dart run build_runner build --delete-conflicting-outputs
 ```
 
+## Pre-push Checklist
+
+Before pushing code or opening a pull request, run the following checks to ensure clean formatting, zero linter warnings, and a successful build:
+
+1. **Format all Dart files**:
+   ```bash
+   dart format .
+   ```
+2. **Run Static Analysis (Linter checks)**:
+   ```bash
+   flutter analyze
+   ```
+3. **Run Unit & Widget Tests**:
+   ```bash
+   flutter test
+   ```
+4. **Verify Android APK Build**:
+   ```bash
+   flutter build apk --release
+   ```
+
 ## Contributing
 
 Pull requests are welcome! For major changes, please open an issue first to discuss what you would like to change.

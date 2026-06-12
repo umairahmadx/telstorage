@@ -14,8 +14,8 @@ flutter run
 
 ### Login Credentials
 
-- **Email:** umair@gmail.com
-- **Password:** Umair123@
+- **Email:** YOUR_EMAIL
+- **Password:** YOUR_PASSWORD
 
 ## 📱 App Features
 
@@ -43,17 +43,17 @@ flutter run
 
 **Google Apps Script URL:**
 ```
-https://script.google.com/macros/s/AKfycbyB4GIeRwFR8DQGPqLCuNDbDShSdWttVH7Blf8t2F1FM8BR1WPuouGVQW6CJgZa314x/exec
+https://script.google.com/macros/s/YOUR_SCRIPT_DEPLOYMENT_ID/exec
 ```
 
 **Bot Token:**
 ```
-8905948113:AAFji_uR4emQfiLBckR3C1Z-7NEXLzb_VW8
+YOUR_TELEGRAM_BOT_TOKEN
 ```
 
 **Channel ID:**
 ```
--1003999517851
+YOUR_TELEGRAM_CHANNEL_ID
 ```
 
 ### Storage Limit

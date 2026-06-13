@@ -1,63 +1,61 @@
-name: Flutter CI/CD
+name: Flutter CI
 
 on:
   push:
     branches: [ main, master, dev ]
   pull_request:
     branches: [ main, master, dev ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  analyze_and_test:
-    name: Lint, Test & Build
+  verify:
+    name: Analyze, Test & Build APK
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
-      # 1. Checkout repository code
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 2. Setup Java Environment (required for Android builds)
       - name: Setup Java JDK
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      # 3. Setup Flutter Environment
       - name: Setup Flutter SDK
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
           cache: true
-          # Optional: cache-key: "flutter-:os:-:channel:-:version:-:arch:-:hash:"
 
-      # 3.5 Create .env file from Secrets
-      - name: Create .env file
+      - name: Create CI env file
         run: |
           echo "SCRIPT_URL=${{ secrets.SCRIPT_URL }}" > .env
           echo "WORKER_URL=${{ secrets.WORKER_URL }}" >> .env
 
-      # 4. Install Dependencies
       - name: Install Dependencies
         run: flutter pub get
 
-      # 5. Check Code Formatting
       - name: Check Formatting
         run: dart format --output=none --set-exit-if-changed .
 
-      # 6. Static Analysis (Linter checks)
       - name: Run Static Analysis
         run: flutter analyze
 
-      # 7. Run Unit & Widget Tests
       - name: Run Tests
         run: flutter test
 
-      # 8. Build Android APK (Unsigned Release)
       - name: Build Android APK
         run: flutter build apk --release
 
-      # 9. Upload Compiled APK as Artifact
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:

@@ -488,30 +488,37 @@ class _HomeScreenState extends State<HomeScreen> {
           // Recent files
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
-            sliver: SliverList(
-                    delegate: SliverChildListDelegate([
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Text('Recent Files',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700)),
-                TextButton(
-                  onPressed: () =>
-                      Navigator.of(context).pushNamed(AppRouter.browser),
-                  child: const Text('View All',
-                      style: TextStyle(
-                          color: AppTheme.primary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13)),
-                ),
-              ]),
-              const SizedBox(height: 8),
-              _recentFilesCard(),
-            ]))
-                .animate()
-                .fadeIn(duration: 400.ms, delay: 300.ms)
-                .slideY(begin: 0.1, end: 0),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Recent Files',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700)),
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pushNamed(
+                          AppRouter.browser,
+                        ),
+                        child: const Text('View All',
+                            style: TextStyle(
+                                color: AppTheme.primary,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _recentFilesCard(),
+                ],
+              )
+                  .animate()
+                  .fadeIn(duration: 400.ms, delay: 300.ms)
+                  .slideY(begin: 0.1, end: 0),
+            ),
           ),
         ],
       ),

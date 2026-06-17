@@ -18,7 +18,7 @@ jobs:
   verify:
     name: Analyze, Test & Build APK
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout Repository
@@ -36,6 +36,32 @@ jobs:
           channel: 'stable'
           cache: true
 
+      # ── Caches ────────────────────────────────────────────────────────────
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Cache Android CMake
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/android/sdk/cmake
+          key: ${{ runner.os }}-cmake-3.22.1
+
+      # ── Android SDK setup ─────────────────────────────────────────────────
+      - name: Accept licenses & pre-install CMake
+        run: |
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
+            --licenses > /dev/null 2>&1
+          $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
+            "cmake;3.22.1"
+
+      # ── App setup ─────────────────────────────────────────────────────────
       - name: Create CI env file
         run: |
           echo "SCRIPT_URL=${{ secrets.SCRIPT_URL }}" > .env
@@ -44,6 +70,7 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
+      # ── Quality gates ──────────────────────────────────────────────────────
       - name: Check Formatting
         run: dart format --output=none --set-exit-if-changed .
 
@@ -53,12 +80,39 @@ jobs:
       - name: Run Tests
         run: flutter test
 
-      - name: Build Android APK
-        run: flutter build apk --release
+      # ── Build ──────────────────────────────────────────────────────────────
+      - name: Build Split APKs (arm64-v8a · armeabi-v7a · x86_64)
+        run: flutter build apk --release --split-per-abi
 
-      - name: Upload APK Artifact
+      - name: Build Universal APK
+        run: flutter build apk --release
+        # Gradle reuses compiled artifacts from above — significantly faster
+
+      # ── Upload all 4 APKs ─────────────────────────────────────────────────
+      - name: Upload arm64-v8a APK
         uses: actions/upload-artifact@v4
         with:
-          name: release-apk
+          name: apk-arm64-v8a
+          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          if-no-files-found: error
+
+      - name: Upload armeabi-v7a APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-armeabi-v7a
+          path: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+          if-no-files-found: error
+
+      - name: Upload x86_64 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-x86_64
+          path: build/app/outputs/flutter-apk/app-x86_64-release.apk
+          if-no-files-found: error
+
+      - name: Upload Universal APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-universal
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error

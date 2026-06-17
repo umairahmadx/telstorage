@@ -104,10 +104,10 @@ class _SplashScreenState extends State<SplashScreen>
                           ),
                         ],
                       ),
-                      child: const Icon(
-                        Icons.cloud_done_rounded,
-                        color: Colors.white,
-                        size: 44,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(24),
+                        child: Image.asset('assets/images/logo.png',
+                            fit: BoxFit.cover),
                       ),
                     )
                         .animate()

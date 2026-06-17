@@ -10,6 +10,7 @@ import '../../../core/models/file_record.dart';
 import '../../../core/models/folder_record.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/routing/app_router.dart';
+import '../../../core/services/hive_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/utils/responsive.dart';
 import '../../../shared/widgets/app_shell.dart';
@@ -24,7 +25,8 @@ enum BrowserGroupOption { foldersFirst, fileCategory, none }
 
 class BrowserScreen extends StatefulWidget {
   final String? currentFolderId;
-  const BrowserScreen({super.key, this.currentFolderId});
+  final String? category;
+  const BrowserScreen({super.key, this.currentFolderId, this.category});
 
   @override
   State<BrowserScreen> createState() => _BrowserScreenState();
@@ -32,6 +34,40 @@ class BrowserScreen extends StatefulWidget {
 
 class _BrowserScreenState extends State<BrowserScreen> {
   bool _isLoading = true;
+
+  bool _matchesCategory(FileRecord file, String category) {
+    final mimeType = file.mimeType.toLowerCase();
+    switch (category) {
+      case 'images':
+        return mimeType.startsWith('image/');
+      case 'videos':
+        return mimeType.startsWith('video/');
+      case 'docs':
+        return mimeType == 'application/pdf';
+      case 'others':
+        return !mimeType.startsWith('image/') &&
+            !mimeType.startsWith('video/') &&
+            mimeType != 'application/pdf';
+      default:
+        return true;
+    }
+  }
+
+  String _categoryTitle(String category) {
+    switch (category) {
+      case 'images':
+        return 'Images';
+      case 'videos':
+        return 'Videos';
+      case 'docs':
+        return 'Documents';
+      case 'others':
+        return 'Others';
+      default:
+        return 'Files';
+    }
+  }
+
   String _search = '';
   bool _gridView = false;
   bool _fabOpen = false;
@@ -161,8 +197,14 @@ class _BrowserScreenState extends State<BrowserScreen> {
         return ValueListenableBuilder<Box<FileRecord>>(
           valueListenable: _hive.filesListenable,
           builder: (context, _, __) {
-            final rawFolders = _hive.subfolders(widget.currentFolderId);
-            final rawFiles = _hive.filesInFolder(widget.currentFolderId);
+            final rawFolders = widget.category != null
+                ? <FolderRecord>[]
+                : _hive.subfolders(widget.currentFolderId);
+            final rawFiles = widget.category != null
+                ? _hive.allFiles
+                    .where((f) => _matchesCategory(f, widget.category!))
+                    .toList()
+                : _hive.filesInFolder(widget.currentFolderId);
             final q = _search.toLowerCase();
             final filteredFolders = q.isEmpty
                 ? rawFolders
@@ -265,12 +307,17 @@ class _BrowserScreenState extends State<BrowserScreen> {
     }
 
     return AppBar(
-      leading: widget.currentFolderId != null ? const BackButton() : null,
-      automaticallyImplyLeading: widget.currentFolderId != null,
+      leading: (widget.currentFolderId != null || widget.category != null)
+          ? const BackButton()
+          : null,
+      automaticallyImplyLeading:
+          widget.currentFolderId != null || widget.category != null,
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(widget.currentFolderId == null ? 'All Files' : 'Folder'),
+          Text(widget.category != null
+              ? _categoryTitle(widget.category!)
+              : (widget.currentFolderId == null ? 'All Files' : 'Folder')),
           if (count > 0)
             Text('$count items', style: Theme.of(context).textTheme.bodySmall),
         ],
@@ -1064,25 +1111,43 @@ class _BrowserScreenState extends State<BrowserScreen> {
     final ok =
         await _confirm('Delete "${file.name}"?', 'This cannot be undone.');
     if (!ok) return;
+
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 20),
+            Text('Deleting file…'),
+          ],
+        ),
+      ),
+    );
+
     try {
       await _fileManager.deleteFile(file.fileId);
+      if (mounted) Navigator.pop(context);
       setState(() {});
       _snack('File deleted', success: true);
     } catch (e) {
+      if (mounted) Navigator.pop(context);
       _snack('Error: $e');
     }
   }
 
   Future<void> _moveFile(FileRecord file) async {
-    final newFolderId = await showFolderPicker(
+    final pickedFolderId = await showFolderPicker(
       context,
       currentFolderId: file.folderId,
       title: 'Move "${file.name}" to…',
     );
-    // showFolderPicker returns null both for "Root" and "dismissed" —
-    // only act if the user actually made a selection (sheet returned).
-    // We can't distinguish dismiss vs root in this implementation,
-    // so we always apply.
+    if (pickedFolderId == null) return; // User dismissed
+    final actualFolderId =
+        pickedFolderId == HiveService.kRootFolderId ? null : pickedFolderId;
+
     if (!mounted) return;
     showDialog(
       context: context,
@@ -1099,10 +1164,10 @@ class _BrowserScreenState extends State<BrowserScreen> {
     );
 
     try {
-      await _fileManager.moveFile(file.fileId, newFolderId);
+      await _fileManager.moveFile(file.fileId, actualFolderId);
       if (mounted) Navigator.pop(context);
       setState(() {});
-      _snack('Moved to ${newFolderId == null ? "root" : "folder"}',
+      _snack('Moved to ${actualFolderId == null ? "root" : "folder"}',
           success: true);
     } catch (e) {
       if (mounted) Navigator.pop(context);
@@ -1165,11 +1230,14 @@ class _BrowserScreenState extends State<BrowserScreen> {
       return;
     }
 
-    final newFolderId = await showFolderPicker(
+    final pickedFolderId = await showFolderPicker(
       context,
       currentFolderId: widget.currentFolderId,
       title: 'Move ${_selectedFileIds.length} files to…',
     );
+    if (pickedFolderId == null) return; // User dismissed
+    final actualFolderId =
+        pickedFolderId == HiveService.kRootFolderId ? null : pickedFolderId;
 
     if (!mounted) return;
     showDialog(
@@ -1188,11 +1256,11 @@ class _BrowserScreenState extends State<BrowserScreen> {
 
     try {
       for (final fileId in List.from(_selectedFileIds)) {
-        await _fileManager.moveFile(fileId, newFolderId);
+        await _fileManager.moveFile(fileId, actualFolderId);
       }
 
       if (mounted) Navigator.pop(context);
-      _snack('Moved files to ${newFolderId == null ? "root" : "folder"}',
+      _snack('Moved files to ${actualFolderId == null ? "root" : "folder"}',
           success: true);
     } catch (e) {
       if (mounted) Navigator.pop(context);

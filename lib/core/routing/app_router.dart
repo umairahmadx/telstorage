@@ -29,9 +29,17 @@ class AppRouter {
         return _pageRoute(MobileShell(initialIndex: initialTab), settings);
 
       case browser:
-        final folderId = settings.arguments as String?;
+        String? folderId;
+        String? category;
+        if (settings.arguments is String) {
+          folderId = settings.arguments as String;
+        } else if (settings.arguments is Map<String, dynamic>) {
+          final args = settings.arguments as Map<String, dynamic>;
+          folderId = args['folderId'] as String?;
+          category = args['category'] as String?;
+        }
         return _pageRoute(
-          BrowserScreen(currentFolderId: folderId),
+          BrowserScreen(currentFolderId: folderId, category: category),
           settings,
         );
 

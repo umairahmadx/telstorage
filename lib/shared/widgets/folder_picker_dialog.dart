@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/services/hive_service.dart';
 import '../../core/services/service_locator.dart';
 import '../../core/theme/app_theme.dart';
 
@@ -80,7 +81,8 @@ class _FolderPickerSheet extends StatelessWidget {
                   name: 'Root (No folder)',
                   color: AppTheme.secondary,
                   isSelected: currentFolderId == null,
-                  onTap: () => Navigator.pop(context, null),
+                  onTap: () =>
+                      Navigator.pop(context, HiveService.kRootFolderId),
                 ),
                 ...folders.map((f) => _FolderItem(
                       icon: Icons.folder_rounded,

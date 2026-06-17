@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show File;
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/download_job.dart';
@@ -99,6 +100,24 @@ class DownloadQueueService {
   Future<void> removeJob(String fileId) async {
     await cancelDownload(fileId);
     await _box.delete(fileId);
+  }
+
+  /// Delete a job and its local file from disk.
+  Future<void> deleteJobAndLocalFile(String fileId) async {
+    final job = _box.get(fileId);
+    if (job != null && job.localPath != null && !kIsWeb) {
+      try {
+        final file = File(job.localPath!);
+        if (await file.exists()) {
+          await file.delete();
+          AppLogger.i('Deleted local file: ${job.localPath}',
+              tag: 'DownloadQueue');
+        }
+      } catch (e) {
+        AppLogger.w('Could not delete local file: $e', tag: 'DownloadQueue');
+      }
+    }
+    await removeJob(fileId);
   }
 
   /// Clear all completed downloads from history

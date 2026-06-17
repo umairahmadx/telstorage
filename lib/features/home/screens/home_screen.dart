@@ -166,8 +166,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             colors: [AppTheme.primary, Color(0xFFA78BFA)]),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(Icons.cloud_done_rounded,
-                          color: Colors.white, size: 20),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.asset('assets/images/logo.png',
+                            fit: BoxFit.cover),
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -1107,36 +1110,57 @@ class _CategoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkCard : AppTheme.lightCard,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          String catKey = 'others';
+          final nameLower = data.name.toLowerCase();
+          if (nameLower == 'images') catKey = 'images';
+          if (nameLower == 'videos') catKey = 'videos';
+          if (nameLower == 'documents') catKey = 'docs';
+          if (nameLower == 'others') catKey = 'others';
+
+          Navigator.of(context).pushNamed(
+            AppRouter.browser,
+            arguments: {'category': catKey},
+          );
+        },
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-            color: isDark ? AppTheme.darkCardBorder : AppTheme.lightCardBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              gradient: data.gradient,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(data.icon, color: Colors.white, size: 20),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isDark ? AppTheme.darkCard : AppTheme.lightCard,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+                color: isDark
+                    ? AppTheme.darkCardBorder
+                    : AppTheme.lightCardBorder),
           ),
-          const SizedBox(height: 10),
-          Text(data.name, style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 2),
-          Text(
-            '${data.stat.count} · ${_sz(data.stat.sizeMb)}',
-            style: Theme.of(context).textTheme.bodySmall,
-            overflow: TextOverflow.ellipsis,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  gradient: data.gradient,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(data.icon, color: Colors.white, size: 20),
+              ),
+              const SizedBox(height: 10),
+              Text(data.name, style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 2),
+              Text(
+                '${data.stat.count} · ${_sz(data.stat.sizeMb)}',
+                style: Theme.of(context).textTheme.bodySmall,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

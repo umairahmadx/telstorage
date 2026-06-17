@@ -28,5 +28,5 @@ class AppConstants {
   static const int uploadDelayMs = 500;
 
   // Storage
-  static const double defaultStorageLimitMb = 10240.0; // 10 GB
+  static const double defaultStorageLimitMb = 1e18; // Unlimited
 }

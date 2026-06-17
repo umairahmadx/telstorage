@@ -44,10 +44,17 @@ class SyncService {
       AppLogger.d('${appMeta.folders.length} folder(s) on Telegram',
           tag: 'SyncService');
       for (final folder in appMeta.folders) {
-        if (_hive.getFolder(folder.id) == null) {
+        final local = _hive.getFolder(folder.id);
+        if (local == null) {
           await _hive.saveFolder(FolderRecord.fromFolder(folder));
           added++;
           AppLogger.d('Added folder: ${folder.name}', tag: 'SyncService');
+        } else if (local.name != folder.name ||
+            local.parentId != folder.parentId) {
+          local.name = folder.name;
+          local.parentId = folder.parentId;
+          await local.save();
+          AppLogger.d('Updated folder: ${folder.name}', tag: 'SyncService');
         }
       }
 
@@ -75,8 +82,17 @@ class SyncService {
           'Syncing ${i + 1}/${fileRefs.length}: ${ref.name}',
         );
 
-        if (_hive.getFile(ref.fileId) != null) {
-          AppLogger.d('${ref.name} already cached', tag: 'SyncService');
+        final existing = _hive.getFile(ref.fileId);
+        if (existing != null) {
+          // Update local record if name or folder changed on another device
+          if (existing.name != ref.name || existing.folderId != ref.folderId) {
+            existing.name = ref.name;
+            existing.folderId = ref.folderId;
+            await existing.save();
+            AppLogger.d('Updated file: ${ref.name}', tag: 'SyncService');
+          } else {
+            AppLogger.d('${ref.name} already cached', tag: 'SyncService');
+          }
           continue;
         }
 

@@ -143,6 +143,20 @@ class FileManagerService {
       metadataMsgId: newMsgId,
       metadataFileId: newMetaFileId,
     );
+
+    // Update FileRef in global metadata so re-login sees correct folder
+    final appMeta = await _meta.fetch();
+    final ref = appMeta.files.where((f) => f.fileId == fileId).firstOrNull;
+    if (ref != null) {
+      appMeta.files.removeWhere((f) => f.fileId == fileId);
+      appMeta.files.add(FileRef(
+        fileId: fileId,
+        metaFileId: newMetaFileId,
+        name: ref.name,
+        folderId: newFolderId,
+      ));
+      await _meta.update(appMeta);
+    }
   }
 
   Future<void> deleteFile(String fileId) async {

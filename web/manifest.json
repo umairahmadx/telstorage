@@ -1,6 +1,6 @@
 {
-    "name": "telstorage",
-    "short_name": "telstorage",
+    "name": "TelStorage",
+    "short_name": "TelStorage",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

@@ -76,8 +76,11 @@ class _DesktopRail extends StatelessWidget {
                     ),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.cloud_done_rounded,
-                      color: Colors.white, size: 22),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.asset('assets/images/logo.png',
+                        fit: BoxFit.cover),
+                  ),
                 ),
                 if (isWide) ...[
                   const SizedBox(width: 12),

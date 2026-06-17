@@ -335,8 +335,10 @@ class _LoginScreenState extends State<LoginScreen>
                 offset: const Offset(0, 8))
           ],
         ),
-        child:
-            Icon(Icons.cloud_done_rounded, color: Colors.white, size: iconSize),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(radius),
+          child: Image.asset('assets/images/logo.png', fit: BoxFit.cover),
+        ),
       );
 
   Widget _glowCircle(double size, Color color) => Container(

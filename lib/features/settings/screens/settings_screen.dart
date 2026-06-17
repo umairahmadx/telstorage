@@ -272,10 +272,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
             ),
-            child: const Icon(
-              Icons.cloud_done_rounded,
-              color: Colors.white,
-              size: 28,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Image.asset('assets/images/logo.png', fit: BoxFit.cover),
             ),
           ),
           const SizedBox(width: 16),

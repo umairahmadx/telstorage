@@ -424,8 +424,10 @@ class _RegisterScreenState extends State<RegisterScreen>
                 offset: const Offset(0, 6))
           ],
         ),
-        child:
-            Icon(Icons.cloud_done_rounded, color: Colors.white, size: iconSize),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(radius),
+          child: Image.asset('assets/images/logo.png', fit: BoxFit.cover),
+        ),
       );
 
   Widget _glowCircle(double size, Color color) => Container(

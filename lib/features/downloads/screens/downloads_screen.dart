@@ -54,6 +54,39 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     return AppTheme.primary;
   }
 
+  Future<void> _confirmAndDeleteJob(String fileId, String name) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Delete Download?'),
+        content: Text(
+          'Permanently delete "$name"? The downloaded file will be removed from your device.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: const Text('Delete Permanently'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await ServiceLocator.instance.downloadQueue.deleteJobAndLocalFile(fileId);
+    }
+  }
+
   // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
@@ -204,10 +237,10 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                       );
                     }
                   },
-                  onDelete: () {
-                    ServiceLocator.instance.downloadQueue
-                        .removeJob(active[index].fileId);
-                  },
+                  onDelete: () => _confirmAndDeleteJob(
+                    active[index].fileId,
+                    active[index].name,
+                  ),
                 );
                 return tile
                     .animate()
@@ -262,10 +295,10 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                       );
                     }
                   },
-                  onDelete: () {
-                    ServiceLocator.instance.downloadQueue
-                        .removeJob(completed[index].fileId);
-                  },
+                  onDelete: () => _confirmAndDeleteJob(
+                    completed[index].fileId,
+                    completed[index].name,
+                  ),
                 );
                 return tile
                     .animate()

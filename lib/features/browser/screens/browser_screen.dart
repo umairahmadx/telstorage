@@ -3,7 +3,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:hive_flutter/hive_flutter.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:uuid/uuid.dart';
 import '../../../core/utils/file_reader_native.dart'
     if (dart.library.js_interop) '../../../core/utils/file_reader_stub.dart';
 import '../../../core/models/file_record.dart';
@@ -16,8 +17,9 @@ import '../../../shared/utils/responsive.dart';
 import '../../../shared/widgets/app_shell.dart';
 import '../../../shared/widgets/folder_picker_dialog.dart';
 import '../../../shared/widgets/mobile_shell.dart';
-import '../../../core/utils/app_logger.dart';
 import '../../../core/utils/file_category_helper.dart';
+import '../bloc/browser_bloc.dart';
+import '../../upload/bloc/upload_bloc.dart';
 
 enum BrowserSortOption { name, date, size }
 
@@ -33,25 +35,23 @@ class BrowserScreen extends StatefulWidget {
 }
 
 class _BrowserScreenState extends State<BrowserScreen> {
+  late final BrowserBloc _bloc;
+  BrowserState? _state;
   bool _isLoading = true;
+  bool _fabOpen = false;
 
-  bool _matchesCategory(FileRecord file, String category) {
-    final mimeType = file.mimeType.toLowerCase();
-    switch (category) {
-      case 'images':
-        return mimeType.startsWith('image/');
-      case 'videos':
-        return mimeType.startsWith('video/');
-      case 'docs':
-        return mimeType == 'application/pdf';
-      case 'others':
-        return !mimeType.startsWith('image/') &&
-            !mimeType.startsWith('video/') &&
-            mimeType != 'application/pdf';
-      default:
-        return true;
-    }
-  }
+  // Computed properties delegating to BLoC state
+  bool get _gridView => _state?.isGridView ?? false;
+  String get _search => _state?.searchQuery ?? '';
+  Set<String> get _selectedFileIds => _state?.selectedFileIds ?? {};
+  Set<String> get _selectedFolderIds => _state?.selectedFolderIds ?? {};
+  bool get _isMultiSelect => _state?.isMultiSelect ?? false;
+  BrowserSortOption get _sortOption => _state?.sortOption ?? BrowserSortOption.name;
+  bool get _sortAscending => _state?.sortAscending ?? true;
+  BrowserGroupOption get _groupOption => _state?.groupOption ?? BrowserGroupOption.foldersFirst;
+
+  // Convenience getters via ServiceLocator
+  get _download => ServiceLocator.instance.downloadService;
 
   String _categoryTitle(String category) {
     switch (category) {
@@ -68,47 +68,30 @@ class _BrowserScreenState extends State<BrowserScreen> {
     }
   }
 
-  String _search = '';
-  bool _gridView = false;
-  bool _fabOpen = false;
-
-  BrowserSortOption _sortOption = BrowserSortOption.name;
-  bool _sortAscending = true;
-  BrowserGroupOption _groupOption = BrowserGroupOption.foldersFirst;
-
-  // Convenience getters via ServiceLocator
-  get _hive => ServiceLocator.instance.hive;
-  get _fileManager => ServiceLocator.instance.fileManager;
-  get _download => ServiceLocator.instance.downloadService;
-  get _upload => ServiceLocator.instance.uploadService;
-
-  final Set<String> _selectedFileIds = {};
-  final Set<String> _selectedFolderIds = {};
-
-  bool get _isMultiSelect =>
-      _selectedFileIds.isNotEmpty || _selectedFolderIds.isNotEmpty;
-
   void _toggleSelection(String id, bool isFolder) {
-    setState(() {
-      final set = isFolder ? _selectedFolderIds : _selectedFileIds;
-      if (set.contains(id)) {
-        set.remove(id);
-      } else {
-        set.add(id);
-      }
-    });
+    _bloc.add(ToggleItemSelection(id, isFolder: isFolder));
   }
 
   @override
   void initState() {
     super.initState();
+    _bloc = BrowserBloc();
     _initServices();
+  }
+
+  @override
+  void dispose() {
+    _bloc.close();
+    super.dispose();
   }
 
   Future<void> _initServices() async {
     try {
       await ServiceLocator.instance.init();
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _bloc.add(LoadDirectory(folderId: widget.currentFolderId, category: widget.category));
+      }
     } catch (e) {
       if (!mounted) return;
       Navigator.of(context).pushReplacementNamed(AppRouter.login);
@@ -119,13 +102,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
     final ctrl = TextEditingController();
     final result = await _showInputDialog('New Folder', 'Folder name', ctrl);
     if (result == null || result.isEmpty) return;
-    try {
-      await _fileManager.createFolder(result, parentId: widget.currentFolderId);
-      setState(() {});
-      _snack('Folder created', success: true);
-    } catch (e) {
-      _snack('Error: $e');
-    }
+    _bloc.add(CreateFolder(result));
   }
 
   Future<String?> _showInputDialog(
@@ -175,103 +152,82 @@ class _BrowserScreenState extends State<BrowserScreen> {
   @override
   Widget build(BuildContext context) {
     final isMobile = Responsive.isMobile(context);
-    final scaffold = _buildScaffold();
-    if (isMobile) return scaffold;
-    return AppShell(selectedIndex: 1, child: scaffold);
-  }
-
-  Widget _buildScaffold() {
-    if (_isLoading) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation(AppTheme.primary),
-          ),
-        ),
-      );
-    }
-
-    return ValueListenableBuilder<Box<FolderRecord>>(
-      valueListenable: _hive.foldersListenable,
-      builder: (context, _, __) {
-        return ValueListenableBuilder<Box<FileRecord>>(
-          valueListenable: _hive.filesListenable,
-          builder: (context, _, __) {
-            final rawFolders = widget.category != null
-                ? <FolderRecord>[]
-                : _hive.subfolders(widget.currentFolderId);
-            final rawFiles = widget.category != null
-                ? _hive.allFiles
-                    .where((f) => _matchesCategory(f, widget.category!))
-                    .toList()
-                : _hive.filesInFolder(widget.currentFolderId);
-            final q = _search.toLowerCase();
-            final filteredFolders = q.isEmpty
-                ? rawFolders
-                : rawFolders
-                    .where((f) => f.name.toLowerCase().contains(q))
-                    .toList();
-            final filteredFiles = q.isEmpty
-                ? rawFiles
-                : rawFiles
-                    .where((f) => f.name.toLowerCase().contains(q))
-                    .toList();
-
-            // Apply sorting
-            final List<FolderRecord> folders =
-                List<FolderRecord>.from(filteredFolders);
-            final List<FileRecord> files = List<FileRecord>.from(filteredFiles);
-
-            if (_sortOption == BrowserSortOption.name) {
-              folders.sort((a, b) => _sortAscending
-                  ? a.name.toLowerCase().compareTo(b.name.toLowerCase())
-                  : b.name.toLowerCase().compareTo(a.name.toLowerCase()));
-              files.sort((a, b) => _sortAscending
-                  ? a.name.toLowerCase().compareTo(b.name.toLowerCase())
-                  : b.name.toLowerCase().compareTo(a.name.toLowerCase()));
-            } else if (_sortOption == BrowserSortOption.date) {
-              folders.sort((a, b) => _sortAscending
-                  ? a.createdAt.compareTo(b.createdAt)
-                  : b.createdAt.compareTo(a.createdAt));
-              files.sort((a, b) => _sortAscending
-                  ? a.uploadedAt.compareTo(b.uploadedAt)
-                  : b.uploadedAt.compareTo(a.uploadedAt));
-            } else if (_sortOption == BrowserSortOption.size) {
-              folders.sort((a, b) => _sortAscending
-                  ? a.name.toLowerCase().compareTo(b.name.toLowerCase())
-                  : b.name.toLowerCase().compareTo(a.name.toLowerCase()));
-              files.sort((a, b) => _sortAscending
-                  ? a.sizeMb.compareTo(b.sizeMb)
-                  : b.sizeMb.compareTo(a.sizeMb));
-            }
-
-            return PopScope(
-              canPop: !_isMultiSelect,
-              onPopInvokedWithResult: (didPop, result) {
-                if (didPop) return;
-                setState(() {
-                  _selectedFileIds.clear();
-                  _selectedFolderIds.clear();
-                });
-              },
-              child: Scaffold(
-                appBar: _buildAppBar(folders.length + files.length),
-                body: Column(
-                  children: [
-                    _buildSearchBar(),
-                    Expanded(
-                      child: folders.isEmpty && files.isEmpty
-                          ? _buildEmpty()
-                          : _buildList(folders, files),
-                    ),
-                  ],
+    return BlocProvider.value(
+      value: _bloc,
+      child: BlocConsumer<BrowserBloc, BrowserState>(
+        listener: (context, state) {
+          if (state.errorMessage != null) {
+            _snack(state.errorMessage!);
+          }
+        },
+        builder: (context, state) {
+          _state = state;
+          
+          if (_isLoading || (state.isLoading && state.folders.isEmpty && state.files.isEmpty)) {
+            return const Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation(AppTheme.primary),
                 ),
-                floatingActionButton: _isMultiSelect ? null : _buildSpeedDial(),
               ),
             );
-          },
-        );
+          }
+
+          final scaffold = _buildScaffold(context, state);
+          if (isMobile) return scaffold;
+          return AppShell(selectedIndex: 1, child: scaffold);
+        },
+      ),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context, BrowserState state) {
+    final folders = state.folders;
+    final files = state.files;
+
+    return PopScope(
+      canPop: !state.isMultiSelect,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _bloc.add(ClearSelection());
       },
+      child: Scaffold(
+        appBar: _buildAppBar(folders.length + files.length),
+        body: Column(
+          children: [
+            _buildSearchBar(),
+            if (state.isOffline)
+              Container(
+                color: Colors.amber.shade900,
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
+                child: Row(
+                  children: [
+                    const Icon(Icons.wifi_off_rounded, size: 16, color: Colors.white),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'You are offline. Showing cached contents.',
+                      style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                    if (state.pendingActionsCount > 0) ...[
+                      const Spacer(),
+                      Text(
+                        '${state.pendingActionsCount} changes queued',
+                        style: const TextStyle(color: Colors.white70, fontSize: 11),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            Expanded(
+              child: folders.isEmpty && files.isEmpty
+                  ? _buildEmpty()
+                  : _buildList(folders, files),
+            ),
+          ],
+        ),
+        floatingActionButton: state.isMultiSelect ? null : _buildSpeedDial(),
+      ),
     );
   }
 
@@ -327,14 +283,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
           icon: const Icon(Icons.sort_rounded),
           tooltip: 'Sort by',
           onSelected: (BrowserSortOption opt) {
-            if (_sortOption == opt) {
-              setState(() => _sortAscending = !_sortAscending);
-            } else {
-              setState(() {
-                _sortOption = opt;
-                _sortAscending = true;
-              });
-            }
+            _bloc.add(SortOptionChanged(opt));
           },
           itemBuilder: (context) => [
             CheckedPopupMenuItem(
@@ -397,7 +346,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
           icon: const Icon(Icons.group_work_rounded),
           tooltip: 'Group by',
           onSelected: (BrowserGroupOption opt) {
-            setState(() => _groupOption = opt);
+            _bloc.add(GroupOptionChanged(opt));
           },
           itemBuilder: (context) => [
             CheckedPopupMenuItem(
@@ -420,7 +369,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
         IconButton(
           icon: Icon(_gridView ? Icons.list_rounded : Icons.grid_view_rounded),
           tooltip: _gridView ? 'List view' : 'Grid view',
-          onPressed: () => setState(() => _gridView = !_gridView),
+          onPressed: () => _bloc.add(ToggleViewMode()),
         ),
       ],
     );
@@ -443,7 +392,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
           suffixIcon: _search.isNotEmpty
               ? IconButton(
                   icon: const Icon(Icons.close_rounded, size: 18),
-                  onPressed: () => setState(() => _search = ''),
+                  onPressed: () => _bloc.add(SearchQueryChanged('')),
                 )
               : null,
           border: OutlineInputBorder(
@@ -468,7 +417,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
           fillColor: isDark ? AppTheme.darkCard : AppTheme.lightCard,
           contentPadding: const EdgeInsets.symmetric(vertical: 12),
         ),
-        onChanged: (v) => setState(() => _search = v),
+        onChanged: (v) => _bloc.add(SearchQueryChanged(v)),
       ),
     );
   }
@@ -1075,67 +1024,28 @@ class _BrowserScreenState extends State<BrowserScreen> {
     final ctrl = TextEditingController(text: folder.name);
     final result = await _showInputDialog('Rename Folder', 'New name', ctrl);
     if (result == null || result.isEmpty) return;
-    try {
-      await _fileManager.renameFolder(folder.id, result);
-      setState(() {});
-    } catch (e) {
-      _snack('Error: $e');
-    }
+    _bloc.add(RenameFolder(folder.id, result));
   }
 
   Future<void> _deleteFolder(FolderRecord folder) async {
     final ok =
         await _confirm('Delete "${folder.name}"?', 'This cannot be undone.');
     if (!ok) return;
-    try {
-      await _fileManager.deleteFolder(folder.id);
-      setState(() {});
-    } catch (e) {
-      _snack('Error: $e');
-    }
+    _bloc.add(DeleteFolder(folder.id));
   }
 
   Future<void> _renameFile(FileRecord file) async {
     final ctrl = TextEditingController(text: file.name);
     final result = await _showInputDialog('Rename File', 'New name', ctrl);
     if (result == null || result.isEmpty) return;
-    try {
-      await _fileManager.renameFile(file.fileId, result);
-      setState(() {});
-    } catch (e) {
-      _snack('Error: $e');
-    }
+    _bloc.add(RenameFile(file.fileId, result));
   }
 
   Future<void> _deleteFile(FileRecord file) async {
     final ok =
         await _confirm('Delete "${file.name}"?', 'This cannot be undone.');
     if (!ok) return;
-
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => const AlertDialog(
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 20),
-            Text('Deleting file…'),
-          ],
-        ),
-      ),
-    );
-
-    try {
-      await _fileManager.deleteFile(file.fileId);
-      if (mounted) Navigator.pop(context);
-      setState(() {});
-      _snack('File deleted', success: true);
-    } catch (e) {
-      if (mounted) Navigator.pop(context);
-      _snack('Error: $e');
-    }
+    _bloc.add(DeleteFile(file.fileId));
   }
 
   Future<void> _moveFile(FileRecord file) async {
@@ -1147,32 +1057,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
     if (pickedFolderId == null) return; // User dismissed
     final actualFolderId =
         pickedFolderId == HiveService.kRootFolderId ? null : pickedFolderId;
-
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => const AlertDialog(
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 20),
-            Text('Moving file…'),
-          ],
-        ),
-      ),
-    );
-
-    try {
-      await _fileManager.moveFile(file.fileId, actualFolderId);
-      if (mounted) Navigator.pop(context);
-      setState(() {});
-      _snack('Moved to ${actualFolderId == null ? "root" : "folder"}',
-          success: true);
-    } catch (e) {
-      if (mounted) Navigator.pop(context);
-      _snack('Error moving file: $e');
-    }
+    _bloc.add(MoveFile(file.fileId, actualFolderId));
   }
 
   Future<void> _batchDelete() async {
@@ -1183,45 +1068,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
         await _confirm('Delete $totalCount items?', 'This cannot be undone.');
     if (!ok) return;
 
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => const AlertDialog(
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 20),
-            Text('Deleting selected items…'),
-          ],
-        ),
-      ),
-    );
-
-    try {
-      for (final folderId in List.from(_selectedFolderIds)) {
-        try {
-          await _fileManager.deleteFolder(folderId);
-        } catch (e) {
-          AppLogger.w('Failed to delete folder $folderId: $e');
-        }
-      }
-
-      for (final fileId in List.from(_selectedFileIds)) {
-        await _fileManager.deleteFile(fileId);
-      }
-
-      if (mounted) Navigator.pop(context);
-      _snack('$totalCount items deleted', success: true);
-    } catch (e) {
-      if (mounted) Navigator.pop(context);
-      _snack('Error deleting items: $e');
-    } finally {
-      setState(() {
-        _selectedFileIds.clear();
-        _selectedFolderIds.clear();
-      });
-    }
+    _bloc.add(BatchDelete());
   }
 
   Future<void> _batchMove() async {
@@ -1239,38 +1086,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
     final actualFolderId =
         pickedFolderId == HiveService.kRootFolderId ? null : pickedFolderId;
 
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => const AlertDialog(
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 20),
-            Text('Moving files…'),
-          ],
-        ),
-      ),
-    );
-
-    try {
-      for (final fileId in List.from(_selectedFileIds)) {
-        await _fileManager.moveFile(fileId, actualFolderId);
-      }
-
-      if (mounted) Navigator.pop(context);
-      _snack('Moved files to ${actualFolderId == null ? "root" : "folder"}',
-          success: true);
-    } catch (e) {
-      if (mounted) Navigator.pop(context);
-      _snack('Error moving files: $e');
-    } finally {
-      setState(() {
-        _selectedFileIds.clear();
-        _selectedFolderIds.clear();
-      });
-    }
+    _bloc.add(BatchMove(actualFolderId));
   }
 
   Future<bool> _confirm(String title, String body) async {
@@ -1508,87 +1324,40 @@ class _BrowserScreenState extends State<BrowserScreen> {
   }
 
   Future<void> _uploadFile() async {
-    final result = await FilePicker.platform.pickFiles(allowMultiple: false);
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      withData: kIsWeb,
+    );
     if (result == null || result.files.isEmpty) return;
-    final picked = result.files.first;
-    if (picked.bytes == null && picked.path == null) {
-      _snack('Could not read file');
-      return;
-    }
 
-    final notifier = ValueNotifier<({double progress, String status})>(
-        (progress: 0.0, status: 'Preparing…'));
-    var dialogOpen = true;
-
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => ValueListenableBuilder(
-        valueListenable: notifier,
-        builder: (_, state, __) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text('Uploading ${picked.name}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 14)),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: state.progress == 0 ? null : state.progress,
-                minHeight: 6,
-                valueColor:
-                    const AlwaysStoppedAnimation<Color>(Color(0xFF10B981)),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(state.status, style: Theme.of(context).textTheme.bodySmall),
-            if (state.progress > 0) ...[
-              const SizedBox(height: 4),
-              Text('${(state.progress * 100).toStringAsFixed(0)}%',
-                  style: const TextStyle(
-                      color: Color(0xFF10B981), fontWeight: FontWeight.w700)),
-            ],
-          ]),
-        ),
-      ),
-    ).then((_) => dialogOpen = false);
-
-    void closeDialog() {
-      if (dialogOpen && mounted) {
-        dialogOpen = false;
-        Navigator.pop(context);
-      }
-    }
-
-    try {
+    final List<UploadTask> tasks = [];
+    const uuid = Uuid();
+    for (final file in result.files) {
       final Uint8List bytes;
-      if (picked.bytes != null) {
-        bytes = picked.bytes!;
-      } else if (!kIsWeb && picked.path != null) {
-        bytes = await _readNativeFile(picked.path!);
+      if (file.bytes != null) {
+        bytes = file.bytes!;
+      } else if (!kIsWeb && file.path != null) {
+        try {
+          bytes = await _readNativeFile(file.path!);
+        } catch (e) {
+          _snack('Failed to read file ${file.name}: $e');
+          continue;
+        }
       } else {
-        _snack('Cannot read file on this platform');
-        return;
+        _snack('Cannot read file ${file.name}');
+        continue;
       }
-      await _upload.uploadFile(
-        bytes,
-        picked.name,
-        widget.currentFolderId,
-        (p, s) => notifier.value = (progress: p, status: s),
-      );
-      closeDialog();
-      if (!mounted) return;
-      setState(() {});
-      _snack('✅ ${picked.name} uploaded!', success: true);
-    } catch (e) {
-      closeDialog();
-      if (!mounted) return;
-      _snack('❌ Upload failed: $e');
-    } finally {
-      notifier.dispose();
+      tasks.add(UploadTask(
+        id: uuid.v4(),
+        bytes: bytes,
+        name: file.name,
+        folderId: widget.currentFolderId,
+      ));
+    }
+
+    if (tasks.isNotEmpty && mounted) {
+      context.read<UploadBloc>().add(AddUploads(tasks));
+      _snack('Added ${tasks.length} file(s) to the upload queue.', success: true);
     }
   }
 

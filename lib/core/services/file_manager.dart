@@ -24,10 +24,10 @@ class FileManagerService {
 
   // ── Folder Operations ───────────────────────────────────────
 
-  Future<void> createFolder(String name, {String? parentId}) async {
+  Future<void> createFolder(String name, {String? parentId, String? folderId}) async {
     final meta = await _meta.fetch();
     final folder = Folder(
-      id: const Uuid().v4(),
+      id: folderId ?? const Uuid().v4(),
       name: name,
       parentId: parentId,
       createdAt: DateTime.now(),
@@ -201,5 +201,33 @@ class FileManagerService {
     // ── Step 5: Remove from local cache ─────────────────────────────────────
     await _hive.deleteFile(fileId);
     AppLogger.i('File $fileId deleted successfully', tag: 'FileManager');
+  }
+
+  Future<void> deleteFileRemoteOnly({
+    required String fileId,
+    required int metadataMessageId,
+    required String? metadataFileId,
+    required double sizeMb,
+    required String mimeType,
+  }) async {
+    Map<String, dynamic> fileMeta;
+    try {
+      fileMeta = await _fetchFileMeta(metadataMessageId, metadataFileId);
+    } catch (e) {
+      AppLogger.w(
+          'Could not fetch metadata for $fileId on sync deletion: $e',
+          tag: 'FileManager');
+      return;
+    }
+    final chunks = fileMeta['chunks'] as List? ?? [];
+    for (final chunk in chunks) {
+      try {
+        await _telegram.deleteMessage(chunk['message_id'] as int);
+      } catch (_) {}
+    }
+    await _telegram.deleteMessage(metadataMessageId);
+    final meta = await _meta.fetch();
+    await _meta.removeFile(meta, fileId, sizeMb, mimeType);
+    AppLogger.i('File $fileId deleted from remote successfully', tag: 'FileManager');
   }
 }

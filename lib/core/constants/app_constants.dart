@@ -15,6 +15,7 @@ class AppConstants {
   static const String filesBox = 'files';
   static const String foldersBox = 'folders';
   static const String downloadsBox = 'downloads';
+  static const String pendingActionsBox = 'pending_actions';
 
   // Telegram limits
   /// Maximum file size Telegram Bot API allows per upload (50 MB)

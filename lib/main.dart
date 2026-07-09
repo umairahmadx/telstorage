@@ -7,6 +7,7 @@ import 'core/constants/app_constants.dart';
 import 'core/models/file_record.dart';
 import 'core/models/folder_record.dart';
 import 'core/models/download_job.dart';
+import 'core/models/pending_action.dart';
 import 'core/services/theme_service.dart';
 
 Future<void> main() async {
@@ -24,9 +25,11 @@ Future<void> main() async {
   Hive.registerAdapter(FileRecordAdapter());
   Hive.registerAdapter(FolderRecordAdapter());
   Hive.registerAdapter(DownloadJobAdapter());
+  Hive.registerAdapter(PendingActionAdapter());
   await Hive.openBox<FileRecord>(AppConstants.filesBox);
   await Hive.openBox<FolderRecord>(AppConstants.foldersBox);
   await Hive.openBox<DownloadJob>(AppConstants.downloadsBox);
+  await Hive.openBox<PendingAction>(AppConstants.pendingActionsBox);
 
   // Initialize Theme Service
   await ThemeService.instance.init();

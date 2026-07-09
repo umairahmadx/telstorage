@@ -10,6 +10,8 @@ import 'metadata_service.dart';
 import 'sync_service.dart';
 import 'telegram_service.dart';
 import 'upload_service.dart';
+import 'sync_queue_service.dart';
+import '../../features/storage/data/repositories/storage_repository.dart';
 
 /// Single initialization point for all services.
 /// Call [ServiceLocator.instance.init()] after login.
@@ -34,6 +36,8 @@ class ServiceLocator {
   late DownloadService _downloadService;
   late DownloadQueueService _downloadQueue;
   late FileManagerService _fileManager;
+  late SyncQueueService _syncQueue;
+  late StorageRepository _storageRepository;
 
   TelegramService get telegram => _telegram;
   HiveService get hive => _hive;
@@ -43,6 +47,8 @@ class ServiceLocator {
   DownloadService get downloadService => _downloadService;
   DownloadQueueService get downloadQueue => _downloadQueue;
   FileManagerService get fileManager => _fileManager;
+  SyncQueueService get syncQueue => _syncQueue;
+  StorageRepository get storageRepository => _storageRepository;
 
   Future<void>? _initFuture;
 
@@ -82,9 +88,14 @@ class ServiceLocator {
       _downloadQueue =
           DownloadQueueService(_downloadService, AppConstants.downloadsBox);
       _fileManager = FileManagerService(_metadata, _telegram, _hive);
+      _syncQueue = SyncQueueService(_fileManager);
+      _storageRepository = StorageRepository(_hive, _fileManager);
 
       await NotificationService.instance.init();
       await NotificationService.instance.requestPermissions();
+
+      // Process pending actions queue in the background
+      _syncQueue.processQueue();
 
       _initialized = true;
       AppLogger.i('ServiceLocator initialized successfully',

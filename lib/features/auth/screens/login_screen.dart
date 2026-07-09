@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/routing/app_router.dart';
-import '../../../core/services/auth_service.dart';
+import '../bloc/auth_bloc.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/utils/responsive.dart';
 
@@ -41,34 +42,40 @@ class _LoginScreenState extends State<LoginScreen>
     super.dispose();
   }
 
-  Future<void> _login() async {
+  void _login() {
     if (!_formKey.currentState!.validate()) return;
     HapticFeedback.lightImpact();
-    setState(() => _isLoading = true);
-    final result = await AuthService.instance
-        .login(_emailCtrl.text.trim(), _passCtrl.text);
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-    if (result['success'] == true) {
-      HapticFeedback.mediumImpact();
-      Navigator.of(context).pushReplacementNamed(AppRouter.home);
-    } else {
-      HapticFeedback.vibrate();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(result['message'] ?? 'Login failed'),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: AppTheme.error,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      ));
-    }
+    context.read<AuthBloc>().add(
+          LoginRequested(_emailCtrl.text.trim(), _passCtrl.text),
+        );
   }
 
   @override
   Widget build(BuildContext context) {
     final isDesktop = Responsive.isDesktop(context);
-    return Scaffold(
-      body: isDesktop ? _buildDesktop() : _buildMobile(),
+    return BlocConsumer<AuthBloc, AuthState>(
+      listener: (context, state) {
+        if (state is Authenticated) {
+          HapticFeedback.mediumImpact();
+          Navigator.of(context).pushReplacementNamed(AppRouter.home);
+        } else if (state is AuthError) {
+          HapticFeedback.vibrate();
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(state.message),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: AppTheme.error,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          ));
+        }
+      },
+      builder: (context, state) {
+        _isLoading = state is AuthLoading;
+        return Scaffold(
+          body: isDesktop ? _buildDesktop() : _buildMobile(),
+        );
+      },
     );
   }
 

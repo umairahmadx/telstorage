@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:uuid/uuid.dart';
 import '../../../core/models/app_metadata.dart';
 import '../../../core/models/file_record.dart';
 import '../../../core/routing/app_router.dart';
@@ -13,7 +14,7 @@ import '../../../shared/widgets/app_shell.dart';
 import '../../../shared/widgets/mobile_shell.dart';
 import '../../../shared/widgets/storage_ring.dart';
 import '../../storage/bloc/sync_cubit.dart';
-import '../../upload/bloc/upload_cubit.dart';
+import '../../upload/bloc/upload_bloc.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -23,21 +24,18 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late final SyncCubit _syncCubit;
-  late final UploadCubit _uploadCubit;
   AppMetadata? _meta;
 
   @override
   void initState() {
     super.initState();
     _syncCubit = SyncCubit();
-    _uploadCubit = UploadCubit();
     _initAndSync();
   }
 
   @override
   void dispose() {
     _syncCubit.close();
-    _uploadCubit.close();
     super.dispose();
   }
 
@@ -66,15 +64,28 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _pickAndUpload() async {
-    final picked = await FilePicker.platform.pickFiles(withData: true);
+    final picked = await FilePicker.platform.pickFiles(
+      withData: true,
+      allowMultiple: true,
+    );
     if (picked == null || picked.files.isEmpty) return;
-    final file = picked.files.first;
-    if (file.bytes == null) {
-      _snack('Could not read file');
-      return;
+
+    final List<UploadTask> tasks = [];
+    const uuid = Uuid();
+    for (final file in picked.files) {
+      if (file.bytes == null) continue;
+      tasks.add(UploadTask(
+        id: uuid.v4(),
+        bytes: file.bytes!,
+        name: file.name,
+        folderId: null,
+      ));
     }
 
-    _uploadCubit.upload(bytes: file.bytes!, name: file.name, folderId: null);
+    if (tasks.isNotEmpty && mounted) {
+      context.read<UploadBloc>().add(AddUploads(tasks));
+      _snack('Added ${tasks.length} file(s) to the upload queue.', success: true);
+    }
   }
 
   void _snack(String msg, {bool success = false}) {
@@ -94,17 +105,20 @@ class _HomeScreenState extends State<HomeScreen> {
     return MultiBlocProvider(
       providers: [
         BlocProvider.value(value: _syncCubit),
-        BlocProvider.value(value: _uploadCubit),
       ],
-      child: BlocConsumer<UploadCubit, UploadState>(
+      child: BlocConsumer<UploadBloc, UploadState>(
         listener: (ctx, state) {
           if (state is UploadSuccess) {
-            _snack('${state.fileName} uploaded!', success: true);
+            _snack('Upload queue processed successfully.', success: true);
             _loadMeta();
-            _uploadCubit.reset();
+            ctx.read<UploadBloc>().add(ResetUpload());
           } else if (state is UploadError) {
             _snack('Upload failed: ${state.message}');
-            _uploadCubit.reset();
+            ctx.read<UploadBloc>().add(ResetUpload());
+          } else if (state is UploadSingleError) {
+            _snack('Failed to upload "${state.fileName}": ${state.message}');
+          } else if (state is UploadWaitingForNetwork) {
+            _snack('Waiting for network connection to upload "${state.fileName}"…', success: false);
           }
         },
         builder: (ctx, uploadState) {

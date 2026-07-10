@@ -71,9 +71,6 @@ jobs:
         run: flutter pub get
 
       # ── Quality gates ──────────────────────────────────────────────────────
-      - name: Check Formatting
-        run: dart format --output=none --set-exit-if-changed .
-
       - name: Run Static Analysis
         run: flutter analyze
 

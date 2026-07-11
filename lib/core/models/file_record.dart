@@ -36,6 +36,9 @@ class FileRecord extends HiveObject {
   @HiveField(8)
   String sha256Hash; // for integrity check
 
+  @HiveField(10)
+  String? thumbnailFileId;
+
   FileRecord({
     required this.fileId,
     required this.name,
@@ -47,6 +50,7 @@ class FileRecord extends HiveObject {
     required this.uploadedAt,
     required this.chunkCount,
     required this.sha256Hash,
+    this.thumbnailFileId,
   });
 
   factory FileRecord.fromMap(Map<String, dynamic> map) {
@@ -61,6 +65,7 @@ class FileRecord extends HiveObject {
       uploadedAt: DateTime.parse(map['uploaded_at'] as String),
       chunkCount: map['chunk_count'] as int,
       sha256Hash: map['sha256'] as String,
+      thumbnailFileId: map['thumbnail_file_id'] as String?,
     );
   }
 

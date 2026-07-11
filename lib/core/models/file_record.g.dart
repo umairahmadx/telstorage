@@ -27,13 +27,14 @@ class FileRecordAdapter extends TypeAdapter<FileRecord> {
       uploadedAt: fields[6] as DateTime,
       chunkCount: fields[7] as int,
       sha256Hash: fields[8] as String,
+      thumbnailFileId: fields[10] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, FileRecord obj) {
     writer
-      ..writeByte(10)
+      ..writeByte(11)
       ..writeByte(0)
       ..write(obj.fileId)
       ..writeByte(1)
@@ -53,7 +54,9 @@ class FileRecordAdapter extends TypeAdapter<FileRecord> {
       ..writeByte(7)
       ..write(obj.chunkCount)
       ..writeByte(8)
-      ..write(obj.sha256Hash);
+      ..write(obj.sha256Hash)
+      ..writeByte(10)
+      ..write(obj.thumbnailFileId);
   }
 
   @override

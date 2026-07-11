@@ -19,6 +19,8 @@ import '../../../shared/widgets/folder_picker_dialog.dart';
 import '../../../shared/widgets/mobile_shell.dart';
 import '../../../shared/widgets/thumbnail_widget.dart';
 import '../../../core/utils/file_category_helper.dart';
+import '../../../core/models/download_job.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../bloc/browser_bloc.dart';
 import '../../upload/bloc/upload_bloc.dart';
 
@@ -50,9 +52,6 @@ class _BrowserScreenState extends State<BrowserScreen> {
   BrowserSortOption get _sortOption => _state?.sortOption ?? BrowserSortOption.name;
   bool get _sortAscending => _state?.sortAscending ?? true;
   BrowserGroupOption get _groupOption => _state?.groupOption ?? BrowserGroupOption.foldersFirst;
-
-  // Convenience getters via ServiceLocator
-  get _download => ServiceLocator.instance.downloadService;
 
   String _categoryTitle(String category) {
     switch (category) {
@@ -1118,167 +1117,31 @@ class _BrowserScreenState extends State<BrowserScreen> {
   }
 
   Future<void> _downloadAndView(FileRecord file) async {
-    if (kIsWeb) {
-      final notifier = ValueNotifier<({double progress, String status})>(
-          (progress: 0.0, status: 'Starting…'));
-      var dialogOpen = true;
+    await ServiceLocator.instance.downloadQueue.enqueueDownload(file);
 
-      _showProgressDialog(file.name, notifier, () => dialogOpen = false);
-
-      try {
-        final bytes = await _download.downloadFile(file, (p, s) {
-          notifier.value = (progress: p, status: s);
-        });
-
-        if (dialogOpen && mounted) {
-          Navigator.pop(context);
-          dialogOpen = false;
-        }
-
-        await _download.saveFile(bytes, file.name);
-        _snack('✅ ${file.name} — download started!', success: true);
-      } catch (e) {
-        if (dialogOpen && mounted) Navigator.pop(context);
-        _snack('❌ Download failed: $e');
-      } finally {
-        notifier.dispose();
-      }
-      return;
-    }
-
-    // Native: check file size (19 MB limit)
-    if (file.sizeMb <= 19.0) {
-      final notifier = ValueNotifier<({double progress, String status})>(
-          (progress: 0.0, status: 'Starting…'));
-      var dialogOpen = true;
-
-      _showProgressDialog(file.name, notifier, () => dialogOpen = false);
-
-      try {
-        final bytes = await _download.downloadFile(file, (p, s) {
-          notifier.value = (progress: p, status: s);
-        });
-
-        notifier.value = (progress: 0.95, status: 'Saving file…');
-
-        final saveResult = await _download.saveAndOpen(bytes, file.name);
-
-        if (dialogOpen && mounted) {
-          Navigator.pop(context);
-          dialogOpen = false;
-        }
-
-        if (saveResult.success) {
-          await ServiceLocator.instance.downloadQueue
-              .addCompletedJob(file, saveResult.savedPath);
-          _snack('✅ Saved to downloads: ${file.name}', success: true);
-        } else {
-          _snack('❌ Save failed: ${saveResult.message}');
-        }
-      } catch (e) {
-        if (dialogOpen && mounted) {
-          Navigator.pop(context);
-          dialogOpen = false;
-        }
-        _snack('❌ Download failed: $e');
-      } finally {
-        notifier.dispose();
-      }
-    } else {
-      // Large file: prompt to add to background download queue
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Download Large File'),
-          content: Text(
-              '"${file.name}" is a large file (${file.formattedSize}). '
-              'Would you like to add it to the background downloads queue?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primary,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-              child: const Text('Download in Background',
-                  style: TextStyle(color: Colors.white)),
-            ),
-          ],
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('"${file.name}" added to downloads'),
+        duration: const Duration(seconds: 3),
+        action: SnackBarAction(
+          label: 'View',
+          textColor: Colors.white,
+          onPressed: () {
+            final shell = MobileShell.of(context);
+            if (shell != null) {
+              shell.switchTab(2); // Downloads tab is index 2
+            } else {
+              Navigator.of(context).pushNamed(AppRouter.downloads);
+            }
+          },
         ),
-      );
-
-      if (confirmed == true && mounted) {
-        await ServiceLocator.instance.downloadQueue.enqueueDownload(file);
-
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('"${file.name}" added to download queue'),
-            action: SnackBarAction(
-              label: 'View',
-              textColor: Colors.white,
-              onPressed: () {
-                final shell = MobileShell.of(context);
-                if (shell != null) {
-                  shell.switchTab(2); // Downloads tab is index 2
-                } else {
-                  Navigator.of(context).pushNamed(AppRouter.downloads);
-                }
-              },
-            ),
-            behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          ),
-        );
-      }
-    }
-  }
-
-  void _showProgressDialog(
-      String name,
-      ValueNotifier<({double progress, String status})> notifier,
-      VoidCallback onClosed) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => ValueListenableBuilder(
-        valueListenable: notifier,
-        builder: (context, state, __) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text(name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 14)),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: state.progress == 0 ? null : state.progress,
-                minHeight: 6,
-                valueColor:
-                    const AlwaysStoppedAnimation<Color>(AppTheme.primary),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(state.status, style: Theme.of(context).textTheme.bodySmall),
-            if (state.progress > 0) ...[
-              const SizedBox(height: 4),
-              Text('${(state.progress * 100).toStringAsFixed(0)}%',
-                  style: const TextStyle(
-                      color: AppTheme.primary, fontWeight: FontWeight.w700)),
-            ],
-          ]),
-        ),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       ),
-    ).then((_) => onClosed());
+    );
   }
 
   // ── Speed Dial FAB ─────────────────────────────────────────────────────────
@@ -1442,92 +1305,198 @@ class _FileTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: isSelected
-            ? AppTheme.primary.withAlpha(isDark ? 30 : 20)
-            : (isDark ? AppTheme.darkCard : AppTheme.lightCard),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isSelected
-              ? AppTheme.primary
-              : (isDark ? AppTheme.darkCardBorder : AppTheme.lightCardBorder),
-          width: isSelected ? 1.5 : 1.0,
-        ),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        leading: isMultiSelect
-            ? Checkbox(
-                value: isSelected,
-                onChanged: (v) => onTap(),
-                activeColor: AppTheme.primary,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(4)),
-              )
-            : ThumbnailWidget(
-                file: file,
-                width: 42,
-                height: 42,
-                fallback: Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: _color().withAlpha(25),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(_icon(), color: _color(), size: 22),
-                ),
+
+    return ValueListenableBuilder<Box<DownloadJob>>(
+      valueListenable: ServiceLocator.instance.downloadQueue.listenable,
+      builder: (context, box, _) {
+        final job = box.get(file.fileId);
+        final isDownloading = job != null &&
+            (job.status == 'downloading' || job.status == 'queued');
+
+        Widget leadingWidget;
+        if (isMultiSelect) {
+          leadingWidget = Checkbox(
+            value: isSelected,
+            onChanged: (v) => onTap(),
+            activeColor: AppTheme.primary,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(4)),
+          );
+        } else {
+          final thumbnail = ThumbnailWidget(
+            file: file,
+            width: 42,
+            height: 42,
+            fallback: Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: _color().withAlpha(25),
+                borderRadius: BorderRadius.circular(10),
               ),
-        title: Text(file.name,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.labelLarge),
-        subtitle: Text('${file.formattedSize} · ${_date(file.uploadedAt)}',
-            style: Theme.of(context).textTheme.bodySmall),
-        trailing: isMultiSelect
-            ? null
-            : PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert_rounded, size: 20),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-                onSelected: (v) {
-                  if (v == 'rename') {
-                    onRename();
-                  } else if (v == 'delete') {
-                    onDelete();
-                  } else if (v == 'move') {
-                    onMove?.call();
-                  }
-                },
-                itemBuilder: (_) => [
-                  const PopupMenuItem(
-                      value: 'rename',
-                      child: Row(children: [
-                        Icon(Icons.edit_rounded, size: 18),
-                        SizedBox(width: 10),
-                        Text('Rename')
-                      ])),
-                  const PopupMenuItem(
-                      value: 'move',
-                      child: Row(children: [
-                        Icon(Icons.drive_file_move_rounded,
-                            size: 18, color: Color(0xFF6C63FF)),
-                        SizedBox(width: 10),
-                        Text('Move to folder')
-                      ])),
-                  const PopupMenuItem(
-                      value: 'delete',
-                      child: Row(children: [
-                        Icon(Icons.delete_rounded, size: 18, color: Colors.red),
-                        SizedBox(width: 10),
-                        Text('Delete', style: TextStyle(color: Colors.red))
-                      ])),
+              child: Icon(_icon(), color: _color(), size: 22),
+            ),
+          );
+
+          if (isDownloading) {
+            final progress = job.progress;
+            final percent = (progress * 100).toInt();
+            leadingWidget = SizedBox(
+              width: 42,
+              height: 42,
+              child: Stack(
+                children: [
+                  thumbnail,
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withAlpha(140),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Center(
+                        child: SizedBox(
+                          width: 26,
+                          height: 26,
+                          child: CircularProgressIndicator(
+                            value: progress > 0 ? progress : null,
+                            strokeWidth: 2.5,
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                                Colors.white),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Center(
+                    child: Text(
+                      '$percent%',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
                 ],
               ),
-        onTap: onTap,
-        onLongPress: onLongPress,
-      ),
+            );
+          } else {
+            leadingWidget = thumbnail;
+          }
+        }
+
+        Widget subtitleWidget;
+        if (isDownloading) {
+          final progress = job.progress;
+          final pct = (progress * 100).toInt();
+          final totalMb = job.sizeMb;
+          final downloadedMb = progress * totalMb;
+          final progressText =
+              '${downloadedMb.toStringAsFixed(1)} MB / ${totalMb.toStringAsFixed(1)} MB ($pct%)';
+
+          subtitleWidget = Padding(
+            padding: const EdgeInsets.only(top: 4.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: progress > 0 ? progress : null,
+                    minHeight: 4,
+                    backgroundColor:
+                        isDark ? Colors.grey[800] : Colors.grey[300],
+                    valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  job.status == 'queued' ? 'Queued…' : 'Downloading… $progressText',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppTheme.primary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                ),
+              ],
+            ),
+          );
+        } else {
+          subtitleWidget = Text(
+            '${file.formattedSize} · ${_date(file.uploadedAt)}',
+            style: Theme.of(context).textTheme.bodySmall,
+          );
+        }
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? AppTheme.primary.withAlpha(isDark ? 30 : 20)
+                : (isDark ? AppTheme.darkCard : AppTheme.lightCard),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isSelected
+                  ? AppTheme.primary
+                  : (isDark ? AppTheme.darkCardBorder : AppTheme.lightCardBorder),
+              width: isSelected ? 1.5 : 1.0,
+            ),
+          ),
+          child: ListTile(
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            leading: leadingWidget,
+            title: Text(
+              file.name,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            subtitle: subtitleWidget,
+            trailing: isMultiSelect
+                ? null
+                : PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert_rounded, size: 20),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    onSelected: (v) {
+                      if (v == 'rename') {
+                        onRename();
+                      } else if (v == 'delete') {
+                        onDelete();
+                      } else if (v == 'move') {
+                        onMove?.call();
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(
+                          value: 'rename',
+                          child: Row(children: [
+                            Icon(Icons.edit_rounded, size: 18),
+                            SizedBox(width: 10),
+                            Text('Rename')
+                          ])),
+                      const PopupMenuItem(
+                          value: 'move',
+                          child: Row(children: [
+                            Icon(Icons.drive_file_move_rounded,
+                                size: 18, color: Color(0xFF6C63FF)),
+                            SizedBox(width: 10),
+                            Text('Move to folder')
+                          ])),
+                      const PopupMenuItem(
+                          value: 'delete',
+                          child: Row(children: [
+                            Icon(Icons.delete_rounded, size: 18, color: Colors.red),
+                            SizedBox(width: 10),
+                            Text('Delete', style: TextStyle(color: Colors.red))
+                          ])),
+                    ],
+                  ),
+            onTap: onTap,
+            onLongPress: onLongPress,
+          ),
+        );
+      },
     );
   }
 
@@ -1671,64 +1640,157 @@ class _GridFileItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final itemWidget = Container(
-      decoration: BoxDecoration(
-        color: isSelected
-            ? AppTheme.primary.withAlpha(isDark ? 30 : 20)
-            : (isDark ? AppTheme.darkCard : AppTheme.lightCard),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isSelected
-              ? AppTheme.primary
-              : (isDark ? AppTheme.darkCardBorder : AppTheme.lightCardBorder),
-          width: isSelected ? 1.5 : 1.0,
-        ),
-      ),
-      child: Column(children: [
-        Expanded(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: ThumbnailWidget(
-                file: file,
-                width: double.infinity,
-                height: double.infinity,
-                fallback: Icon(_icon(), size: 40, color: _color()),
-              ),
-            ),
-          ),
-        ),
-        Padding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-            child: Text(file.name,
-                overflow: TextOverflow.ellipsis,
-                maxLines: 2,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall)),
-      ]),
-    );
+    return ValueListenableBuilder<Box<DownloadJob>>(
+      valueListenable: ServiceLocator.instance.downloadQueue.listenable,
+      builder: (context, box, _) {
+        final job = box.get(file.fileId);
+        final isDownloading = job != null &&
+            (job.status == 'downloading' || job.status == 'queued');
 
-    return GestureDetector(
-      onTap: onTap,
-      onLongPress: isMultiSelect ? onTap : onLongPress,
-      child: isMultiSelect
-          ? Stack(
+        final thumbnail = ThumbnailWidget(
+          file: file,
+          width: double.infinity,
+          height: double.infinity,
+          fallback: Icon(_icon(), size: 40, color: _color()),
+        );
+
+        Widget thumbnailWidget;
+        if (isDownloading) {
+          final progress = job.progress;
+          final percent = (progress * 100).toInt();
+          thumbnailWidget = Stack(
+            children: [
+              thumbnail,
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withAlpha(140),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Center(
+                    child: SizedBox(
+                      width: 26,
+                      height: 26,
+                      child: CircularProgressIndicator(
+                        value: progress > 0 ? progress : null,
+                        strokeWidth: 2.5,
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                            Colors.white),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Center(
+                child: Text(
+                  '$percent%',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          );
+        } else {
+          thumbnailWidget = thumbnail;
+        }
+
+        Widget labelWidget;
+        if (isDownloading) {
+          final progress = job.progress;
+          labelWidget = Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                itemWidget,
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Icon(
-                    isSelected
-                        ? Icons.check_circle_rounded
-                        : Icons.radio_button_unchecked_rounded,
-                    color: isSelected ? AppTheme.primary : Colors.grey,
-                    size: 20,
+                Text(
+                  file.name,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 4),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: LinearProgressIndicator(
+                    value: progress > 0 ? progress : null,
+                    minHeight: 3,
+                    backgroundColor:
+                        isDark ? Colors.grey[800] : Colors.grey[300],
+                    valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
                   ),
                 ),
               ],
-            )
-          : itemWidget,
+            ),
+          );
+        } else {
+          labelWidget = Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            child: Text(
+              file.name,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 2,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          );
+        }
+
+        final itemWidget = Container(
+          decoration: BoxDecoration(
+            color: isSelected
+                ? AppTheme.primary.withAlpha(isDark ? 30 : 20)
+                : (isDark ? AppTheme.darkCard : AppTheme.lightCard),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isSelected
+                  ? AppTheme.primary
+                  : (isDark ? AppTheme.darkCardBorder : AppTheme.lightCardBorder),
+              width: isSelected ? 1.5 : 1.0,
+            ),
+          ),
+          child: Column(
+            children: [
+              Expanded(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: thumbnailWidget,
+                  ),
+                ),
+              ),
+              labelWidget,
+            ],
+          ),
+        );
+
+        return GestureDetector(
+          onTap: onTap,
+          onLongPress: isMultiSelect ? onTap : onLongPress,
+          child: isMultiSelect
+              ? Stack(
+                  children: [
+                    itemWidget,
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Icon(
+                        isSelected
+                            ? Icons.check_circle_rounded
+                            : Icons.radio_button_unchecked_rounded,
+                        color: isSelected ? AppTheme.primary : Colors.grey,
+                        size: 20,
+                      ),
+                    ),
+                  ],
+                )
+              : itemWidget,
+        );
+      },
     );
   }
 

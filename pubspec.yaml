@@ -71,6 +71,9 @@ dependencies:
   # Video thumbnail extraction
   get_thumbnail_video: ^0.7.3
 
+  # Web platform APIs
+  web: ^1.1.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

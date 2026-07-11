@@ -118,6 +118,13 @@ class MetadataService {
         metaFileId: metaFileId,
         name: fileData['name'] as String,
         folderId: fileData['folder_id'] as String?,
+        sizeMb: (fileData['size_mb'] as num?)?.toDouble(),
+        mimeType: fileData['mime_type'] as String?,
+        uploadedAt: fileData['uploaded_at'] as String?,
+        chunkCount: fileData['chunk_count'] as int?,
+        sha256: fileData['sha256'] as String?,
+        metadataMessageId: fileData['metadata_message_id'] as int?,
+        thumbnailFileId: fileData['thumbnail_file_id'] as String?,
       ));
     }
 

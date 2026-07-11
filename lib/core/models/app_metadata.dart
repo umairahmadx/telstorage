@@ -74,11 +74,27 @@ class FileRef {
   final String name;
   final String? folderId;
 
+  // New optional metadata fields for fast sync
+  final double? sizeMb;
+  final String? mimeType;
+  final String? uploadedAt; // ISO String
+  final int? chunkCount;
+  final String? sha256;
+  final int? metadataMessageId;
+  final String? thumbnailFileId;
+
   FileRef({
     required this.fileId,
     required this.metaFileId,
     required this.name,
     this.folderId,
+    this.sizeMb,
+    this.mimeType,
+    this.uploadedAt,
+    this.chunkCount,
+    this.sha256,
+    this.metadataMessageId,
+    this.thumbnailFileId,
   });
 
   factory FileRef.fromJson(Map<String, dynamic> json) {
@@ -87,6 +103,13 @@ class FileRef {
       metaFileId: json['meta_file_id'] as String,
       name: json['name'] as String,
       folderId: json['folder_id'] as String?,
+      sizeMb: (json['size_mb'] as num?)?.toDouble(),
+      mimeType: json['mime_type'] as String?,
+      uploadedAt: json['uploaded_at'] as String?,
+      chunkCount: json['chunk_count'] as int?,
+      sha256: json['sha256'] as String?,
+      metadataMessageId: json['metadata_message_id'] as int?,
+      thumbnailFileId: json['thumbnail_file_id'] as String?,
     );
   }
 
@@ -96,6 +119,13 @@ class FileRef {
       'meta_file_id': metaFileId,
       'name': name,
       if (folderId != null) 'folder_id': folderId,
+      if (sizeMb != null) 'size_mb': sizeMb,
+      if (mimeType != null) 'mime_type': mimeType,
+      if (uploadedAt != null) 'uploaded_at': uploadedAt,
+      if (chunkCount != null) 'chunk_count': chunkCount,
+      if (sha256 != null) 'sha256': sha256,
+      if (metadataMessageId != null) 'metadata_message_id': metadataMessageId,
+      if (thumbnailFileId != null) 'thumbnail_file_id': thumbnailFileId,
     };
   }
 }

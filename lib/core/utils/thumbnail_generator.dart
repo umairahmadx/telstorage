@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:get_thumbnail_video/index.dart';
-import 'package:get_thumbnail_video/get_thumbnail_video.dart';
+import 'package:get_thumbnail_video/video_thumbnail.dart';
 
 import 'thumbnail_helper_native.dart'
     if (dart.library.js_interop) 'thumbnail_helper_web.dart';
@@ -36,7 +36,6 @@ class ThumbnailGenerator {
         maxWidth: maxDimension,
         quality: quality,
       );
-      if (uint8list == null) throw Exception('Failed to extract video thumbnail data');
       return uint8list;
     } finally {
       ThumbnailHelper.cleanVideoSource(sourcePath);

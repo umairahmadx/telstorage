@@ -13,6 +13,7 @@ import '../../../shared/utils/responsive.dart';
 import '../../../shared/widgets/app_shell.dart';
 import '../../../shared/widgets/mobile_shell.dart';
 import '../../../shared/widgets/storage_ring.dart';
+import '../../../shared/widgets/thumbnail_widget.dart';
 import '../../storage/bloc/sync_cubit.dart';
 import '../../upload/bloc/upload_bloc.dart';
 
@@ -1186,7 +1187,7 @@ class _CategoryCard extends StatelessWidget {
 }
 
 class _RecentTile extends StatelessWidget {
-  final dynamic file;
+  final FileRecord file;
   final bool isLast;
   final VoidCallback onTap;
   const _RecentTile(
@@ -1200,14 +1201,19 @@ class _RecentTile extends StatelessWidget {
         ListTile(
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          leading: Container(
+          leading: ThumbnailWidget(
+            file: file,
             width: 44,
             height: 44,
-            decoration: BoxDecoration(
-              color: _color().withAlpha(25),
-              borderRadius: BorderRadius.circular(12),
+            fallback: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: _color().withAlpha(25),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(_icon(), color: _color(), size: 22),
             ),
-            child: Icon(_icon(), color: _color(), size: 22),
           ),
           title: Text(file.name,
               style: Theme.of(context).textTheme.labelLarge,
@@ -1231,7 +1237,7 @@ class _RecentTile extends StatelessWidget {
   }
 
   IconData _icon() {
-    final m = file.mimeType as String;
+    final m = file.mimeType;
     if (m.startsWith('image/')) return Icons.image_rounded;
     if (m.startsWith('video/')) return Icons.video_file_rounded;
     if (m.startsWith('audio/')) return Icons.audio_file_rounded;
@@ -1240,7 +1246,7 @@ class _RecentTile extends StatelessWidget {
   }
 
   Color _color() {
-    final m = file.mimeType as String;
+    final m = file.mimeType;
     if (m.startsWith('image/')) return const Color(0xFF3B82F6);
     if (m.startsWith('video/')) return const Color(0xFFA855F7);
     if (m.startsWith('audio/')) return const Color(0xFFF59E0B);

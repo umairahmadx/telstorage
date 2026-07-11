@@ -1,6 +1,7 @@
 import 'dart:convert';
 import '../models/file_record.dart';
 import '../models/folder_record.dart';
+import '../models/app_metadata.dart';
 import '../utils/app_logger.dart';
 import '../utils/connectivity.dart';
 import 'hive_service.dart';
@@ -74,6 +75,8 @@ class SyncService {
       final fileRefs = appMeta.files;
       AppLogger.d('${fileRefs.length} file(s) on Telegram', tag: 'SyncService');
 
+      final List<FileRef> legacySyncQueue = [];
+
       // Add files that are on Telegram but not in local Hive
       for (var i = 0; i < fileRefs.length; i++) {
         final ref = fileRefs[i];
@@ -96,19 +99,46 @@ class SyncService {
           continue;
         }
 
-        try {
-          AppLogger.d(
-              'Fetching index for ${ref.name} (meta file_id: ${ref.metaFileId})',
-              tag: 'SyncService');
-          final bytes = await _telegram.downloadByFileId(ref.metaFileId);
-          final fileMeta =
-              jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
-          fileMeta['metadata_file_id'] = ref.metaFileId;
-          await _hive.saveFile(FileRecord.fromMap(fileMeta));
+        // Fast sync if metadata is stored inline in FileRef
+        if (ref.sizeMb != null) {
+          final record = FileRecord(
+            fileId: ref.fileId,
+            name: ref.name,
+            folderId: ref.folderId,
+            metadataMessageId: ref.metadataMessageId ?? 0,
+            metadataFileId: ref.metaFileId,
+            sizeMb: ref.sizeMb!,
+            mimeType: ref.mimeType ?? 'application/octet-stream',
+            uploadedAt: ref.uploadedAt != null
+                ? DateTime.tryParse(ref.uploadedAt!) ?? DateTime.now()
+                : DateTime.now(),
+            chunkCount: ref.chunkCount ?? 1,
+            sha256Hash: ref.sha256 ?? '',
+            thumbnailFileId: ref.thumbnailFileId,
+          );
+          await _hive.saveFile(record);
           added++;
-          AppLogger.i('Synced: ${ref.name}', tag: 'SyncService');
-        } catch (e) {
-          AppLogger.w('Could not sync ${ref.name}: $e', tag: 'SyncService');
+          AppLogger.d('Fast-synced: ${ref.name}', tag: 'SyncService');
+        } else {
+          // Legacy sync fallback: create skeleton placeholder immediately
+          final skeleton = FileRecord(
+            fileId: ref.fileId,
+            name: ref.name,
+            folderId: ref.folderId,
+            metadataMessageId: 0,
+            metadataFileId: ref.metaFileId,
+            sizeMb: 0.0,
+            mimeType: 'application/octet-stream',
+            uploadedAt: DateTime.now(),
+            chunkCount: 1,
+            sha256Hash: '',
+          );
+          await _hive.saveFile(skeleton);
+          added++;
+          legacySyncQueue.add(ref);
+          AppLogger.d(
+              'Created skeleton placeholder for legacy file: ${ref.name}',
+              tag: 'SyncService');
         }
       }
 
@@ -124,6 +154,11 @@ class SyncService {
         }
       }
 
+      if (legacySyncQueue.isNotEmpty) {
+        // Fire-and-forget background legacy metadata fetching
+        _backgroundSyncOldFiles(legacySyncQueue);
+      }
+
       onProgress?.call(1.0, 'Sync complete!');
       AppLogger.i(
           'Sync done — +$added added, -$removed removed. Local: ${_hive.totalFiles} files, ${_hive.totalFolders} folders',
@@ -134,6 +169,77 @@ class SyncService {
       AppLogger.e('Sync failed: $e', tag: 'SyncService', error: e);
       rethrow;
     }
+  }
+
+  Future<void> _backgroundSyncOldFiles(List<FileRef> legacyQueue) async {
+    AppLogger.d(
+        'Starting background sync of ${legacyQueue.length} legacy files...',
+        tag: 'SyncService');
+    final List<FileRef> migratedRefs = [];
+    for (final ref in legacyQueue) {
+      try {
+        if (!await Connectivity.hasConnection()) {
+          AppLogger.w('Background sync paused: no internet connection',
+              tag: 'SyncService');
+          break;
+        }
+        AppLogger.d('Background sync: fetching metadata for ${ref.name}',
+            tag: 'SyncService');
+        final bytes = await _telegram.downloadByFileId(ref.metaFileId);
+        final fileMeta = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
+        fileMeta['metadata_file_id'] = ref.metaFileId;
+
+        // Save locally to Hive
+        await _hive.saveFile(FileRecord.fromMap(fileMeta));
+
+        // Create updated FileRef object for global metadata migration
+        migratedRefs.add(FileRef(
+          fileId: ref.fileId,
+          metaFileId: ref.metaFileId,
+          name: ref.name,
+          folderId: ref.folderId,
+          sizeMb: (fileMeta['size_mb'] as num?)?.toDouble(),
+          mimeType: fileMeta['mime_type'] as String?,
+          uploadedAt: fileMeta['uploaded_at'] as String?,
+          chunkCount: fileMeta['chunk_count'] as int?,
+          sha256: fileMeta['sha256'] as String?,
+          metadataMessageId: fileMeta['metadata_message_id'] as int?,
+          thumbnailFileId: fileMeta['thumbnail_file_id'] as String?,
+        ));
+
+        AppLogger.d('Background sync completed for: ${ref.name}',
+            tag: 'SyncService');
+
+        // Delay 200ms to avoid rate-limiting issues
+        await Future.delayed(const Duration(milliseconds: 200));
+      } catch (e) {
+        AppLogger.w('Background sync failed for ${ref.name}: $e',
+            tag: 'SyncService');
+      }
+    }
+
+    // Write updated metadata index back to Telegram so the migration is global/permanent
+    if (migratedRefs.isNotEmpty) {
+      try {
+        AppLogger.d(
+            'Updating global metadata index with ${migratedRefs.length} migrated references...',
+            tag: 'SyncService');
+        final appMeta = await _metadata.fetch();
+        for (final migrated in migratedRefs) {
+          appMeta.files.removeWhere((f) => f.fileId == migrated.fileId);
+          appMeta.files.add(migrated);
+        }
+        await _metadata.update(appMeta);
+        AppLogger.i(
+            'Successfully saved upgraded global metadata index to Telegram.',
+            tag: 'SyncService');
+      } catch (e) {
+        AppLogger.e('Failed to save upgraded metadata index to Telegram: $e',
+            tag: 'SyncService');
+      }
+    }
+
+    AppLogger.d('Background sync process complete.', tag: 'SyncService');
   }
 }
 

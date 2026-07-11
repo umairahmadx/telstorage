@@ -10,6 +10,7 @@ import '../models/chunk_info.dart';
 import '../models/file_record.dart';
 import '../utils/app_logger.dart';
 import '../utils/connectivity.dart';
+import '../utils/thumbnail_generator.dart';
 import 'hive_service.dart';
 import 'metadata_service.dart';
 import 'notification_service.dart';
@@ -62,6 +63,26 @@ class UploadService {
         (pct) =>
             onProgress(0.03 + pct * 0.07, 'Verifying… ${(pct * 100).toInt()}%'),
       );
+
+      // ── Step 1.5: Generate and Upload Thumbnail ────────────────────────────
+      String? thumbnailFileId;
+      try {
+        if (mimeType.startsWith('image/')) {
+          onProgress(0.08, 'Generating thumbnail…');
+          final thumbBytes = await ThumbnailGenerator.generateImageThumbnail(bytes);
+          onProgress(0.10, 'Uploading thumbnail…');
+          final thumbResult = await _telegram.uploadBytesWithFileId(thumbBytes, 'thumb_$fileId.jpg');
+          thumbnailFileId = thumbResult['file_id'] as String;
+        } else if (mimeType.startsWith('video/')) {
+          onProgress(0.08, 'Generating video thumbnail…');
+          final thumbBytes = await ThumbnailGenerator.generateVideoThumbnail(bytes, name);
+          onProgress(0.10, 'Uploading thumbnail…');
+          final thumbResult = await _telegram.uploadBytesWithFileId(thumbBytes, 'thumb_$fileId.jpg');
+          thumbnailFileId = thumbResult['file_id'] as String;
+        }
+      } catch (e) {
+        AppLogger.e('Thumbnail generation failed for $name: $e', tag: 'UploadService');
+      }
 
       final chunkInfos = <ChunkInfo>[];
 
@@ -138,6 +159,7 @@ class UploadService {
         'is_zipped': bytes.length > _partSize,
         'chunks': chunkInfos.map((c) => c.toJson()).toList(),
         'uploaded_at': DateTime.now().toIso8601String(),
+        if (thumbnailFileId != null) 'thumbnail_file_id': thumbnailFileId,
       };
 
       final metaResult = await _telegram.uploadBytesWithFileId(

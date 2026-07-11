@@ -11,6 +11,7 @@ import 'sync_service.dart';
 import 'telegram_service.dart';
 import 'upload_service.dart';
 import 'sync_queue_service.dart';
+import 'thumbnail_repository.dart';
 import '../../features/storage/data/repositories/storage_repository.dart';
 
 /// Single initialization point for all services.
@@ -38,6 +39,7 @@ class ServiceLocator {
   late FileManagerService _fileManager;
   late SyncQueueService _syncQueue;
   late StorageRepository _storageRepository;
+  late ThumbnailRepository _thumbnailRepository;
 
   TelegramService get telegram => _telegram;
   HiveService get hive => _hive;
@@ -49,6 +51,7 @@ class ServiceLocator {
   FileManagerService get fileManager => _fileManager;
   SyncQueueService get syncQueue => _syncQueue;
   StorageRepository get storageRepository => _storageRepository;
+  ThumbnailRepository get thumbnailRepository => _thumbnailRepository;
 
   Future<void>? _initFuture;
 
@@ -90,6 +93,7 @@ class ServiceLocator {
       _fileManager = FileManagerService(_metadata, _telegram, _hive);
       _syncQueue = SyncQueueService(_fileManager);
       _storageRepository = StorageRepository(_hive, _fileManager);
+      _thumbnailRepository = ThumbnailRepository(_telegram);
 
       await NotificationService.instance.init();
       await NotificationService.instance.requestPermissions();

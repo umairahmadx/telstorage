@@ -54,3 +54,6 @@ app.*.map.json
 
 # Graphify
 graphify-out/
+
+# Git Worktrees
+.worktrees/

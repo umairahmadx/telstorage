@@ -17,6 +17,7 @@ import '../../../shared/utils/responsive.dart';
 import '../../../shared/widgets/app_shell.dart';
 import '../../../shared/widgets/folder_picker_dialog.dart';
 import '../../../shared/widgets/mobile_shell.dart';
+import '../../../shared/widgets/thumbnail_widget.dart';
 import '../../../core/utils/file_category_helper.dart';
 import '../bloc/browser_bloc.dart';
 import '../../upload/bloc/upload_bloc.dart';
@@ -1465,14 +1466,19 @@ class _FileTile extends StatelessWidget {
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(4)),
               )
-            : Container(
+            : ThumbnailWidget(
+                file: file,
                 width: 42,
                 height: 42,
-                decoration: BoxDecoration(
-                  color: _color().withAlpha(25),
-                  borderRadius: BorderRadius.circular(10),
+                fallback: Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: _color().withAlpha(25),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(_icon(), color: _color(), size: 22),
                 ),
-                child: Icon(_icon(), color: _color(), size: 22),
               ),
         title: Text(file.name,
             overflow: TextOverflow.ellipsis,
@@ -1680,7 +1686,18 @@ class _GridFileItem extends StatelessWidget {
       ),
       child: Column(children: [
         Expanded(
-            child: Center(child: Icon(_icon(), size: 40, color: _color()))),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: ThumbnailWidget(
+                file: file,
+                width: double.infinity,
+                height: double.infinity,
+                fallback: Icon(_icon(), size: 40, color: _color()),
+              ),
+            ),
+          ),
+        ),
         Padding(
             padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
             child: Text(file.name,

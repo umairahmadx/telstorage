@@ -30,6 +30,7 @@ Future<void> main() async {
   await Hive.openBox<FolderRecord>(AppConstants.foldersBox);
   await Hive.openBox<DownloadJob>(AppConstants.downloadsBox);
   await Hive.openBox<PendingAction>(AppConstants.pendingActionsBox);
+  await Hive.openBox(AppConstants.webSharesBox);
 
   // Initialize Theme Service
   await ThemeService.instance.init();

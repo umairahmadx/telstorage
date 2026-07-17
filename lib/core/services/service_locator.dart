@@ -10,6 +10,7 @@ import 'metadata_service.dart';
 import 'sync_service.dart';
 import 'telegram_service.dart';
 import 'upload_service.dart';
+import 'web_share_queue_service.dart';
 import 'sync_queue_service.dart';
 import 'thumbnail_repository.dart';
 import '../../features/storage/data/repositories/storage_repository.dart';
@@ -40,6 +41,7 @@ class ServiceLocator {
   late SyncQueueService _syncQueue;
   late StorageRepository _storageRepository;
   late ThumbnailRepository _thumbnailRepository;
+  late WebShareQueueService _webShareQueue;
 
   TelegramService get telegram => _telegram;
   HiveService get hive => _hive;
@@ -52,6 +54,7 @@ class ServiceLocator {
   SyncQueueService get syncQueue => _syncQueue;
   StorageRepository get storageRepository => _storageRepository;
   ThumbnailRepository get thumbnailRepository => _thumbnailRepository;
+  WebShareQueueService get webShareQueue => _webShareQueue;
 
   Future<void>? _initFuture;
 
@@ -94,6 +97,8 @@ class ServiceLocator {
       _syncQueue = SyncQueueService(_fileManager);
       _storageRepository = StorageRepository(_hive, _fileManager);
       _thumbnailRepository = ThumbnailRepository(_telegram);
+      _webShareQueue =
+          WebShareQueueService(_downloadService, AppConstants.webSharesBox);
 
       await NotificationService.instance.init();
       await NotificationService.instance.requestPermissions();

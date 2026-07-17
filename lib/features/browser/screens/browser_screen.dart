@@ -575,6 +575,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
                 onRename: () => _renameFile(f),
                 onDelete: () => _deleteFile(f),
                 onMove: () => _moveFile(f),
+                onShareWeb: () => _shareWebFile(f),
               ));
             }
           }),
@@ -649,6 +650,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
               onRename: () => _renameFile(f),
               onDelete: () => _deleteFile(f),
               onMove: () => _moveFile(f),
+              onShareWeb: () => _shareWebFile(f),
             ));
           }
         }));
@@ -718,6 +720,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
               onRename: () => _renameFile(f),
               onDelete: () => _deleteFile(f),
               onMove: () => _moveFile(f),
+              onShareWeb: () => _shareWebFile(f),
             );
             return buildAnimTile(tile);
           }),
@@ -804,6 +807,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
               onRename: () => _renameFile(f),
               onDelete: () => _deleteFile(f),
               onMove: () => _moveFile(f),
+              onShareWeb: () => _shareWebFile(f),
             );
           }
         },
@@ -892,6 +896,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
                   onRename: () => _renameFile(f),
                   onDelete: () => _deleteFile(f),
                   onMove: () => _moveFile(f),
+                  onShareWeb: () => _shareWebFile(f),
                 );
               }
             },
@@ -993,6 +998,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
               onRename: () => _renameFile(f),
               onDelete: () => _deleteFile(f),
               onMove: () => _moveFile(f),
+              onShareWeb: () => _shareWebFile(f),
             );
           },
           childCount: files.length,
@@ -1058,6 +1064,33 @@ class _BrowserScreenState extends State<BrowserScreen> {
     final actualFolderId =
         pickedFolderId == HiveService.kRootFolderId ? null : pickedFolderId;
     _bloc.add(MoveFile(file.fileId, actualFolderId));
+  }
+
+  Future<void> _shareWebFile(FileRecord file) async {
+    await ServiceLocator.instance.webShareQueue.enqueueShare(file);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('"${file.name}" is uploading. View progress in Web Shares.'),
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(
+          label: 'View',
+          textColor: Colors.white,
+          onPressed: () {
+            final shell = MobileShell.of(context);
+            if (shell != null) {
+              shell.switchTab(2); // Downloads screen is index 2
+            } else {
+              Navigator.of(context).pushNamed(AppRouter.downloads);
+            }
+          },
+        ),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      ),
+    );
   }
 
   Future<void> _batchDelete() async {
@@ -1287,6 +1320,7 @@ class _FileTile extends StatelessWidget {
   final FileRecord file;
   final VoidCallback onTap, onRename, onDelete;
   final VoidCallback? onMove;
+  final VoidCallback? onShareWeb;
   final bool isSelected;
   final bool isMultiSelect;
   final VoidCallback onLongPress;
@@ -1297,6 +1331,7 @@ class _FileTile extends StatelessWidget {
     required this.onRename,
     required this.onDelete,
     this.onMove,
+    this.onShareWeb,
     required this.isSelected,
     required this.isMultiSelect,
     required this.onLongPress,
@@ -1465,9 +1500,19 @@ class _FileTile extends StatelessWidget {
                         onDelete();
                       } else if (v == 'move') {
                         onMove?.call();
+                      } else if (v == 'share') {
+                        onShareWeb?.call();
                       }
                     },
                     itemBuilder: (_) => [
+                      const PopupMenuItem(
+                          value: 'share',
+                          child: Row(children: [
+                            Icon(Icons.public_rounded,
+                                size: 18, color: AppTheme.primary),
+                            SizedBox(width: 10),
+                            Text('Share Web Link')
+                          ])),
                       const PopupMenuItem(
                           value: 'rename',
                           child: Row(children: [
@@ -1621,6 +1666,7 @@ class _GridFileItem extends StatelessWidget {
   final FileRecord file;
   final VoidCallback onTap, onRename, onDelete;
   final VoidCallback? onMove;
+  final VoidCallback? onShareWeb;
   final bool isSelected;
   final bool isMultiSelect;
   final VoidCallback onLongPress;
@@ -1631,6 +1677,7 @@ class _GridFileItem extends StatelessWidget {
     required this.onRename,
     required this.onDelete,
     this.onMove,
+    this.onShareWeb,
     required this.isSelected,
     required this.isMultiSelect,
     required this.onLongPress,
@@ -1788,7 +1835,62 @@ class _GridFileItem extends StatelessWidget {
                     ),
                   ],
                 )
-              : itemWidget,
+              : GestureDetector(
+                  onTap: onTap,
+                  onLongPress: () {
+                    showModalBottomSheet(
+                      context: context,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.vertical(top: Radius.circular(20)),
+                      ),
+                      builder: (_) => SafeArea(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ListTile(
+                              leading: const Icon(Icons.public_rounded,
+                                  color: AppTheme.primary),
+                              title: const Text('Share Web Link'),
+                              onTap: () {
+                                Navigator.pop(context);
+                                onShareWeb?.call();
+                              },
+                            ),
+                            ListTile(
+                              leading: const Icon(Icons.edit_rounded),
+                              title: const Text('Rename'),
+                              onTap: () {
+                                Navigator.pop(context);
+                                onRename();
+                              },
+                            ),
+                            ListTile(
+                              leading: const Icon(Icons.drive_file_move_rounded,
+                                  color: Color(0xFF6C63FF)),
+                              title: const Text('Move to folder'),
+                              onTap: () {
+                                Navigator.pop(context);
+                                onMove?.call();
+                              },
+                            ),
+                            ListTile(
+                              leading: const Icon(Icons.delete_rounded,
+                                  color: Colors.red),
+                              title: const Text('Delete',
+                                  style: TextStyle(color: Colors.red)),
+                              onTap: () {
+                                Navigator.pop(context);
+                                onDelete();
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                  child: itemWidget,
+                ),
         );
       },
     );

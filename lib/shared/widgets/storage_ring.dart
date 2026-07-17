@@ -47,6 +47,7 @@ class _StorageRingState extends State<StorageRing>
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final usedLabel = _formatSize(widget.usedMb);
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
 
     return AnimatedBuilder(
       animation: _anim,
@@ -63,6 +64,7 @@ class _StorageRingState extends State<StorageRing>
                   percent: _isUnlimited ? 0.72 : _percent * _anim.value,
                   isDark: isDark,
                   isUnlimited: _isUnlimited,
+                  trackColor: colors.selectionColorAlt,
                 ),
               ),
               Column(
@@ -76,8 +78,8 @@ class _StorageRingState extends State<StorageRing>
                           fontSize: _isUnlimited ? 44 : 36,
                           fontWeight: FontWeight.w800,
                           foreground: Paint()
-                            ..shader = const LinearGradient(
-                              colors: [AppTheme.primary, Color(0xFFA78BFA)],
+                            ..shader = LinearGradient(
+                              colors: colors.primaryGradient,
                             ).createShader(const Rect.fromLTWH(0, 0, 80, 40)),
                         ),
                   ),
@@ -112,9 +114,13 @@ class _RingPainter extends CustomPainter {
   final double percent;
   final bool isDark;
   final bool isUnlimited;
+  final Color trackColor;
 
   _RingPainter(
-      {required this.percent, required this.isDark, required this.isUnlimited});
+      {required this.percent,
+      required this.isDark,
+      required this.isUnlimited,
+      required this.trackColor});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -124,7 +130,7 @@ class _RingPainter extends CustomPainter {
 
     // Track
     final trackPaint = Paint()
-      ..color = isDark ? const Color(0xFF2A2A45) : const Color(0xFFE8E4FF)
+      ..color = trackColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = sw
       ..strokeCap = StrokeCap.round;
@@ -155,7 +161,7 @@ class _RingPainter extends CustomPainter {
       ..shader = const SweepGradient(
         startAngle: 0,
         endAngle: 2 * math.pi,
-        colors: [Color(0xFF6C63FF), Color(0xFFA78BFA), Color(0xFF6C63FF)],
+        colors: [AppTheme.primary, AppTheme.primaryLight, AppTheme.primary],
         stops: [0.0, 0.6, 1.0],
       ).createShader(rect)
       ..style = PaintingStyle.stroke

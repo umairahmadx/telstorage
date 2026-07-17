@@ -39,6 +39,7 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light.copyWith(
@@ -54,9 +55,7 @@ class _SplashScreenState extends State<SplashScreen>
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: isDark
-                  ? const [Color(0xFF0F0F1A), Color(0xFF1A1A2E)]
-                  : const [AppTheme.primary, Color(0xFF4F46E5)],
+              colors: colors.heroGradient,
             ),
           ),
           child: Stack(
@@ -70,7 +69,7 @@ class _SplashScreenState extends State<SplashScreen>
               Positioned(
                 bottom: -80,
                 left: -50,
-                child: _glowCircle(220, const Color(0xFFA78BFA).withAlpha(25)),
+                child: _glowCircle(220, colors.glowColor),
               ),
               Positioned(
                 top: MediaQuery.of(context).size.height * 0.3,
@@ -90,7 +89,7 @@ class _SplashScreenState extends State<SplashScreen>
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: isDark
-                              ? const [AppTheme.primary, Color(0xFFA78BFA)]
+                              ? colors.primaryGradient
                               : const [Colors.white24, Colors.white38],
                         ),
                         borderRadius: BorderRadius.circular(24),

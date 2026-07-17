@@ -50,13 +50,13 @@ class _DesktopRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
     final isWide = MediaQuery.sizeOf(context).width > 1200;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       width: isWide ? 240 : 72,
-      color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+      color: Theme.of(context).colorScheme.surface,
       child: Column(
         children: [
           const SizedBox(height: 24),
@@ -69,8 +69,8 @@ class _DesktopRail extends StatelessWidget {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [AppTheme.primary, Color(0xFFA78BFA)],
+                    gradient: LinearGradient(
+                      colors: colors.primaryGradient,
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),

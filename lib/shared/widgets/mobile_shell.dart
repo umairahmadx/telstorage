@@ -1,26 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../features/home/screens/home_screen.dart';
 import '../../features/browser/screens/browser_screen.dart';
 import '../../features/downloads/screens/downloads_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
+import '../../features/upload/bloc/upload_bloc.dart';
 
-/// A unified mobile navigation shell that wraps all primary screens with
-/// an animated Material 3-style bottom navigation bar.
-///
-/// Uses [IndexedStack] to persist each tab's state across switches.
-/// Child screens can access the shell via [MobileShell.of(context)] to
-/// programmatically switch tabs.
+import 'app_drawer.dart';
+
 class MobileShell extends StatefulWidget {
   final int initialIndex;
 
   const MobileShell({super.key, this.initialIndex = 0});
 
-  /// Access the [MobileShellState] from a descendant widget to
-  /// programmatically switch tabs. Returns null if not inside a MobileShell.
   static MobileShellState? of(BuildContext context) {
     return context.findAncestorStateOfType<MobileShellState>();
   }
@@ -31,6 +29,7 @@ class MobileShell extends StatefulWidget {
 
 class MobileShellState extends State<MobileShell> {
   late int _currentIndex;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
@@ -38,24 +37,108 @@ class MobileShellState extends State<MobileShell> {
     _currentIndex = widget.initialIndex;
   }
 
-  /// Switch to the tab at [index] programmatically.
+  void openDrawer() {
+    _scaffoldKey.currentState?.openDrawer();
+  }
+
   void switchTab(int index) {
-    if (index == _currentIndex || index < 0 || index > 3) return;
+    if (index == _currentIndex || index < 0 || index > 4) return;
+    if (index == 2) {
+      _showAddMenu();
+      return;
+    }
     HapticFeedback.selectionClick();
     setState(() => _currentIndex = index);
   }
 
   int get currentIndex => _currentIndex;
 
+  void _showAddMenu() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: const BoxDecoration(
+          color: AppTheme.black,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white10,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                _AddActionItem(
+                  icon: Icons.upload_file_rounded,
+                  label: 'Upload File',
+                  color: Colors.blue,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _pickAndUpload();
+                  },
+                ),
+                _AddActionItem(
+                  icon: Icons.create_new_folder_rounded,
+                  label: 'New Folder',
+                  color: AppTheme.warning,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    // logic to trigger folder creation in Browser tab or global
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickAndUpload() async {
+    final picked = await FilePicker.platform.pickFiles(withData: true, allowMultiple: true);
+    if (picked == null || picked.files.isEmpty) return;
+
+    final List<UploadTask> tasks = [];
+    const uuid = Uuid();
+    for (final file in picked.files) {
+      if (file.bytes == null) continue;
+      tasks.add(UploadTask(
+        id: uuid.v4(),
+        bytes: file.bytes!,
+        name: file.name,
+      ));
+    }
+    
+    if (tasks.isNotEmpty && mounted) {
+      context.read<UploadBloc>().add(AddUploads(tasks));
+      switchTab(3); // Go to Transfer tab
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
+      drawer: AppDrawer(
+        currentIndex: _currentIndex,
+        onTabSelected: switchTab,
+      ),
       body: IndexedStack(
-        index: _currentIndex,
+        index: _currentIndex > 2 ? _currentIndex - 1 : (_currentIndex == 2 ? 0 : _currentIndex),
         children: const [
           HomeScreen(),
           BrowserScreen(),
-          DownloadsScreen(),
+          DownloadsScreen(), 
           SettingsScreen(),
         ],
       ),
@@ -67,7 +150,43 @@ class MobileShellState extends State<MobileShell> {
   }
 }
 
-// ── Bottom Navigation Bar ─────────────────────────────────────────────────────
+class _AddActionItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _AddActionItem({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Column(
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: color.withAlpha(40),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(icon, color: color, size: 28),
+            ),
+            const SizedBox(height: 12),
+            Text(label, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _MobileNavBar extends StatelessWidget {
   final int currentIndex;
@@ -78,65 +197,84 @@ class _MobileNavBar extends StatelessWidget {
     required this.onTap,
   });
 
-  static const _items = [
-    _NavItemData(Icons.home_rounded, 'Home'),
-    _NavItemData(Icons.folder_rounded, 'Files'),
-    _NavItemData(Icons.download_rounded, 'Downloads'),
-    _NavItemData(Icons.settings_outlined, 'Settings'),
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
+      height: 90,
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+        color: colors.bgPrimary,
         border: Border(
-          top: BorderSide(
-            color: isDark ? const Color(0xFF2A2A45) : const Color(0xFFE0DFFF),
-          ),
+          top: BorderSide(color: colors.borderSubtle, width: 0.5),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(isDark ? 40 : 15),
-            blurRadius: 20,
-            offset: const Offset(0, -4),
+      ),
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.topCenter,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _NavItem(
+                icon: Icons.home_filled,
+                label: 'Home',
+                selected: currentIndex == 0,
+                onTap: () => onTap(0),
+              ),
+              _NavItem(
+                icon: Icons.folder_outlined,
+                label: 'Files',
+                selected: currentIndex == 1,
+                onTap: () => onTap(1),
+              ),
+              const SizedBox(width: 60), // Space for FAB
+              _NavItem(
+                icon: Icons.swap_calls_rounded,
+                label: 'Transfer',
+                selected: currentIndex == 3,
+                onTap: () => onTap(3),
+              ),
+              _NavItem(
+                icon: Icons.more_horiz_rounded,
+                label: 'More',
+                selected: currentIndex == 4,
+                onTap: () => onTap(4),
+              ),
+            ],
+          ),
+          Positioned(
+            top: -20,
+            child: GestureDetector(
+              onTap: () => onTap(2),
+              child: Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: colors.accentPrimary,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withAlpha(50),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  Icons.add_rounded,
+                  color: isDark ? Colors.black : Colors.white,
+                  size: 32,
+                ),
+              ),
+            ),
           ),
         ],
       ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: 64,
-          child: Row(
-            children: List.generate(_items.length, (i) {
-              return _NavItem(
-                icon: _items[i].icon,
-                label: _items[i].label,
-                selected: _currentIndex == i,
-                onTap: () => onTap(i),
-              );
-            }),
-          ),
-        ),
-      ),
     ).animate().fadeIn(duration: 300.ms, curve: Curves.easeOut);
   }
-
-  // Hold the current index for the selected-check
-  int get _currentIndex => currentIndex;
 }
-
-// ── Nav Item Data ─────────────────────────────────────────────────────────────
-
-class _NavItemData {
-  final IconData icon;
-  final String label;
-  const _NavItemData(this.icon, this.label);
-}
-
-// ── Individual Nav Item ───────────────────────────────────────────────────────
 
 class _NavItem extends StatelessWidget {
   final IconData icon;
@@ -153,6 +291,7 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
     return Expanded(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -160,29 +299,18 @@ class _NavItem extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeInOut,
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-              decoration: BoxDecoration(
-                color: selected
-                    ? AppTheme.primary.withAlpha(25)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Icon(
-                icon,
-                color: selected ? AppTheme.primary : Colors.grey,
-                size: 23,
-              ),
+            Icon(
+              icon,
+              color: selected ? colors.accentPrimary : colors.textTertiary,
+              size: 26,
             ),
-            const SizedBox(height: 3),
+            const SizedBox(height: 4),
             Text(
               label,
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 11,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                color: selected ? AppTheme.primary : Colors.grey,
+                color: selected ? colors.accentPrimary : colors.textTertiary,
               ),
             ),
           ],

@@ -29,7 +29,7 @@ class _FolderPickerSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
     final folders = ServiceLocator.instance.hive.allFolders
         .where((f) => f.id != currentFolderId)
         .toList()
@@ -40,7 +40,7 @@ class _FolderPickerSheet extends StatelessWidget {
         maxHeight: MediaQuery.of(context).size.height * 0.6,
       ),
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkCard : Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: Column(
@@ -52,7 +52,7 @@ class _FolderPickerSheet extends StatelessWidget {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: isDark ? Colors.white24 : Colors.black12,
+              color: colors.selectionColor,
               borderRadius: BorderRadius.circular(2),
             ),
           ),

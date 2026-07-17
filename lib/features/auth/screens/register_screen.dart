@@ -111,46 +111,49 @@ class _RegisterScreenState extends State<RegisterScreen>
     ]);
   }
 
-  Widget _heroPanel() => Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF0F0F1A), Color(0xFF1A1A2E)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+  Widget _heroPanel() {
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: colors.heroGradient,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        child: Stack(children: [
-          Positioned(
-              top: -100,
-              right: -60,
-              child: _glowCircle(280, AppTheme.primary.withAlpha(35))),
-          Positioned(
-              bottom: -80,
-              left: -40,
-              child: _glowCircle(240, const Color(0xFFA78BFA).withAlpha(25))),
-          Center(
-              child: Padding(
-            padding: const EdgeInsets.all(48),
-            child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _logoBox(),
-                  const SizedBox(height: 32),
-                  Text('Get started\nfor free.',
-                      style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                          color: Colors.white, fontSize: 40, height: 1.2)),
-                  const SizedBox(height: 16),
-                  const Text(
-                      'Your own unlimited cloud drive,\npowered by your Telegram channel.',
-                      style: TextStyle(
-                          color: Colors.white60, fontSize: 16, height: 1.6)),
-                  const SizedBox(height: 40),
-                  _instructionCard(),
-                ]),
-          )),
-        ]),
-      );
+      ),
+      child: Stack(children: [
+        Positioned(
+            top: -100,
+            right: -60,
+            child: _glowCircle(280, AppTheme.primary.withAlpha(35))),
+        Positioned(
+            bottom: -80,
+            left: -40,
+            child: _glowCircle(240, colors.glowColor)),
+        Center(
+            child: Padding(
+          padding: const EdgeInsets.all(48),
+          child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _logoBox(),
+                const SizedBox(height: 32),
+                Text('Get started\nfor free.',
+                    style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                        color: Colors.white, fontSize: 40, height: 1.2)),
+                const SizedBox(height: 16),
+                const Text(
+                    'Your own unlimited cloud drive,\npowered by your Telegram channel.',
+                    style: TextStyle(
+                        color: Colors.white60, fontSize: 16, height: 1.6)),
+                const SizedBox(height: 40),
+                _instructionCard(),
+              ]),
+        )),
+      ]),
+    );
+  }
 
   Widget _instructionCard() => Container(
         padding: const EdgeInsets.all(20),
@@ -187,6 +190,7 @@ class _RegisterScreenState extends State<RegisterScreen>
   // ── Mobile ────────────────────────────────────────────────────────────────
   Widget _buildMobile() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
       child: Stack(children: [
@@ -195,9 +199,7 @@ class _RegisterScreenState extends State<RegisterScreen>
           height: 220,
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: isDark
-                  ? [const Color(0xFF0F0F1A), const Color(0xFF1A1A2E)]
-                  : [const Color(0xFF6C63FF), const Color(0xFF4F46E5)],
+              colors: colors.heroGradient,
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -409,26 +411,27 @@ class _RegisterScreenState extends State<RegisterScreen>
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   Widget _logoBox(
-          {double size = 64, double radius = 18, double iconSize = 36}) =>
-      Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-              colors: [AppTheme.primary, Color(0xFFA78BFA)]),
-          borderRadius: BorderRadius.circular(radius),
-          boxShadow: [
-            BoxShadow(
-                color: AppTheme.primary.withAlpha(80),
-                blurRadius: 16,
-                offset: const Offset(0, 6))
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(radius),
-          child: Image.asset('assets/images/logo.png', fit: BoxFit.cover),
-        ),
-      );
+      {double size = 64, double radius = 18, double iconSize = 36}) {
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: colors.primaryGradient),
+        borderRadius: BorderRadius.circular(radius),
+        boxShadow: [
+          BoxShadow(
+              color: AppTheme.primary.withAlpha(80),
+              blurRadius: 16,
+              offset: const Offset(0, 6))
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: Image.asset('assets/images/logo.png', fit: BoxFit.cover),
+      ),
+    );
+  }
 
   Widget _glowCircle(double size, Color color) => Container(
       width: size,
@@ -463,7 +466,7 @@ class _RegisterScreenState extends State<RegisterScreen>
         Expanded(
             child: Text(text,
                 style: TextStyle(
-                    color: isDark ? Colors.white70 : const Color(0xFF3730A3),
+                    color: isDark ? Colors.white70 : AppTheme.primary,
                     fontSize: 12))),
       ]),
     );

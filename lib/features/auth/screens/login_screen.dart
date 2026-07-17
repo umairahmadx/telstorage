@@ -97,60 +97,64 @@ class _LoginScreenState extends State<LoginScreen>
     ]);
   }
 
-  Widget _heroPanel() => Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF0F0F1A), Color(0xFF1A1A2E), Color(0xFF16213E)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+  Widget _heroPanel() {
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: colors.heroGradient,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        child: Stack(children: [
-          Positioned(
-              top: -80,
-              left: -80,
-              child: _glowCircle(300, AppTheme.primary.withAlpha(40))),
-          Positioned(
-              bottom: -100,
-              right: -60,
-              child: _glowCircle(250, const Color(0xFFA78BFA).withAlpha(30))),
-          Center(
-              child: Padding(
-            padding: const EdgeInsets.all(48),
-            child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _logoBox(64, 18, 36),
-                  const SizedBox(height: 32),
-                  Text('TelStorage',
-                      style: Theme.of(context)
-                          .textTheme
-                          .displayLarge
-                          ?.copyWith(color: Colors.white, fontSize: 42)),
-                  const SizedBox(height: 12),
-                  Text('Unlimited cloud storage\npowered by Telegram.',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyLarge
-                          ?.copyWith(color: Colors.white60, height: 1.6)),
-                  const SizedBox(height: 48),
-                  _featureRow(Icons.all_inclusive_rounded,
-                      'Unlimited storage — no caps'),
-                  const SizedBox(height: 16),
-                  _featureRow(
-                      Icons.sync_rounded, 'Syncs across all your devices'),
-                  const SizedBox(height: 16),
-                  _featureRow(Icons.lock_rounded,
-                      'Files stay in your Telegram channel'),
-                ]),
-          )),
-        ]),
-      );
+      ),
+      child: Stack(children: [
+        Positioned(
+            top: -80,
+            left: -80,
+            child: _glowCircle(300, AppTheme.primary.withAlpha(40))),
+        Positioned(
+            bottom: -100,
+            right: -60,
+            child: _glowCircle(250, colors.glowColor)),
+        Center(
+            child: Padding(
+          padding: const EdgeInsets.all(48),
+          child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _logoBox(64, 18, 36),
+                const SizedBox(height: 32),
+                Text('TelStorage',
+                    style: Theme.of(context)
+                        .textTheme
+                        .displayLarge
+                        ?.copyWith(color: Colors.white, fontSize: 42)),
+                const SizedBox(height: 12),
+                Text('Unlimited cloud storage\npowered by Telegram.',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyLarge
+                        ?.copyWith(color: Colors.white60, height: 1.6)),
+                const SizedBox(height: 48),
+                _featureRow(Icons.all_inclusive_rounded,
+                    'Unlimited storage — no caps'),
+                const SizedBox(height: 16),
+                _featureRow(
+                    Icons.sync_rounded, 'Syncs across all your devices'),
+                const SizedBox(height: 16),
+                _featureRow(Icons.lock_rounded,
+                    'Files stay in your Telegram channel'),
+              ]),
+        )),
+      ]),
+    );
+  }
 
   // ── Mobile layout (full redesign — immersive + ergonomic) ─────────────────
   Widget _buildMobile() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
       child: Stack(children: [
@@ -158,9 +162,7 @@ class _LoginScreenState extends State<LoginScreen>
         Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: isDark
-                  ? [const Color(0xFF0F0F1A), const Color(0xFF1A1A2E)]
-                  : [const Color(0xFF6C63FF), const Color(0xFF4F46E5)],
+              colors: colors.heroGradient,
               begin: Alignment.topCenter,
               end: Alignment.center,
             ),
@@ -328,25 +330,27 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   // ── Shared helpers ────────────────────────────────────────────────────────
-  Widget _logoBox(double size, double radius, double iconSize) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-              colors: [AppTheme.primary, Color(0xFFA78BFA)]),
-          borderRadius: BorderRadius.circular(radius),
-          boxShadow: [
-            BoxShadow(
-                color: AppTheme.primary.withAlpha(80),
-                blurRadius: 20,
-                offset: const Offset(0, 8))
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(radius),
-          child: Image.asset('assets/images/logo.png', fit: BoxFit.cover),
-        ),
-      );
+  Widget _logoBox(double size, double radius, double iconSize) {
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: colors.primaryGradient),
+        borderRadius: BorderRadius.circular(radius),
+        boxShadow: [
+          BoxShadow(
+              color: AppTheme.primary.withAlpha(80),
+              blurRadius: 20,
+              offset: const Offset(0, 8))
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: Image.asset('assets/images/logo.png', fit: BoxFit.cover),
+      ),
+    );
+  }
 
   Widget _glowCircle(double size, Color color) => Container(
       width: size,

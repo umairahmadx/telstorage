@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../core/models/file_record.dart';
 import '../../../core/theme/app_theme.dart';
+import 'qr_dialog.dart';
 
 class ShareLinkSheet extends StatefulWidget {
   final FileRecord file;
-  final Function(String? password, String expiry) onCopyLink;
+  final String? shareUrl;
+  final Function(String? password, int expiryDays) onCopyLink;
 
   const ShareLinkSheet({
     super.key,
     required this.file,
+    this.shareUrl,
     required this.onCopyLink,
   });
 
@@ -19,15 +22,15 @@ class ShareLinkSheet extends StatefulWidget {
 
 class _ShareLinkSheetState extends State<ShareLinkSheet> {
   bool _setPassword = false;
-  String _expiryLabel = 'In 7 days';
-  DateTime _expiryDate = DateTime.now().add(const Duration(days: 7));
+  int _expiryDays = 7;
   final _passCtrl = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
-    final dateStr = DateFormat('dd MMM yyyy').format(_expiryDate);
-    
+    final dateStr = DateFormat('dd MMM yyyy')
+        .format(DateTime.now().add(Duration(days: _expiryDays)));
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -59,14 +62,18 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
                   children: [
                     Text(
                       widget.file.name,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                      style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
                     Text(
                       widget.file.formattedSize,
-                      style: TextStyle(color: colors.textSecondary, fontSize: 13),
+                      style:
+                          TextStyle(color: colors.textSecondary, fontSize: 13),
                     ),
                   ],
                 ),
@@ -74,10 +81,16 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
             ],
           ),
           const SizedBox(height: 32),
-          const Text('Expires', style: TextStyle(color: Colors.white70, fontSize: 14)),
+          const Text('Expires',
+              style: TextStyle(color: Colors.white70, fontSize: 14)),
           const SizedBox(height: 12),
-          GestureDetector(
-            onTap: _pickExpiry,
+          PopupMenuButton<int>(
+            onSelected: (days) => setState(() => _expiryDays = days),
+            itemBuilder: (ctx) => [
+              const PopupMenuItem(value: 1, child: Text('In 1 day')),
+              const PopupMenuItem(value: 3, child: Text('In 3 days')),
+              const PopupMenuItem(value: 7, child: Text('In 7 days')),
+            ],
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               decoration: BoxDecoration(
@@ -86,24 +99,32 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.calendar_today_outlined, size: 20, color: Colors.white54),
+                  const Icon(Icons.calendar_today_outlined,
+                      size: 20, color: Colors.white54),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(_expiryLabel, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                        Text(dateStr, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                        Text('In $_expiryDays days',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600)),
+                        Text(dateStr,
+                            style: const TextStyle(
+                                color: Colors.white38, fontSize: 11)),
                       ],
                     ),
                   ),
-                  const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white54),
+                  const Icon(Icons.keyboard_arrow_down_rounded,
+                      color: Colors.white54),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 24),
-          const Text('Password (Optional)', style: TextStyle(color: Colors.white70, fontSize: 14)),
+          const Text('Password (Optional)',
+              style: TextStyle(color: Colors.white70, fontSize: 14)),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -113,10 +134,13 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.lock_outline_rounded, size: 20, color: Colors.white54),
+                const Icon(Icons.lock_outline_rounded,
+                    size: 20, color: Colors.white54),
                 const SizedBox(width: 16),
                 const Expanded(
-                  child: Text('Set password', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
+                  child: Text('Set password',
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.w500)),
                 ),
                 Switch(
                   value: _setPassword,
@@ -138,7 +162,9 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
                 hintStyle: const TextStyle(color: Colors.white24),
                 filled: true,
                 fillColor: colors.bgSurface,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none),
               ),
             ),
           ],
@@ -147,26 +173,42 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
             children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () => widget.onCopyLink(_setPassword ? _passCtrl.text : null, _expiryLabel),
+                  onPressed: () => widget.onCopyLink(
+                      _setPassword ? _passCtrl.text : null, _expiryDays),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: Colors.black,
                     minimumSize: const Size(double.infinity, 56),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16)),
                   ),
                   icon: const Icon(Icons.link_rounded),
-                  label: const Text('Copy Link', style: TextStyle(fontWeight: FontWeight.bold)),
+                  label: const Text('Copy Link',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
               const SizedBox(width: 12),
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: colors.bgSurface,
-                  borderRadius: BorderRadius.circular(16),
+              GestureDetector(
+                onTap: widget.shareUrl == null
+                    ? null
+                    : () => showDialog(
+                          context: context,
+                          builder: (_) => QrDialog(
+                              data: widget.shareUrl!, title: 'Share File QR'),
+                        ),
+                child: Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: colors.bgSurface,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    Icons.qr_code_2_rounded,
+                    color:
+                        widget.shareUrl == null ? Colors.white24 : Colors.white,
+                  ),
                 ),
-                child: const Icon(Icons.qr_code_2_rounded, color: Colors.white),
               ),
             ],
           ),
@@ -174,27 +216,6 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
         ],
       ),
     );
-  }
-
-  Future<void> _pickExpiry() async {
-    final picked = await showDatePicker(
-      context: context, 
-      initialDate: _expiryDate,
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-      builder: (context, child) => Theme(
-        data: Theme.of(context).copyWith(
-          colorScheme: const ColorScheme.dark(primary: Colors.white, onPrimary: Colors.black, surface: AppTheme.surface),
-        ),
-        child: child!,
-      ),
-    );
-    if (picked != null) {
-      setState(() {
-        _expiryDate = picked;
-        _expiryLabel = 'Custom Date';
-      });
-    }
   }
 
   Widget _buildFileIcon(AppColorsExtension colors) {
@@ -208,7 +229,9 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
         borderRadius: BorderRadius.circular(12),
       ),
       alignment: Alignment.center,
-      child: Text(widget.file.isPdf ? 'PDF' : 'FILE', style: TextStyle(color: iconColor, fontWeight: FontWeight.bold, fontSize: 12)),
+      child: Text(widget.file.isPdf ? 'PDF' : 'FILE',
+          style: TextStyle(
+              color: iconColor, fontWeight: FontWeight.bold, fontSize: 12)),
     );
   }
 }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/services/service_locator.dart';
+import '../../../core/navigation/navigation_intent.dart';
 
 class AppDrawer extends StatelessWidget {
   final int currentIndex;
@@ -14,7 +16,7 @@ class AppDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
-    
+
     return Drawer(
       backgroundColor: colors.bgPrimary,
       child: SafeArea(
@@ -35,7 +37,9 @@ class AppDrawer extends StatelessWidget {
                     padding: const EdgeInsets.all(6),
                     child: Image.asset(
                       'assets/images/logo.png',
-                      color: Theme.of(context).brightness == Brightness.dark ? Colors.black : Colors.white,
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.black
+                          : Colors.white,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -57,7 +61,8 @@ class AppDrawer extends StatelessWidget {
               isSelected: currentIndex == 0,
               onTap: () {
                 Navigator.pop(context);
-                onTabSelected(0);
+                ServiceLocator.instance.navigation
+                    .navigateTo(AppDestination.home);
               },
             ),
             _DrawerItem(
@@ -66,34 +71,41 @@ class AppDrawer extends StatelessWidget {
               isSelected: currentIndex == 1,
               onTap: () {
                 Navigator.pop(context);
-                onTabSelected(1);
+                ServiceLocator.instance.navigation
+                    .navigateTo(AppDestination.files);
               },
             ),
             _DrawerItem(
               icon: Icons.file_download_outlined,
               label: 'Downloads',
-              isSelected: false,
+              isSelected: currentIndex == 3 &&
+                  ServiceLocator.instance.navigation.lastTransferTab == 0,
               onTap: () {
                 Navigator.pop(context);
-                onTabSelected(3);
+                ServiceLocator.instance.navigation
+                    .navigateTo(AppDestination.transferDownloads);
               },
             ),
             _DrawerItem(
               icon: Icons.file_upload_outlined,
               label: 'Uploads',
-              isSelected: false,
+              isSelected: currentIndex == 3 &&
+                  ServiceLocator.instance.navigation.lastTransferTab == 1,
               onTap: () {
                 Navigator.pop(context);
-                onTabSelected(3);
+                ServiceLocator.instance.navigation
+                    .navigateTo(AppDestination.transferUploads);
               },
             ),
             _DrawerItem(
               icon: Icons.people_outline_rounded,
               label: 'Shared',
-              isSelected: false,
+              isSelected: currentIndex == 3 &&
+                  ServiceLocator.instance.navigation.lastTransferTab == 2,
               onTap: () {
                 Navigator.pop(context);
-                onTabSelected(3);
+                ServiceLocator.instance.navigation
+                    .navigateTo(AppDestination.transferShared);
               },
             ),
             const Padding(
@@ -106,7 +118,8 @@ class AppDrawer extends StatelessWidget {
               isSelected: currentIndex == 4,
               onTap: () {
                 Navigator.pop(context);
-                onTabSelected(4);
+                ServiceLocator.instance.navigation
+                    .navigateTo(AppDestination.settings);
               },
             ),
           ],

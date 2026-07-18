@@ -18,10 +18,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _userName = 'User';
   String _userEmail = '';
   double _usedMb = 0;
+  late final Future<Map<String, dynamic>> _quotaFuture;
 
   @override
   void initState() {
     super.initState();
+    _quotaFuture = ServiceLocator.instance.webShareQueue.getBandwidthStatus();
     _loadData();
   }
 
@@ -50,19 +52,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Scaffold _buildScaffold(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
-    
+
     return Scaffold(
       backgroundColor: colors.bgPrimary,
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.menu_rounded), 
+          icon: const Icon(Icons.menu_rounded),
           onPressed: () => MobileShell.of(context)?.openDrawer(),
         ),
         title: const Text('Settings'),
         centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.search_rounded), 
+            icon: const Icon(Icons.search_rounded),
             onPressed: () {
               // Settings search logic
             },
@@ -73,6 +75,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         children: [
           _buildProfileCard(colors),
+          const SizedBox(height: 32),
+          _sectionLabel('QUOTA'),
+          const SizedBox(height: 12),
+          _buildQuotaCard(colors),
           const SizedBox(height: 32),
           _sectionLabel('STORAGE'),
           const SizedBox(height: 12),
@@ -88,6 +94,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 60),
         ],
       ),
+    );
+  }
+
+  Widget _buildQuotaCard(AppColorsExtension colors) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _quotaFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const SizedBox(
+              height: 80, child: Center(child: CircularProgressIndicator()));
+        }
+        if (snapshot.hasError || !snapshot.hasData) {
+          return Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: colors.bgSurface,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: const Text('Web upload quota is currently unavailable.'),
+          );
+        }
+        final data = snapshot.data!;
+        final remaining = data['remaining_gb']?.toString() ?? '...';
+        final limit = data['limit_gb']?.toString() ?? '...';
+        final usedPct = (data['used_bytes'] as num? ?? 0) /
+            (data['limit_bytes'] as num? ?? 1);
+
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+              color: colors.bgSurface, borderRadius: BorderRadius.circular(24)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Web Upload Quota: $remaining GB of $limit GB remaining',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w600, fontSize: 13)),
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: LinearProgressIndicator(
+                  value: usedPct.clamp(0.0, 1.0),
+                  minHeight: 6,
+                  backgroundColor: colors.bgSurfaceInset,
+                  valueColor:
+                      AlwaysStoppedAnimation<Color>(colors.accentPrimary),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -110,7 +168,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             alignment: Alignment.center,
             child: Text(
               _userName.isNotEmpty ? _userName[0].toUpperCase() : 'U',
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22),
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 22),
             ),
           ),
           const SizedBox(width: 16),
@@ -118,9 +179,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_userName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(_userName,
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
-                Text(_userEmail, style: const TextStyle(color: Colors.white54, fontSize: 13)),
+                Text(_userEmail,
+                    style:
+                        const TextStyle(color: Colors.white54, fontSize: 13)),
               ],
             ),
           ),
@@ -131,8 +196,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildStorageCard(AppColorsExtension colors) {
-    final usedText = _usedMb >= 1024 
-        ? '${(_usedMb / 1024).toStringAsFixed(1)} GB' 
+    final usedText = _usedMb >= 1024
+        ? '${(_usedMb / 1024).toStringAsFixed(1)} GB'
         : '${_usedMb.toStringAsFixed(0)} MB';
 
     return Container(
@@ -149,15 +214,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('$usedText of Unlimited used', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                Text('$usedText of Unlimited used',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 14)),
                 const SizedBox(height: 12),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(10),
                   child: LinearProgressIndicator(
-                    value: (_usedMb / 102400).clamp(0.05, 1.0),
+                    value: (_usedMb / 102400).clamp(0.0, 1.0),
                     minHeight: 6,
                     backgroundColor: colors.bgSurfaceInset,
-                    valueColor: AlwaysStoppedAnimation<Color>(colors.accentPrimary),
+                    valueColor:
+                        AlwaysStoppedAnimation<Color>(colors.accentPrimary),
                   ),
                 ),
               ],
@@ -183,15 +251,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               const Icon(Icons.contrast_rounded, color: Colors.white, size: 24),
               const SizedBox(width: 16),
-              const Expanded(child: Text('Appearance', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15))),
+              const Expanded(
+                  child: Text('Appearance',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 15))),
               ValueListenableBuilder<ThemeMode>(
                 valueListenable: ThemeService.instance.themeModeNotifier,
                 builder: (context, mode, _) {
-                  String modeText = mode == ThemeMode.system ? 'System' : (mode == ThemeMode.dark ? 'Dark' : 'Light');
+                  String modeText = mode == ThemeMode.system
+                      ? 'System'
+                      : (mode == ThemeMode.dark ? 'Dark' : 'Light');
                   return Row(
                     children: [
-                      Text(modeText, style: const TextStyle(color: Colors.white54, fontSize: 13)),
-                      const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white54, size: 18),
+                      Text(modeText,
+                          style: const TextStyle(
+                              color: Colors.white54, fontSize: 13)),
+                      const Icon(Icons.keyboard_arrow_down_rounded,
+                          color: Colors.white54, size: 18),
                     ],
                   );
                 },
@@ -211,9 +287,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               builder: (context, currentMode, _) {
                 return Row(
                   children: [
-                    _buildThemeToggle(ThemeMode.light, 'Light', currentMode, colors),
-                    _buildThemeToggle(ThemeMode.dark, 'Dark', currentMode, colors),
-                    _buildThemeToggle(ThemeMode.system, 'System', currentMode, colors),
+                    _buildThemeToggle(
+                        ThemeMode.light, 'Light', currentMode, colors),
+                    _buildThemeToggle(
+                        ThemeMode.dark, 'Dark', currentMode, colors),
+                    _buildThemeToggle(
+                        ThemeMode.system, 'System', currentMode, colors),
                   ],
                 );
               },
@@ -224,7 +303,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildThemeToggle(ThemeMode mode, String label, ThemeMode currentMode, AppColorsExtension colors) {
+  Widget _buildThemeToggle(ThemeMode mode, String label, ThemeMode currentMode,
+      AppColorsExtension colors) {
     final isSelected = currentMode == mode;
     return Expanded(
       child: GestureDetector(
@@ -263,9 +343,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('About App', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                Text('About App',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
                 SizedBox(height: 4),
-                Text('v1.0.0', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                Text('v1.0.0',
+                    style: TextStyle(color: Colors.white54, fontSize: 12)),
               ],
             ),
           ),
@@ -289,7 +372,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             Icon(Icons.logout_rounded, color: Colors.red, size: 22),
             SizedBox(width: 12),
-            Text('Log Out', style: TextStyle(color: Colors.red, fontSize: 16, fontWeight: FontWeight.bold)),
+            Text('Log Out',
+                style: TextStyle(
+                    color: Colors.red,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold)),
           ],
         ),
       ),
@@ -297,12 +384,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _sectionLabel(String text) => Padding(
-    padding: const EdgeInsets.only(left: 4),
-    child: Text(
-      text,
-      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white54, letterSpacing: 1.2),
-    ),
-  );
+        padding: const EdgeInsets.only(left: 4),
+        child: Text(
+          text,
+          style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Colors.white54,
+              letterSpacing: 1.2),
+        ),
+      );
 
   Future<void> _logout() async {
     final confirmed = await showDialog<bool>(
@@ -313,7 +404,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: const Text('Log out?'),
         content: const Text('Your files are safely stored on Telegram.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),

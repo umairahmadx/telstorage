@@ -5,6 +5,7 @@ import '../../../core/models/app_metadata.dart';
 import '../../../core/models/file_record.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/navigation/navigation_intent.dart';
 import '../../../shared/widgets/thumbnail_widget.dart';
 import '../../../shared/widgets/mobile_shell.dart';
 import '../../../shared/widgets/file_detail_sheet.dart';
@@ -89,17 +90,24 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showShareSheet(FileRecord file) {
+    final queue = ServiceLocator.instance.webShareQueue;
+    final existing =
+        queue.allShares.where((s) => s.fileId == file.fileId).firstOrNull;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => ShareLinkSheet(
         file: file,
+        shareUrl: existing?.shareUrl,
         onCopyLink: (pwd, expiry) {
           if (!mounted) return;
           Navigator.pop(ctx);
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Link copied with $expiry validity'), backgroundColor: Colors.green),
+            SnackBar(
+                content: Text('Link copied with $expiry validity'),
+                backgroundColor: Colors.green),
           );
         },
       ),
@@ -110,14 +118,16 @@ class _HomeScreenState extends State<HomeScreen> {
     await ServiceLocator.instance.downloadQueue.enqueueDownload(file);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('"${file.name}" added to downloads'), backgroundColor: Colors.green),
+      SnackBar(
+          content: Text('"${file.name}" added to downloads'),
+          backgroundColor: Colors.green),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
-    
+
     return BlocProvider.value(
       value: _syncCubit,
       child: Scaffold(
@@ -130,7 +140,8 @@ class _HomeScreenState extends State<HomeScreen> {
           actions: [
             IconButton(
               icon: const Icon(Icons.file_download_outlined),
-              onPressed: () => MobileShell.of(context)?.switchTab(3),
+              onPressed: () => ServiceLocator.instance.navigation
+                  .navigateTo(AppDestination.transferDownloads),
             ),
           ],
         ),
@@ -216,14 +227,16 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildStorageOverview(AppColorsExtension colors) {
     final usedMb = _meta?.storageUsedMb ?? 0;
     final limitMb = _meta?.storageLimitMb ?? 102400; // fallback to 100GB
-    final usedText = usedMb >= 1024 
-        ? '${(usedMb / 1024).toStringAsFixed(1)} GB' 
+    final usedText = usedMb >= 1024
+        ? '${(usedMb / 1024).toStringAsFixed(1)} GB'
         : '${usedMb.toStringAsFixed(0)} MB';
-    
+
     final hive = ServiceLocator.instance.hive;
     final totalFiles = hive.totalFiles;
     final totalShares = ServiceLocator.instance.webShareQueue.allShares.length;
-    final totalDownloads = ServiceLocator.instance.downloadQueue.allJobs.where((j) => j.isComplete).length;
+    final totalDownloads = ServiceLocator.instance.downloadQueue.allJobs
+        .where((j) => j.isComplete)
+        .length;
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -245,7 +258,8 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 TextSpan(
                   text: usedText,
-                  style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                      color: colors.textPrimary, fontWeight: FontWeight.bold),
                 ),
                 const TextSpan(text: ' of Unlimited used'),
               ],
@@ -255,7 +269,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
             child: LinearProgressIndicator(
-              value: (usedMb / limitMb).clamp(0.05, 1.0),
+              value: (usedMb / limitMb).clamp(0.0, 1.0),
               minHeight: 6,
               backgroundColor: colors.bgSurfaceInset,
               valueColor: AlwaysStoppedAnimation<Color>(colors.accentPrimary),
@@ -265,17 +279,24 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildStatItem(colors, Icons.cloud_upload_outlined, 'Uploaded', '$totalFiles Files'),
-              _buildStatItem(colors, Icons.share_outlined, 'Shared', '$totalShares Links'),
-              _buildStatItem(colors, Icons.file_download_outlined, 'Downloads', '$totalDownloads Files'),
+              _buildStatItem(colors, Icons.cloud_upload_outlined, 'Uploaded',
+                  '$totalFiles Files'),
+              _buildStatItem(
+                  colors, Icons.share_outlined, 'Shared', '$totalShares Links'),
+              _buildStatItem(colors, Icons.file_download_outlined, 'Downloads',
+                  '$totalDownloads Files'),
             ],
           ),
         ],
       ),
-    ).animate().fadeIn(duration: 400.ms, delay: 100.ms).slideY(begin: 0.1, end: 0);
+    )
+        .animate()
+        .fadeIn(duration: 400.ms, delay: 100.ms)
+        .slideY(begin: 0.1, end: 0);
   }
 
-  Widget _buildStatItem(AppColorsExtension colors, IconData icon, String label, String value) {
+  Widget _buildStatItem(
+      AppColorsExtension colors, IconData icon, String label, String value) {
     return Container(
       width: 95,
       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -287,9 +308,12 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Icon(icon, color: colors.textPrimary, size: 20),
           const SizedBox(height: 8),
-          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+          Text(label,
+              style:
+                  const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
           const SizedBox(height: 2),
-          Text(value, style: TextStyle(color: colors.textSecondary, fontSize: 11)),
+          Text(value,
+              style: TextStyle(color: colors.textSecondary, fontSize: 11)),
         ],
       ),
     );
@@ -304,7 +328,8 @@ class _HomeScreenState extends State<HomeScreen> {
           style: Theme.of(context).textTheme.headlineSmall,
         ),
         GestureDetector(
-          onTap: () => MobileShell.of(context)?.switchTab(1),
+          onTap: () => ServiceLocator.instance.navigation
+              .navigateTo(AppDestination.files),
           child: Text(
             'View all',
             style: TextStyle(color: colors.textSecondary, fontSize: 14),
@@ -315,23 +340,28 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildRecentFilesList(AppColorsExtension colors) {
-    final hive = ServiceLocator.instance.isInitialized ? ServiceLocator.instance.hive : null;
+    final hive = ServiceLocator.instance.isInitialized
+        ? ServiceLocator.instance.hive
+        : null;
     final files = hive?.recentFiles(5) ?? [];
 
     if (files.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(40.0),
-          child: Text('No recent files', style: TextStyle(color: colors.textTertiary)),
+          child: Text('No recent files',
+              style: TextStyle(color: colors.textTertiary)),
         ),
       );
     }
 
     return Column(
-      children: files.map((f) => _RecentFileTile(
-        file: f,
-        onMore: () => _showFileDetail(f),
-      )).toList(),
+      children: files
+          .map((f) => _RecentFileTile(
+                file: f,
+                onMore: () => _showFileDetail(f),
+              ))
+          .toList(),
     );
   }
 }
@@ -344,7 +374,7 @@ class _RecentFileTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
-    
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
@@ -422,7 +452,8 @@ class _RecentFileTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
         ),
         alignment: Alignment.center,
-        child: const Icon(Icons.palette_outlined, color: Colors.purple, size: 24),
+        child:
+            const Icon(Icons.palette_outlined, color: Colors.purple, size: 24),
       );
     } else {
       iconColor = colors.fileZip;
@@ -439,13 +470,27 @@ class _RecentFileTile extends StatelessWidget {
       alignment: Alignment.center,
       child: Text(
         label,
-        style: TextStyle(color: iconColor, fontSize: 10, fontWeight: FontWeight.bold),
+        style: TextStyle(
+            color: iconColor, fontSize: 10, fontWeight: FontWeight.bold),
       ),
     );
   }
 
   String _formatDate(DateTime d) {
-    final months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return '${d.day} ${months[d.month-1]} ${d.year}';
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
+    return '${d.day} ${months[d.month - 1]} ${d.year}';
   }
 }

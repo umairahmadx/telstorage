@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../constants/app_constants.dart';
 import '../utils/app_logger.dart';
@@ -13,6 +14,8 @@ import 'upload_service.dart';
 import 'web_share_queue_service.dart';
 import 'sync_queue_service.dart';
 import 'thumbnail_repository.dart';
+import 'navigation_service.dart';
+import 'transfer_queue_service.dart';
 import '../../features/storage/data/repositories/storage_repository.dart';
 
 /// Single initialization point for all services.
@@ -42,6 +45,8 @@ class ServiceLocator {
   late StorageRepository _storageRepository;
   late ThumbnailRepository _thumbnailRepository;
   late WebShareQueueService _webShareQueue;
+  late NavigationService _navigation;
+  late TransferQueueService _transferQueue;
 
   TelegramService get telegram => _telegram;
   HiveService get hive => _hive;
@@ -55,6 +60,8 @@ class ServiceLocator {
   StorageRepository get storageRepository => _storageRepository;
   ThumbnailRepository get thumbnailRepository => _thumbnailRepository;
   WebShareQueueService get webShareQueue => _webShareQueue;
+  NavigationService get navigation => _navigation;
+  TransferQueueService get transferQueue => _transferQueue;
 
   Future<void>? _initFuture;
 
@@ -99,9 +106,15 @@ class ServiceLocator {
       _thumbnailRepository = ThumbnailRepository(_telegram);
       _webShareQueue =
           WebShareQueueService(_downloadService, AppConstants.webSharesBox);
+      _navigation = NavigationService.instance;
+      _transferQueue = TransferQueueService.instance;
 
       await NotificationService.instance.init();
       await NotificationService.instance.requestPermissions();
+
+      _transferQueue.loadFromPersistence();
+      unawaited(_downloadQueue.resumePendingDownloads());
+      unawaited(_webShareQueue.resumePendingShares());
 
       // Process pending actions queue in the background
       _syncQueue.processQueue();

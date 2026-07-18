@@ -74,6 +74,12 @@ dependencies:
   # Web platform APIs
   web: ^1.1.1
 
+  # QR Code generation
+  qr_flutter: ^4.1.0
+
+  # Advanced thumbnails
+  thumbnailer: 3.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

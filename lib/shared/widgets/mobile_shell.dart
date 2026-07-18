@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:open_file/open_file.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/services/service_locator.dart';
+import '../../core/services/notification_service.dart';
+import '../../core/services/transfer_queue_service.dart';
+import '../../core/navigation/navigation_intent.dart';
 import '../../features/home/screens/home_screen.dart';
 import '../../features/browser/screens/browser_screen.dart';
 import '../../features/downloads/screens/downloads_screen.dart';
@@ -35,6 +41,78 @@ class MobileShellState extends State<MobileShell> {
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
+    ServiceLocator.instance.navigation.intentNotifier
+        .addListener(_onIntentChanged);
+    NotificationService.instance.onNotificationTap = handleNotificationResponse;
+  }
+
+  @override
+  void dispose() {
+    ServiceLocator.instance.navigation.intentNotifier
+        .removeListener(_onIntentChanged);
+    super.dispose();
+  }
+
+  void _onIntentChanged() {
+    final intent = ServiceLocator.instance.navigation.intentNotifier.value;
+    if (intent != null) {
+      setState(() {
+        _currentIndex = intent.shellIndex;
+      });
+      // Do not clear the intent here, let the screen consume it if needed
+    }
+  }
+
+  void handleNotificationResponse(NotificationResponse details) {
+    final payload = details.payload;
+    final actionId = details.actionId;
+
+    if (actionId != null) {
+      if (actionId.startsWith('pause_')) {
+        final id = actionId.replaceFirst('pause_', '');
+        TransferQueueService.instance.pauseTask(id);
+      } else if (actionId.startsWith('resume_')) {
+        final id = actionId.replaceFirst('resume_', '');
+        TransferQueueService.instance.resumeTask(id);
+      } else if (actionId.startsWith('cancel_')) {
+        final id = actionId.replaceFirst('cancel_', '');
+        TransferQueueService.instance.cancelTask(id);
+      } else if (actionId.startsWith('open_')) {
+        final id = actionId.replaceFirst('open_', '');
+        final job = ServiceLocator.instance.downloadQueue.allJobs
+            .where((j) => j.fileId == id)
+            .firstOrNull;
+        if (job?.localPath != null) {
+          OpenFile.open(job!.localPath!);
+        }
+      } else if (actionId.startsWith('copy_')) {
+        final id = actionId.replaceFirst('copy_', '');
+        final share = ServiceLocator.instance.webShareQueue.allShares
+            .where((s) => s.fileId == id)
+            .firstOrNull;
+        if (share?.shareUrl != null) {
+          Clipboard.setData(ClipboardData(text: share!.shareUrl!));
+        }
+      } else if (actionId == 'view_all') {
+        ServiceLocator.instance.navigation
+            .navigateTo(AppDestination.transferActive);
+      }
+      return;
+    }
+
+    if (payload == 'transfer_active') {
+      ServiceLocator.instance.navigation
+          .navigateTo(AppDestination.transferActive);
+    } else if (details.payload == 'transfer_upload') {
+      ServiceLocator.instance.navigation
+          .navigateTo(AppDestination.transferUploads);
+    } else if (details.payload == 'transfer_download') {
+      ServiceLocator.instance.navigation
+          .navigateTo(AppDestination.transferDownloads);
+    } else if (details.payload == 'transfer_share') {
+      ServiceLocator.instance.navigation
+          .navigateTo(AppDestination.transferShared);
+    }
   }
 
   void openDrawer() {
@@ -86,15 +164,19 @@ class MobileShellState extends State<MobileShell> {
                     _pickAndUpload();
                   },
                 ),
-                _AddActionItem(
-                  icon: Icons.create_new_folder_rounded,
-                  label: 'New Folder',
-                  color: AppTheme.warning,
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    // logic to trigger folder creation in Browser tab or global
-                  },
-                ),
+                if (_currentIndex == 1) // Only show in Files tab
+                  _AddActionItem(
+                    icon: Icons.create_new_folder_rounded,
+                    label: 'New Folder',
+                    color: AppTheme.warning,
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      // This is a bit tricky since BrowserScreen is inside IndexedStack.
+                      // We can use a global notification or event bus, but for now
+                      // let's assume we can trigger a re-render or similar.
+                      // In a real app, a GlobalKey or a dedicated Bloc event would be better.
+                    },
+                  ),
               ],
             ),
             const SizedBox(height: 16),
@@ -105,7 +187,8 @@ class MobileShellState extends State<MobileShell> {
   }
 
   Future<void> _pickAndUpload() async {
-    final picked = await FilePicker.platform.pickFiles(withData: true, allowMultiple: true);
+    final picked = await FilePicker.platform
+        .pickFiles(withData: true, allowMultiple: true);
     if (picked == null || picked.files.isEmpty) return;
 
     final List<UploadTask> tasks = [];
@@ -118,10 +201,11 @@ class MobileShellState extends State<MobileShell> {
         name: file.name,
       ));
     }
-    
+
     if (tasks.isNotEmpty && mounted) {
       context.read<UploadBloc>().add(AddUploads(tasks));
-      switchTab(3); // Go to Transfer tab
+      ServiceLocator.instance.navigation
+          .navigateTo(AppDestination.transferUploads);
     }
   }
 
@@ -134,11 +218,13 @@ class MobileShellState extends State<MobileShell> {
         onTabSelected: switchTab,
       ),
       body: IndexedStack(
-        index: _currentIndex > 2 ? _currentIndex - 1 : (_currentIndex == 2 ? 0 : _currentIndex),
+        index: _currentIndex > 2
+            ? _currentIndex - 1
+            : (_currentIndex == 2 ? 0 : _currentIndex),
         children: const [
           HomeScreen(),
           BrowserScreen(),
-          DownloadsScreen(), 
+          DownloadsScreen(),
           SettingsScreen(),
         ],
       ),
@@ -180,7 +266,11 @@ class _AddActionItem extends StatelessWidget {
               child: Icon(icon, color: color, size: 28),
             ),
             const SizedBox(height: 12),
-            Text(label, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+            Text(label,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500)),
           ],
         ),
       ),

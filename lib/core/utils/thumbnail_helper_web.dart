@@ -1,5 +1,6 @@
 import 'dart:js_interop';
 import 'dart:typed_data';
+import 'package:flutter/widgets.dart';
 import 'package:web/web.dart';
 
 class ThumbnailHelper {
@@ -13,4 +14,17 @@ class ThumbnailHelper {
       URL.revokeObjectURL(source);
     } catch (_) {}
   }
+
+  static Future<String?> cachedThumbnailPath(String fileId) async => null;
+
+  static Future<String> cacheThumbnail(String fileId, Uint8List bytes) =>
+      throw UnsupportedError('Thumbnail file caching is not available on web');
+
+  static Future<String?> cachedVideoThumbnailPath(String fileId) async => null;
+
+  static Future<String?> generateVideoThumbnail(
+          String fileId, String videoPath) async =>
+      null;
+
+  static ImageProvider? imageProviderFromPath(String path) => null;
 }

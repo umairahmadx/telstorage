@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/chunk_info.dart';
 import '../models/file_record.dart';
 import '../utils/app_logger.dart';
+import 'transfer_queue_service.dart';
 import '../utils/web_download.dart'
     if (dart.library.io) '../utils/web_download_stub.dart';
 import '../utils/native_save_helper.dart'
@@ -78,6 +79,14 @@ class DownloadService {
       // Step 3: Download all parts
       final builder = BytesBuilder(copy: false);
       for (var i = 0; i < chunks.length; i++) {
+        // Check for pause/cancel
+        while (TransferQueueService.instance.isPaused(record.fileId)) {
+          await Future.delayed(const Duration(seconds: 1));
+        }
+        if (TransferQueueService.instance.isCancelled(record.fileId)) {
+          throw Exception('Download cancelled by user');
+        }
+
         final part = chunks[i];
         final label = part.partName ?? 'part ${i + 1}';
         final partPct = i / chunks.length;

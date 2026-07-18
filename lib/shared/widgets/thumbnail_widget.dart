@@ -1,9 +1,12 @@
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:thumbnailer/thumbnailer.dart';
+
 import '../../core/models/file_record.dart';
 import '../../core/services/service_locator.dart';
+import '../../core/utils/thumbnail_helper_native.dart'
+    if (dart.library.js_interop) '../../core/utils/thumbnail_helper_web.dart';
 
 class ThumbnailWidget extends StatefulWidget {
   final FileRecord file;
@@ -31,7 +34,38 @@ class _ThumbnailWidgetState extends State<ThumbnailWidget> {
   @override
   void initState() {
     super.initState();
-    _thumbnailFuture = ServiceLocator.instance.thumbnailRepository.getThumbnailData(widget.file);
+    _initThumbnail();
+  }
+
+  void _initThumbnail() {
+    if (widget.file.isVideo && !kIsWeb) {
+      _thumbnailFuture = _generateVideoThumbnail();
+    } else {
+      _thumbnailFuture = ServiceLocator.instance.thumbnailRepository
+          .getThumbnailData(widget.file);
+    }
+  }
+
+  Future<String?> _generateVideoThumbnail() async {
+    try {
+      final cachedPath =
+          await ThumbnailHelper.cachedVideoThumbnailPath(widget.file.fileId);
+      if (cachedPath != null) return cachedPath;
+
+      final downloadJob = ServiceLocator.instance.downloadQueue.allJobs
+          .where((j) => j.fileId == widget.file.fileId && j.isComplete)
+          .firstOrNull;
+
+      if (downloadJob?.localPath != null) {
+        return ThumbnailHelper.generateVideoThumbnail(
+          widget.file.fileId,
+          downloadJob!.localPath!,
+        );
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
   }
 
   @override
@@ -39,32 +73,51 @@ class _ThumbnailWidgetState extends State<ThumbnailWidget> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.file.fileId != widget.file.fileId ||
         oldWidget.file.thumbnailFileId != widget.file.thumbnailFileId) {
-      _thumbnailFuture = ServiceLocator.instance.thumbnailRepository.getThumbnailData(widget.file);
+      _initThumbnail();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (widget.file.thumbnailFileId == null) {
-      return widget.fallback;
+    // For documents and other non-media, use thumbnailer for branded icons
+    if (!widget.file.isImage && !widget.file.isVideo) {
+      return SizedBox(
+        width: widget.width,
+        height: widget.height,
+        child: Thumbnail(
+          mimeType: widget.file.mimeType,
+          widgetSize: widget.width,
+          name: widget.file.name,
+          onlyIcon: true,
+          useWaterMark: false,
+        ),
+      );
     }
 
+    // For images and videos (using Telegram provided thumbs or local generation)
     return FutureBuilder<dynamic>(
       future: _thumbnailFuture,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.done && snapshot.data != null) {
+        if (snapshot.connectionState == ConnectionState.done) {
           final data = snapshot.data;
+
+          if (data == null) return widget.fallback;
+
           ImageProvider imageProvider;
           if (kIsWeb && data is Uint8List) {
             imageProvider = MemoryImage(data);
-          } else if (!kIsWeb && data is String) {
-            imageProvider = FileImage(File(data));
+          } else if (data is String) {
+            final nativeProvider = ThumbnailHelper.imageProviderFromPath(data);
+            if (nativeProvider == null) return widget.fallback;
+            imageProvider = nativeProvider;
+          } else if (data is Uint8List) {
+            imageProvider = MemoryImage(data);
           } else {
             return widget.fallback;
           }
 
           return ClipRRect(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             child: Image(
               image: imageProvider,
               width: widget.width,
@@ -75,14 +128,19 @@ class _ThumbnailWidgetState extends State<ThumbnailWidget> {
           );
         }
 
-        return SizedBox(
+        return Container(
           width: widget.width,
           height: widget.height,
+          decoration: BoxDecoration(
+            color: Colors.white.withAlpha(10),
+            borderRadius: BorderRadius.circular(12),
+          ),
           child: const Center(
             child: SizedBox(
               width: 16,
               height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: Colors.white24),
             ),
           ),
         );

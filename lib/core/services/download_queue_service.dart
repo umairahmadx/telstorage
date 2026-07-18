@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'dart:io' show File;
 import 'package:flutter/foundation.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/download_job.dart';
 import '../models/file_record.dart';
@@ -8,7 +8,11 @@ import '../utils/app_logger.dart';
 import '../utils/connectivity.dart';
 import 'download_service.dart';
 import 'notification_service.dart';
+import 'transfer_queue_service.dart';
 import 'service_locator.dart';
+import '../models/transfer_task.dart';
+import '../utils/local_file_stub.dart'
+    if (dart.library.io) '../utils/local_file_native.dart';
 
 /// Manages concurrent downloads (max 3), queue, and state persistence using Hive.
 class DownloadQueueService {
@@ -40,6 +44,9 @@ class DownloadQueueService {
 
   /// Check if a download is cancelled
   bool isCancelled(String fileId) => _activeCancellationTokens[fileId] == true;
+
+  bool _isCancelled(String fileId) =>
+      isCancelled(fileId) || TransferQueueService.instance.isCancelled(fileId);
 
   /// Add a new download job or resume an existing failed/cancelled one
   Future<void> enqueueDownload(FileRecord file) async {
@@ -75,6 +82,17 @@ class DownloadQueueService {
       await _box.put(file.fileId, job);
     }
 
+    // Add to unified transfer queue
+    TransferQueueService.instance.addTask(TransferTask(
+      id: file.fileId,
+      name: file.name,
+      type: TransferType.download,
+      sizeMb: file.sizeMb,
+      addedAt: DateTime.now(),
+      status: TransferStatus.pending,
+      currentStage: 'Waiting in queue…',
+    ));
+
     _activeCancellationTokens[file.fileId] = false;
     _processQueue();
   }
@@ -92,6 +110,8 @@ class DownloadQueueService {
       job.status = 'cancelled';
       await job.save();
     }
+    TransferQueueService.instance
+        .updateTask(fileId, status: TransferStatus.cancelled);
     _runningFileIds.remove(fileId);
     _processQueue();
   }
@@ -107,9 +127,7 @@ class DownloadQueueService {
     final job = _box.get(fileId);
     if (job != null && job.localPath != null && !kIsWeb) {
       try {
-        final file = File(job.localPath!);
-        if (await file.exists()) {
-          await file.delete();
+        if (await deleteLocalFileIfExists(job.localPath!)) {
           AppLogger.i('Deleted local file: ${job.localPath}',
               tag: 'DownloadQueue');
         }
@@ -126,6 +144,20 @@ class DownloadQueueService {
     for (final job in completed) {
       await _box.delete(job.fileId);
     }
+  }
+
+  /// Restarts queued work after an app relaunch. A previously running download
+  /// has no live network request to resume, so it is safely restarted from the
+  /// beginning using its persisted metadata.
+  Future<void> resumePendingDownloads() async {
+    for (final job in _box.values) {
+      if (job.status == 'queued' || job.status == 'downloading') {
+        job.status = 'queued';
+        await job.save();
+        _activeCancellationTokens[job.fileId] = false;
+      }
+    }
+    _processQueue();
   }
 
   /// Manually add a completed download job (used for direct downloads)
@@ -169,6 +201,11 @@ class DownloadQueueService {
       job.status = 'failed';
       job.error = 'File metadata not found locally';
       await job.save();
+      TransferQueueService.instance.updateTask(
+        fileId,
+        status: TransferStatus.failed,
+        error: job.error,
+      );
       _runningFileIds.remove(fileId);
       _processQueue();
       return;
@@ -178,13 +215,18 @@ class DownloadQueueService {
     job.progress = 0.0;
     await job.save();
 
+    TransferQueueService.instance.updateTask(fileId,
+        status: TransferStatus.downloading, currentStage: 'Downloading…');
+
     if (!await Connectivity.hasConnection()) {
       job.status = 'failed';
       job.error = 'No internet connection';
       await job.save();
 
-      await NotificationService.instance.showNotification(
-        id: fileId.hashCode,
+      TransferQueueService.instance.updateTask(fileId,
+          status: TransferStatus.failed, error: 'No internet connection');
+
+      await NotificationService.instance.showCompletionNotification(
         title: 'Download Failed',
         body: 'Failed to download ${job.name}: no internet connection.',
       );
@@ -197,19 +239,24 @@ class DownloadQueueService {
     try {
       final bytes = await _downloadService.downloadFile(fileRecord,
           (progress, status) async {
-        if (isCancelled(fileId)) {
+        if (_isCancelled(fileId)) {
           throw Exception('Cancelled');
         }
         job.progress = progress;
         await job.save();
+
+        TransferQueueService.instance.updateTask(fileId,
+            progress: progress, currentStage: 'Downloading…');
       });
 
-      if (isCancelled(fileId)) {
+      if (_isCancelled(fileId)) {
         throw Exception('Cancelled');
       }
 
       job.progress = 0.95;
       await job.save();
+      TransferQueueService.instance
+          .updateTask(fileId, progress: 0.95, currentStage: 'Finalizing…');
 
       final saveResult = await _downloadService.saveAndOpen(bytes, job.name);
 
@@ -220,31 +267,43 @@ class DownloadQueueService {
         job.completedAt = DateTime.now();
         await job.save();
 
-        await NotificationService.instance.showNotification(
-          id: fileId.hashCode,
+        TransferQueueService.instance.updateTask(fileId,
+            status: TransferStatus.completed, progress: 1.0);
+
+        await NotificationService.instance.showCompletionNotification(
           title: 'Download Complete',
           body: '${job.name} has been successfully downloaded.',
+          payload: 'transfer_download',
+          actions: [
+            if (saveResult.savedPath != null)
+              AndroidNotificationAction('open_${job.fileId}', 'Open File'),
+          ],
         );
       } else {
         job.status = 'failed';
         job.error = saveResult.message;
         await job.save();
 
-        await NotificationService.instance.showNotification(
-          id: fileId.hashCode,
+        TransferQueueService.instance.updateTask(fileId,
+            status: TransferStatus.failed, error: saveResult.message);
+
+        await NotificationService.instance.showCompletionNotification(
           title: 'Download Failed',
           body: 'Failed to download ${job.name}: ${saveResult.message}',
         );
       }
     } catch (e) {
-      if (isCancelled(fileId)) {
+      if (_isCancelled(fileId)) {
         job.status = 'cancelled';
+        TransferQueueService.instance
+            .updateTask(fileId, status: TransferStatus.cancelled);
       } else {
         job.status = 'failed';
         job.error = e.toString();
+        TransferQueueService.instance.updateTask(fileId,
+            status: TransferStatus.failed, error: e.toString());
 
-        await NotificationService.instance.showNotification(
-          id: fileId.hashCode,
+        await NotificationService.instance.showCompletionNotification(
           title: 'Download Failed',
           body: 'Failed to download ${job.name}: $e',
         );

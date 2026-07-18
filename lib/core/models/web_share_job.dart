@@ -6,7 +6,8 @@ class WebShareJob {
   final String mimeType;
   final double sizeMb;
   final double progress;
-  final String status; // 'queued', 'downloading', 'uploading', 'completed', 'failed'
+  final String
+      status; // 'queued', 'downloading', 'uploading', 'completed', 'failed'
   final String? shareUrl;
   final String? ownerToken;
   final String? storageToId;
@@ -15,6 +16,7 @@ class WebShareJob {
   final DateTime? completedAt;
   final String? password;
   final int? maxDownloads;
+  final int? expiryDays;
 
   WebShareJob({
     required this.fileId,
@@ -31,6 +33,7 @@ class WebShareJob {
     this.completedAt,
     this.password,
     this.maxDownloads,
+    this.expiryDays,
   });
 
   bool get isComplete => status == 'completed';
@@ -38,6 +41,7 @@ class WebShareJob {
   bool get isDownloading => status == 'downloading';
   bool get isQueued => status == 'queued';
   bool get isFailed => status == 'failed';
+  bool get isCancelled => status == 'cancelled';
 
   /// Create a copy of the job with optional updated fields.
   WebShareJob copyWith({
@@ -47,9 +51,11 @@ class WebShareJob {
     String? ownerToken,
     String? storageToId,
     String? error,
+    bool clearError = false,
     DateTime? completedAt,
     String? password,
     int? maxDownloads,
+    int? expiryDays,
   }) {
     return WebShareJob(
       fileId: fileId,
@@ -61,11 +67,12 @@ class WebShareJob {
       shareUrl: shareUrl ?? this.shareUrl,
       ownerToken: ownerToken ?? this.ownerToken,
       storageToId: storageToId ?? this.storageToId,
-      error: error ?? this.error,
+      error: clearError ? null : error ?? this.error,
       addedAt: addedAt,
       completedAt: completedAt ?? this.completedAt,
       password: password ?? this.password,
       maxDownloads: maxDownloads ?? this.maxDownloads,
+      expiryDays: expiryDays ?? this.expiryDays,
     );
   }
 
@@ -86,6 +93,7 @@ class WebShareJob {
       if (completedAt != null) 'completed_at': completedAt!.toIso8601String(),
       if (password != null) 'password': password,
       if (maxDownloads != null) 'max_downloads': maxDownloads,
+      if (expiryDays != null) 'expiry_days': expiryDays,
     };
   }
 
@@ -108,6 +116,7 @@ class WebShareJob {
           : null,
       password: map['password'] as String?,
       maxDownloads: map['max_downloads'] as int?,
+      expiryDays: map['expiry_days'] as int?,
     );
   }
 }

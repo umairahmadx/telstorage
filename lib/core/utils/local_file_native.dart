@@ -1,0 +1,8 @@
+import 'dart:io';
+
+Future<bool> deleteLocalFileIfExists(String path) async {
+  final file = File(path);
+  if (!await file.exists()) return false;
+  await file.delete();
+  return true;
+}

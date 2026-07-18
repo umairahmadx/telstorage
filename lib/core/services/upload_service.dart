@@ -15,6 +15,8 @@ import 'hive_service.dart';
 import 'metadata_service.dart';
 import 'notification_service.dart';
 import 'telegram_service.dart';
+import 'transfer_queue_service.dart';
+import '../models/transfer_task.dart';
 
 /// Handles file upload pipeline — non-blocking on Flutter web (single JS thread).
 ///
@@ -45,50 +47,82 @@ class UploadService {
       throw OfflineException('Cannot upload: no internet connection.');
     }
 
+    String? transferId;
     try {
       AppLogger.d('Starting upload for: $name', tag: 'UploadService');
-      onProgress(0.0, 'Preparing…');
 
       final fileId = const Uuid().v4();
+      transferId = fileId;
       final mimeType = lookupMimeType(name) ?? 'application/octet-stream';
       final sizeMb = bytes.length / 1048576;
+
+      final task = TransferTask(
+        id: fileId,
+        name: name,
+        type: TransferType.upload,
+        sizeMb: sizeMb,
+        addedAt: DateTime.now(),
+        status: TransferStatus.preparing,
+        currentStage: 'Preparing…',
+      );
+      TransferQueueService.instance.addTask(task);
+
+      void internalOnProgress(double progress, String status) {
+        if (TransferQueueService.instance.isCancelled(fileId)) {
+          throw Exception('Upload cancelled by user');
+        }
+        onProgress(progress, status);
+        TransferQueueService.instance.updateTask(
+          fileId,
+          progress: progress,
+          currentStage: status,
+          status: progress >= 1.0
+              ? TransferStatus.completed
+              : TransferStatus.uploading,
+        );
+      }
 
       AppLogger.d('Size: ${sizeMb.toStringAsFixed(2)} MB',
           tag: 'UploadService');
 
       // ── Step 1: SHA-256 in chunks (non-blocking) ───────────────────────────
-      onProgress(0.03, 'Verifying file… 0%');
+      internalOnProgress(0.03, 'Verifying file… 0%');
       final hash = await _sha256Chunked(
         bytes,
-        (pct) =>
-            onProgress(0.03 + pct * 0.07, 'Verifying… ${(pct * 100).toInt()}%'),
+        (pct) => internalOnProgress(
+            0.03 + pct * 0.07, 'Verifying… ${(pct * 100).toInt()}%'),
       );
 
       // ── Step 1.5: Generate and Upload Thumbnail ────────────────────────────
       String? thumbnailFileId;
       try {
         if (mimeType.startsWith('image/')) {
-          onProgress(0.08, 'Generating thumbnail…');
-          final thumbBytes = await ThumbnailGenerator.generateImageThumbnail(bytes);
-          onProgress(0.10, 'Uploading thumbnail…');
-          final thumbResult = await _telegram.uploadBytesWithFileId(thumbBytes, 'thumb_$fileId.jpg');
+          internalOnProgress(0.08, 'Generating thumbnail…');
+          final thumbBytes =
+              await ThumbnailGenerator.generateImageThumbnail(bytes);
+          internalOnProgress(0.10, 'Uploading thumbnail…');
+          final thumbResult = await _telegram.uploadBytesWithFileId(
+              thumbBytes, 'thumb_$fileId.jpg');
           thumbnailFileId = thumbResult['file_id'] as String;
         } else if (mimeType.startsWith('video/')) {
-          onProgress(0.08, 'Generating video thumbnail…');
-          final thumbBytes = await ThumbnailGenerator.generateVideoThumbnail(bytes, name);
-          onProgress(0.10, 'Uploading thumbnail…');
-          final thumbResult = await _telegram.uploadBytesWithFileId(thumbBytes, 'thumb_$fileId.jpg');
+          internalOnProgress(0.08, 'Generating video thumbnail…');
+          final thumbBytes =
+              await ThumbnailGenerator.generateVideoThumbnail(bytes, name);
+          internalOnProgress(0.10, 'Uploading thumbnail…');
+          final thumbResult = await _telegram.uploadBytesWithFileId(
+              thumbBytes, 'thumb_$fileId.jpg');
           thumbnailFileId = thumbResult['file_id'] as String;
         }
       } catch (e) {
-        AppLogger.e('Thumbnail generation failed for $name: $e', tag: 'UploadService');
+        AppLogger.e('Thumbnail generation failed for $name: $e',
+            tag: 'UploadService');
       }
 
       final chunkInfos = <ChunkInfo>[];
 
       if (bytes.length <= _partSize) {
         // ── Small file: upload directly ───────────────────────────────────────
-        onProgress(0.12, 'Uploading "$name"…');
+        internalOnProgress(0.12, 'Uploading "$name"…');
         AppLogger.d('Small file — uploading directly', tag: 'UploadService');
 
         final result = await _telegram.uploadBytesWithFileId(bytes, name);
@@ -99,10 +133,10 @@ class UploadService {
           sizeMb: sizeMb,
           partName: name,
         ));
-        onProgress(0.85, 'Uploaded!');
+        internalOnProgress(0.85, 'Uploaded!');
       } else {
         // ── Large file: ZIP (store) → split → upload parts ────────────────────
-        onProgress(0.12, 'Packaging file…');
+        internalOnProgress(0.12, 'Packaging file…');
         AppLogger.d('Large file — wrapping in ZIP (store mode)',
             tag: 'UploadService');
 
@@ -117,11 +151,19 @@ class UploadService {
             tag: 'UploadService');
 
         for (var i = 0; i < parts.length; i++) {
+          // Check for pause/cancel
+          while (TransferQueueService.instance.isPaused(fileId)) {
+            await Future.delayed(const Duration(seconds: 1));
+          }
+          if (TransferQueueService.instance.isCancelled(fileId)) {
+            throw Exception('Upload cancelled by user');
+          }
+
           final partName = parts.length == 1
               ? '$baseName.zip'
               : '$baseName.zip.${(i + 1).toString().padLeft(3, '0')}';
 
-          onProgress(
+          internalOnProgress(
             0.15 + (i / parts.length * 0.68),
             'Uploading part ${i + 1}/${parts.length}…',
           );
@@ -147,7 +189,7 @@ class UploadService {
       }
 
       // ── Step 3: Upload per-file metadata JSON ─────────────────────────────
-      onProgress(0.85, 'Saving file index…');
+      internalOnProgress(0.85, 'Saving file index…');
       final fileMeta = <String, dynamic>{
         'file_id': fileId,
         'name': name,
@@ -170,20 +212,32 @@ class UploadService {
       fileMeta['metadata_file_id'] = metaResult['file_id'] as String;
 
       // ── Step 4: Update global metadata + local Hive ───────────────────────
-      onProgress(0.94, 'Updating storage index…');
+      internalOnProgress(0.94, 'Updating storage index…');
       final appMeta = await _metadata.fetch();
       await _metadata.addFile(appMeta, fileMeta);
       await _hive.saveFile(FileRecord.fromMap(fileMeta));
 
-      onProgress(1.0, 'Upload complete!');
+      internalOnProgress(1.0, 'Upload complete!');
+      TransferQueueService.instance
+          .updateTask(fileId, status: TransferStatus.completed);
       AppLogger.i('Upload complete: $name', tag: 'UploadService');
 
-      await NotificationService.instance.showNotification(
-        id: name.hashCode,
+      await NotificationService.instance.showCompletionNotification(
         title: 'Upload Complete',
         body: '$name has been successfully uploaded.',
+        payload: 'transfer_upload',
       );
     } catch (e) {
+      final wasCancelled = transferId != null &&
+          TransferQueueService.instance.isCancelled(transferId);
+      if (transferId != null) {
+        TransferQueueService.instance.updateTask(
+          transferId,
+          status:
+              wasCancelled ? TransferStatus.cancelled : TransferStatus.failed,
+          error: wasCancelled ? null : e.toString(),
+        );
+      }
       AppLogger.e('Upload failed: $e', tag: 'UploadService', error: e);
       throw Exception('Upload failed: $e');
     }

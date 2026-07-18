@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
 
@@ -10,7 +11,14 @@ import '../models/file_record.dart';
 import '../models/web_share_job.dart';
 import '../utils/app_logger.dart';
 import '../utils/connectivity.dart';
+import '../utils/file_reader_stub.dart'
+    if (dart.library.io) '../utils/file_reader_native.dart';
 import 'download_service.dart';
+import 'notification_service.dart';
+import 'transfer_queue_service.dart';
+import '../models/transfer_task.dart';
+
+import 'service_locator.dart';
 
 class WebShareQueueService {
   static const _r2MinimumTransferTimeout = Duration(minutes: 5);
@@ -65,24 +73,44 @@ class WebShareQueueService {
     const storage = FlutterSecureStorage();
     String? token = await storage.read(key: 'visitor_token');
     if (token == null) {
-      token = 'visitor_${const Uuid().v4().replaceAll('-', '').substring(0, 16)}';
+      token =
+          'visitor_${const Uuid().v4().replaceAll('-', '').substring(0, 16)}';
       await storage.write(key: 'visitor_token', value: token);
     }
     return token;
   }
 
   /// Enqueue a file to be shared publicly on storage.to
-  Future<void> enqueueShare(FileRecord file) async {
+  Future<void> enqueueShare(FileRecord file,
+      {String? password, int? maxDownloads, int? expiryDays}) async {
     final existingMap = _box.get(file.fileId);
     if (existingMap != null) {
-      final existingJob = WebShareJob.fromMap(Map<dynamic, dynamic>.from(existingMap));
+      final existingJob =
+          WebShareJob.fromMap(Map<dynamic, dynamic>.from(existingMap));
       if (existingJob.isComplete) {
-        AppLogger.i('Web share already completed for: ${file.name}', tag: 'WebShareQueue');
+        AppLogger.i('Web share already completed for: ${file.name}',
+            tag: 'WebShareQueue');
+        // If completed, we can still update settings immediately
+        if (password != null) {
+          await setPassword(file.fileId, password);
+        }
+        if (maxDownloads != null) {
+          await setMaxDownloads(file.fileId, maxDownloads);
+        }
+        if (expiryDays != null) {
+          await setExpiry(file.fileId, expiryDays);
+        }
         return;
       }
       if (existingJob.status == 'queued' ||
           existingJob.status == 'downloading' ||
           existingJob.status == 'uploading') {
+        // Update intended settings even if already in queue
+        final updated = existingJob.copyWith(
+            password: password,
+            maxDownloads: maxDownloads,
+            expiryDays: expiryDays);
+        await _box.put(file.fileId, updated.toMap());
         return;
       }
       // Retry/resume failed job
@@ -90,6 +118,9 @@ class WebShareQueueService {
         status: 'queued',
         progress: 0.0,
         error: null,
+        password: password,
+        maxDownloads: maxDownloads,
+        expiryDays: expiryDays,
       );
       await _box.put(file.fileId, job.toMap());
     } else {
@@ -102,11 +133,42 @@ class WebShareQueueService {
         progress: 0.0,
         status: 'queued',
         addedAt: DateTime.now(),
+        password: password,
+        maxDownloads: maxDownloads,
+        expiryDays: expiryDays,
       );
       await _box.put(file.fileId, job.toMap());
     }
 
-    _processQueue();
+    // Add to unified transfer queue
+    TransferQueueService.instance.addTask(TransferTask(
+      id: file.fileId,
+      name: file.name,
+      type: TransferType.share,
+      sizeMb: file.sizeMb,
+      addedAt: DateTime.now(),
+      status: TransferStatus.pending,
+      currentStage: 'Preparing share…',
+    ));
+
+    unawaited(_processQueue());
+  }
+
+  /// Restarts incomplete share jobs after a relaunch. Their temporary download
+  /// bytes are not persisted, so jobs that were in progress restart safely from
+  /// the queued state.
+  Future<void> resumePendingShares() async {
+    for (final job in allShares) {
+      if (job.status == 'downloading' || job.status == 'uploading') {
+        await _box.put(
+          job.fileId,
+          job
+              .copyWith(status: 'queued', progress: 0.0, clearError: true)
+              .toMap(),
+        );
+      }
+    }
+    unawaited(_processQueue());
   }
 
   /// Processes the queue sequentially (max 1 concurrent upload)
@@ -146,6 +208,11 @@ class WebShareQueueService {
       current = current.copyWith(status: 'downloading', progress: 0.0);
       await _box.put(current.fileId, current.toMap());
 
+      TransferQueueService.instance.updateTask(current.fileId,
+          status: TransferStatus.downloading,
+          progress: 0.0,
+          currentStage: 'Downloading from Cloud…');
+
       final fileRecord = FileRecord(
         fileId: current.fileId,
         name: current.name,
@@ -158,7 +225,8 @@ class WebShareQueueService {
       );
 
       // Find the metadata file id from local cache to locate file chunks
-      final localCachedFile = Hive.box<FileRecord>(AppConstants.filesBox).get(current.fileId);
+      final localCachedFile =
+          Hive.box<FileRecord>(AppConstants.filesBox).get(current.fileId);
       if (localCachedFile != null) {
         fileRecord.metadataFileId = localCachedFile.metadataFileId;
         fileRecord.metadataMessageId = localCachedFile.metadataMessageId;
@@ -171,15 +239,23 @@ class WebShareQueueService {
             progress: progress * 0.40,
           );
           await _box.put(current.fileId, current.toMap());
+          TransferQueueService.instance.updateTask(current.fileId,
+              progress: current.progress,
+              currentStage: 'Downloading… ${(progress * 100).toInt()}%');
         },
       );
 
       // ── Step 2: Upload to storage.to (40% - 95%) ───────────────────────────
       current = current.copyWith(status: 'uploading', progress: 0.40);
       await _box.put(current.fileId, current.toMap());
+      TransferQueueService.instance.updateTask(current.fileId,
+          status: TransferStatus.sharing,
+          progress: 0.40,
+          currentStage: 'Uploading to Web…');
 
       final uploadResult = await _uploadToStorageTo(
         bytes: bytes,
+        transferId: current.fileId,
         filename: current.name,
         mimeType: current.mimeType,
         visitorToken: visitorToken,
@@ -188,6 +264,9 @@ class WebShareQueueService {
             progress: 0.40 + pct * 0.55,
           );
           await _box.put(current.fileId, current.toMap());
+          TransferQueueService.instance.updateTask(current.fileId,
+              progress: current.progress,
+              currentStage: 'Uploading… ${(pct * 100).toInt()}%');
         },
       );
 
@@ -201,28 +280,111 @@ class WebShareQueueService {
         completedAt: DateTime.now(),
       );
       await _box.put(current.fileId, current.toMap());
-      AppLogger.i('Web share completed successfully for: ${current.name}', tag: 'WebShareQueue');
+      TransferQueueService.instance.updateTask(current.fileId,
+          status: TransferStatus.completed,
+          progress: 1.0,
+          currentStage: 'Share Link Ready!');
 
+      await NotificationService.instance.showCompletionNotification(
+        title: 'Share Link Ready',
+        body: 'Link for ${current.name} is ready to copy.',
+        payload: 'transfer_share',
+        actions: [
+          if (current.shareUrl != null)
+            AndroidNotificationAction('copy_${current.fileId}', 'Copy Link'),
+        ],
+      );
+
+      // ── Step 4: Upload Thumbnail (if available) ───────────────────────────
+      if (localCachedFile?.thumbnailFileId != null) {
+        try {
+          final thumbData = await ServiceLocator.instance.thumbnailRepository
+              .getThumbnailData(localCachedFile!);
+          if (thumbData != null) {
+            Uint8List? thumbBytes;
+            if (thumbData is Uint8List) {
+              thumbBytes = thumbData;
+            } else if (thumbData is String) {
+              thumbBytes = await readFileBytes(thumbData);
+            }
+
+            if (thumbBytes != null) {
+              await uploadThumbnail(
+                  current.storageToId!, current.ownerToken!, thumbBytes);
+            }
+          }
+        } catch (e) {
+          AppLogger.w('Failed to upload web thumbnail: $e',
+              tag: 'WebShareQueue');
+        }
+      }
+
+      // ── Step 5: Apply initial security settings (password/limits/expiry) ──
+      if (current.password != null) {
+        try {
+          await setPassword(current.fileId, current.password!);
+        } catch (e) {
+          AppLogger.w('Failed to apply initial password to share: $e',
+              tag: 'WebShareQueue');
+        }
+      }
+      if (current.maxDownloads != null) {
+        try {
+          await setMaxDownloads(current.fileId, current.maxDownloads!);
+        } catch (e) {
+          AppLogger.w('Failed to apply initial download cap to share: $e',
+              tag: 'WebShareQueue');
+        }
+      }
+      if (current.expiryDays != null) {
+        try {
+          await setExpiry(current.fileId, current.expiryDays!);
+        } catch (e) {
+          AppLogger.w('Failed to apply initial expiry to share: $e',
+              tag: 'WebShareQueue');
+        }
+      }
+
+      AppLogger.i('Web share completed successfully for: ${current.name}',
+          tag: 'WebShareQueue');
     } catch (e) {
-      AppLogger.e('Web share failed for ${current.name}: $e', tag: 'WebShareQueue');
+      final wasCancelled =
+          TransferQueueService.instance.isCancelled(current.fileId);
+      AppLogger.e(
+          'Web share ${wasCancelled ? 'cancelled' : 'failed'} for ${current.name}: $e',
+          tag: 'WebShareQueue');
       current = current.copyWith(
-        status: 'failed',
-        error: e.toString(),
+        status: wasCancelled ? 'cancelled' : 'failed',
+        error: wasCancelled ? null : e.toString(),
       );
       await _box.put(current.fileId, current.toMap());
+      TransferQueueService.instance.updateTask(
+        current.fileId,
+        status: wasCancelled ? TransferStatus.cancelled : TransferStatus.failed,
+        error: wasCancelled ? null : e.toString(),
+      );
+      if (!wasCancelled) {
+        await NotificationService.instance.showCompletionNotification(
+          title: 'Share Failed',
+          body: 'Failed to share ${current.name}: $e',
+        );
+      }
     }
   }
 
   /// Internal helper to perform storage.to upload dance
   Future<Map<String, dynamic>> _uploadToStorageTo({
     required Uint8List bytes,
+    required String transferId,
     required String filename,
     required String mimeType,
     required String visitorToken,
     required void Function(double pct) onProgress,
   }) async {
+    if (TransferQueueService.instance.isCancelled(transferId)) {
+      throw Exception('Share cancelled by user');
+    }
     // 1. Init upload
-    AppLogger.d('Initializing storage.to upload for $filename...', tag: 'WebShareQueue');
     final initRes = await _dio.post(
       '/upload/init',
       data: {
@@ -248,14 +410,10 @@ class WebShareQueueService {
 
     if (type == 'single') {
       final uploadUrl = initRes.data['upload_url'] as String;
-
-      AppLogger.d('Uploading file to Cloudflare R2...', tag: 'WebShareQueue');
       await _dio.put(
         uploadUrl,
         data: Stream.fromIterable([bytes]),
         options: Options(
-          // The default API timeout is intentionally short. A signed R2 PUT,
-          // however, cannot respond until the complete file has transferred.
           sendTimeout: _r2TransferTimeout(bytes.length),
           receiveTimeout: _r2TransferTimeout(bytes.length),
           headers: {
@@ -275,16 +433,20 @@ class WebShareQueueService {
       final totalParts = initRes.data['total_parts'] as int;
       final initialUrls = initRes.data['initial_urls'] as Map<String, dynamic>;
 
-      AppLogger.d('Uploading multipart file to R2 ($totalParts parts)...', tag: 'WebShareQueue');
       final List<Map<String, dynamic>> completedParts = [];
 
       for (var i = 0; i < totalParts; i++) {
+        while (TransferQueueService.instance.isPaused(transferId)) {
+          await Future<void>.delayed(const Duration(seconds: 1));
+        }
+        if (TransferQueueService.instance.isCancelled(transferId)) {
+          throw Exception('Share cancelled by user');
+        }
         final partNumber = i + 1;
         final start = i * partSize;
         final end = (start + partSize).clamp(0, bytes.length);
         final partBytes = bytes.sublist(start, end);
 
-        // Fetch URL for this part
         String partUrl = initialUrls[partNumber.toString()] as String? ?? '';
         if (partUrl.isEmpty) {
           final partUrlRes = await _dio.post(
@@ -293,31 +455,21 @@ class WebShareQueueService {
               'upload_id': uploadId,
               'part_numbers': [partNumber]
             },
-            options: Options(
-              headers: {
-                'Authorization': 'Owner $finalOwnerToken',
-              },
-            ),
+            options:
+                Options(headers: {'Authorization': 'Owner $finalOwnerToken'}),
           );
           if (partUrlRes.data['success'] == true) {
             final partUrls = partUrlRes.data['part_urls'] as List;
-            if (partUrls.isNotEmpty) {
-              partUrl = partUrls.first['url'] as String;
-            }
+            if (partUrls.isNotEmpty) partUrl = partUrls.first['url'] as String;
           }
         }
 
-        if (partUrl.isEmpty) {
-          throw Exception('Failed to get signed R2 URL for part $partNumber');
-        }
+        if (partUrl.isEmpty) throw Exception('Failed to get part URL');
 
-        // PUT part bytes to R2
         final res = await _dio.put(
           partUrl,
           data: Stream.fromIterable([partBytes]),
           options: Options(
-            // Multipart uploads need the same allowance per part; otherwise a
-            // slow connection still hits the global 30-second API timeout.
             sendTimeout: _r2TransferTimeout(partBytes.length),
             receiveTimeout: _r2TransferTimeout(partBytes.length),
             headers: {
@@ -327,41 +479,27 @@ class WebShareQueueService {
           ),
           onSendProgress: (sent, total) {
             final partPct = total > 0 ? sent / total : 0.0;
-            final overallPct = (i + partPct) / totalParts;
-            onProgress(overallPct);
+            onProgress((i + partPct) / totalParts);
           },
         );
 
-        final etag = res.headers.value('etag') ?? res.headers.value('ETag') ?? '';
-        if (etag.isEmpty) {
-          throw Exception('Failed to retrieve ETag for part $partNumber');
-        }
-
-        completedParts.add({
-          'partNumber': partNumber,
-          'etag': etag,
-        });
+        final etag =
+            res.headers.value('etag') ?? res.headers.value('ETag') ?? '';
+        if (etag.isEmpty) throw Exception('No ETag');
+        completedParts.add({'partNumber': partNumber, 'etag': etag});
       }
 
-      // Complete Multipart
-      AppLogger.d('Finalizing multipart upload...', tag: 'WebShareQueue');
       await _dio.post(
         '/upload/complete-multipart',
-        data: {
-          'upload_id': uploadId,
-          'parts': completedParts,
-        },
-        options: Options(
-          headers: {
-            'Authorization': 'Owner $finalOwnerToken',
-            'Content-Type': 'application/json',
-          },
-        ),
+        data: {'upload_id': uploadId, 'parts': completedParts},
+        options: Options(headers: {
+          'Authorization': 'Owner $finalOwnerToken',
+          'Content-Type': 'application/json'
+        }),
       );
     }
 
     // 3. Confirm upload
-    AppLogger.d('Confirming storage.to upload...', tag: 'WebShareQueue');
     final confirmRes = await _dio.post(
       '/upload/confirm',
       data: {
@@ -370,25 +508,21 @@ class WebShareQueueService {
         'content_type': mimeType,
         'r2_key': r2Key,
       },
-      options: Options(
-        headers: {
-          'X-Visitor-Token': visitorToken,
-          'Content-Type': 'application/json',
-        },
-      ),
+      options: Options(headers: {
+        'X-Visitor-Token': visitorToken,
+        'Content-Type': 'application/json'
+      }),
     );
 
     if (confirmRes.data['success'] != true) {
-      throw Exception(confirmRes.data['error'] ?? 'Confirmation failed');
+      throw Exception('Confirmation failed');
     }
 
     final fileData = confirmRes.data['file'] as Map<String, dynamic>;
-    final ownerToken = confirmRes.data['owner_token'] as String;
-
     return {
       'id': fileData['id'] as String,
       'share_url': fileData['url'] as String,
-      'owner_token': ownerToken,
+      'owner_token': confirmRes.data['owner_token'] as String,
     };
   }
 
@@ -396,25 +530,19 @@ class WebShareQueueService {
   Future<void> deleteShare(String fileId) async {
     final existingMap = _box.get(fileId);
     if (existingMap == null) return;
-
     final job = WebShareJob.fromMap(Map<dynamic, dynamic>.from(existingMap));
 
     if (job.storageToId != null && job.ownerToken != null) {
       try {
-        AppLogger.i('Deleting public file from storage.to: ${job.storageToId}', tag: 'WebShareQueue');
         await _dio.delete(
           '/file/${job.storageToId}',
-          options: Options(
-            headers: {
-              'Authorization': 'Owner ${job.ownerToken}',
-            },
-          ),
+          options:
+              Options(headers: {'Authorization': 'Owner ${job.ownerToken}'}),
         );
       } catch (e) {
-        AppLogger.w('Failed to delete file from storage.to server: $e', tag: 'WebShareQueue');
+        AppLogger.w('Failed deleteShare: $e', tag: 'WebShareQueue');
       }
     }
-
     await _box.delete(fileId);
   }
 
@@ -422,7 +550,6 @@ class WebShareQueueService {
   Future<void> setPassword(String fileId, String password) async {
     final existingMap = _box.get(fileId);
     if (existingMap == null) return;
-
     final job = WebShareJob.fromMap(Map<dynamic, dynamic>.from(existingMap));
 
     if (job.storageToId == null || job.ownerToken == null) return;
@@ -430,45 +557,40 @@ class WebShareQueueService {
     final res = await _dio.post(
       '/file/${job.storageToId}/password',
       data: {'password': password},
-      options: Options(
-        headers: {
-          'Authorization': 'Owner ${job.ownerToken}',
-          'Content-Type': 'application/json',
-        },
-      ),
+      options: Options(headers: {
+        'Authorization': 'Owner ${job.ownerToken}',
+        'Content-Type': 'application/json'
+      }),
     );
 
     if (res.data['success'] == true) {
-      final updated = job.copyWith(password: password);
-      await _box.put(fileId, updated.toMap());
+      await _box.put(fileId, job.copyWith(password: password).toMap());
     } else {
-      throw Exception(res.data['error'] ?? 'Failed to set password');
+      throw Exception(res.data['error'] ?? 'Failed password');
     }
   }
 
-  /// Removes password from a shared web file
-  Future<void> removePassword(String fileId) async {
+  /// Changes a file's expiration days (1-7)
+  Future<void> setExpiry(String fileId, int days) async {
     final existingMap = _box.get(fileId);
     if (existingMap == null) return;
-
     final job = WebShareJob.fromMap(Map<dynamic, dynamic>.from(existingMap));
 
     if (job.storageToId == null || job.ownerToken == null) return;
 
-    final res = await _dio.delete(
-      '/file/${job.storageToId}/password',
-      options: Options(
-        headers: {
-          'Authorization': 'Owner ${job.ownerToken}',
-        },
-      ),
+    final res = await _dio.post(
+      '/file/${job.storageToId}/expiry',
+      data: {'days': days},
+      options: Options(headers: {
+        'Authorization': 'Owner ${job.ownerToken}',
+        'Content-Type': 'application/json'
+      }),
     );
 
     if (res.data['success'] == true) {
-      final updated = job.copyWith(password: null);
-      await _box.put(fileId, updated.toMap());
+      await _box.put(fileId, job.copyWith(expiryDays: days).toMap());
     } else {
-      throw Exception(res.data['error'] ?? 'Failed to remove password');
+      throw Exception(res.data['error'] ?? 'Failed expiry');
     }
   }
 
@@ -476,7 +598,6 @@ class WebShareQueueService {
   Future<void> setMaxDownloads(String fileId, int? maxDownloads) async {
     final existingMap = _box.get(fileId);
     if (existingMap == null) return;
-
     final job = WebShareJob.fromMap(Map<dynamic, dynamic>.from(existingMap));
 
     if (job.storageToId == null || job.ownerToken == null) return;
@@ -484,19 +605,53 @@ class WebShareQueueService {
     final res = await _dio.post(
       '/file/${job.storageToId}/max-downloads',
       data: {'max_downloads': maxDownloads},
-      options: Options(
-        headers: {
-          'Authorization': 'Owner ${job.ownerToken}',
-          'Content-Type': 'application/json',
-        },
-      ),
+      options: Options(headers: {
+        'Authorization': 'Owner ${job.ownerToken}',
+        'Content-Type': 'application/json'
+      }),
     );
 
     if (res.data['success'] == true) {
-      final updated = job.copyWith(maxDownloads: maxDownloads);
-      await _box.put(fileId, updated.toMap());
+      await _box.put(fileId, job.copyWith(maxDownloads: maxDownloads).toMap());
     } else {
-      throw Exception(res.data['error'] ?? 'Failed to set download cap');
+      throw Exception(res.data['error'] ?? 'Failed limit');
     }
+  }
+
+  /// Uploads a thumbnail for a shared web file.
+  Future<void> uploadThumbnail(
+      String storageToId, String ownerToken, Uint8List imageBytes) async {
+    final formData = FormData.fromMap({
+      'thumbnail': MultipartFile.fromBytes(imageBytes, filename: 'thumb.jpg'),
+    });
+
+    final res = await _dio.post(
+      '/file/$storageToId/thumbnail',
+      data: formData,
+      options: Options(headers: {
+        'Authorization': 'Owner $ownerToken',
+        'Content-Type': 'multipart/form-data',
+      }),
+    );
+
+    if (res.data['success'] != true) {
+      throw Exception(res.data['error'] ?? 'Thumbnail upload failed');
+    }
+  }
+
+  /// Poll the bandwidth/quota status for anonymous visitors
+  Future<Map<String, dynamic>> getBandwidthStatus() async {
+    final visitorToken = await _getOrCreateVisitorToken();
+    final res = await _dio.get(
+      '/bandwidth/status',
+      options: Options(headers: {'X-Visitor-Token': visitorToken}),
+    );
+    return res.data as Map<String, dynamic>;
+  }
+
+  /// Check whether a file is still pending its upload.
+  Future<bool> isFilePending(String storageToId) async {
+    final res = await _dio.get('/file/$storageToId/status');
+    return res.data['pending'] as bool? ?? false;
   }
 }

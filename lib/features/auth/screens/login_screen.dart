@@ -4,7 +4,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/routing/app_router.dart';
 import '../bloc/auth_bloc.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../shared/utils/responsive.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -52,7 +51,6 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop = Responsive.isDesktop(context);
     return BlocConsumer<AuthBloc, AuthState>(
       listener: (context, state) {
         if (state is Authenticated) {
@@ -73,81 +71,9 @@ class _LoginScreenState extends State<LoginScreen>
       builder: (context, state) {
         _isLoading = state is AuthLoading;
         return Scaffold(
-          body: isDesktop ? _buildDesktop() : _buildMobile(),
+          body: _buildMobile(),
         );
       },
-    );
-  }
-
-  // ── Desktop layout (unchanged, already great) ─────────────────────────────
-  Widget _buildDesktop() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Row(children: [
-      Expanded(child: _heroPanel()),
-      Container(
-        width: 480,
-        color: isDark ? AppTheme.darkBg : AppTheme.lightBg,
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(48),
-            child: _buildForm(isDesktop: true),
-          ),
-        ),
-      ),
-    ]);
-  }
-
-  Widget _heroPanel() {
-    final colors = Theme.of(context).extension<AppColorsExtension>()!;
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: colors.heroGradient,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Stack(children: [
-        Positioned(
-            top: -80,
-            left: -80,
-            child: _glowCircle(300, AppTheme.primary.withAlpha(40))),
-        Positioned(
-            bottom: -100,
-            right: -60,
-            child: _glowCircle(250, colors.glowColor)),
-        Center(
-            child: Padding(
-          padding: const EdgeInsets.all(48),
-          child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _logoBox(64, 18, 36),
-                const SizedBox(height: 32),
-                Text('TelStorage',
-                    style: Theme.of(context)
-                        .textTheme
-                        .displayLarge
-                        ?.copyWith(color: Colors.white, fontSize: 42)),
-                const SizedBox(height: 12),
-                Text('Unlimited cloud storage\npowered by Telegram.',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyLarge
-                        ?.copyWith(color: Colors.white60, height: 1.6)),
-                const SizedBox(height: 48),
-                _featureRow(Icons.all_inclusive_rounded,
-                    'Unlimited storage — no caps'),
-                const SizedBox(height: 16),
-                _featureRow(
-                    Icons.sync_rounded, 'Syncs across all your devices'),
-                const SizedBox(height: 16),
-                _featureRow(Icons.lock_rounded,
-                    'Files stay in your Telegram channel'),
-              ]),
-        )),
-      ]),
     );
   }
 
@@ -216,7 +142,7 @@ class _LoginScreenState extends State<LoginScreen>
                 opacity: _fadeIn,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: isDark ? AppTheme.darkBg : Colors.white,
+                    color: colors.bgSurface,
                     borderRadius:
                         const BorderRadius.vertical(top: Radius.circular(32)),
                     boxShadow: [
@@ -235,7 +161,7 @@ class _LoginScreenState extends State<LoginScreen>
                       24,
                       MediaQuery.of(context).viewInsets.bottom + 24,
                     ),
-                    child: _buildForm(isDesktop: false),
+                    child: _buildForm(),
                   ),
                 ),
               ),
@@ -247,19 +173,11 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   // ── Shared form ───────────────────────────────────────────────────────────
-  Widget _buildForm({required bool isDesktop}) {
+  Widget _buildForm() {
     return Form(
       key: _formKey,
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        if (isDesktop) ...[
-          Text('Sign in', style: Theme.of(context).textTheme.headlineMedium),
-          const SizedBox(height: 6),
-          Text('Enter your credentials to continue',
-              style: Theme.of(context).textTheme.bodyMedium),
-          const SizedBox(height: 36),
-        ] else ...[
-          const SizedBox(height: 4),
-        ],
+        const SizedBox(height: 4),
         TextFormField(
           controller: _emailCtrl,
           keyboardType: TextInputType.emailAddress,
@@ -356,16 +274,4 @@ class _LoginScreenState extends State<LoginScreen>
       width: size,
       height: size,
       decoration: BoxDecoration(color: color, shape: BoxShape.circle));
-
-  Widget _featureRow(IconData icon, String text) => Row(children: [
-        Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-                color: AppTheme.primary.withAlpha(40),
-                borderRadius: BorderRadius.circular(8)),
-            child: Icon(icon, color: AppTheme.primary, size: 18)),
-        const SizedBox(width: 12),
-        Text(text, style: const TextStyle(color: Colors.white70, fontSize: 14)),
-      ]);
 }

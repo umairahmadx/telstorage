@@ -104,7 +104,7 @@ class ServiceLocator {
           DownloadQueueService(_downloadService, AppConstants.downloadsBox);
       _fileManager = FileManagerService(_metadata, _telegram, _hive);
       _syncQueue = SyncQueueService(_fileManager);
-      _storageRepository = StorageRepository(_hive, _fileManager);
+      _storageRepository = StorageRepository(_hive, _fileManager, _metadata);
       _thumbnailRepository = ThumbnailRepository(_telegram);
       _webShareQueue =
           WebShareQueueService(_downloadService, AppConstants.webSharesBox);

@@ -2,23 +2,94 @@ import 'package:uuid/uuid.dart';
 import '../../../../core/models/pending_action.dart';
 import '../../../../core/models/file_record.dart';
 import '../../../../core/models/folder_record.dart';
+import '../../../../core/models/app_metadata.dart';
 import '../../../../core/services/hive_service.dart';
 import '../../../../core/services/file_manager.dart';
+import '../../../../core/services/metadata_service.dart';
+import '../../../../core/services/auth_service.dart';
 import '../../../../core/utils/connectivity.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/services/service_locator.dart';
+import '../../../../core/models/web_share_job.dart';
 import 'package:hive/hive.dart';
 
 class StorageRepository {
   final HiveService _hive;
   final FileManagerService _fileManager;
+  final MetadataService _metadataService;
 
   StorageRepository(
     this._hive,
     this._fileManager,
+    this._metadataService,
   );
 
   Box<PendingAction> get _pendingBox =>
       Hive.box<PendingAction>(AppConstants.pendingActionsBox);
+
+  // ── Stats & Metadata ──────────────────────────────────────────────────
+
+  Future<AppMetadata> getAppMetadata() async {
+    return _metadataService.fetch();
+  }
+
+  Map<String, int> getCategoryCounts() {
+    return _hive.categoryCount;
+  }
+
+  double getTotalSizeMb() {
+    return _hive.totalSizeMb;
+  }
+
+  int getTotalFiles() {
+    return _hive.totalFiles;
+  }
+
+  Future<String?> getUserEmail() async {
+    return AuthService.instance.getEmail();
+  }
+
+  Future<Map<String, dynamic>> getWebShareQuota() async {
+    return ServiceLocator.instance.webShareQueue.getBandwidthStatus();
+  }
+
+  int getTotalShares() {
+    return ServiceLocator.instance.webShareQueue.allShares.length;
+  }
+
+  WebShareJob? getWebShareJob(String fileId) {
+    return ServiceLocator.instance.webShareQueue.allShares
+        .where((s) => s.fileId == fileId)
+        .firstOrNull;
+  }
+
+  int getTotalCompletedDownloads() {
+    return ServiceLocator.instance.downloadQueue.allJobs
+        .where((j) => j.isComplete)
+        .length;
+  }
+
+  Future<void> enqueueDownload(FileRecord file) async {
+    return ServiceLocator.instance.downloadQueue.enqueueDownload(file);
+  }
+
+  Future<void> enqueueWebShare(FileRecord file,
+      {String? password, int? expiryDays}) async {
+    return ServiceLocator.instance.webShareQueue
+        .enqueueShare(file, password: password, expiryDays: expiryDays);
+  }
+
+  FileRecord? getFile(String fileId) {
+    return _hive.getFile(fileId);
+  }
+
+  FolderRecord? getFolder(String folderId) {
+    return _hive.getFolder(folderId);
+  }
+
+  int getFilesInFolderCount(String folderId) {
+    return _hive.filesInFolder(folderId).length;
+  }
 
   // ── Read Operations (Offline-First) ───────────────────────────────────
 

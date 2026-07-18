@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../../core/models/file_record.dart';
-import '../../../core/theme/app_theme.dart';
-import '../../../core/services/service_locator.dart';
+import '../../core/models/file_record.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/services/service_locator.dart';
+import 'thumbnail_widget.dart';
 
 class FileDetailSheet extends StatelessWidget {
   final FileRecord file;
@@ -23,29 +24,32 @@ class FileDetailSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
-    final uploadedStr = DateFormat('dd MMM yyyy, hh:mm a').format(file.uploadedAt);
-    
+    final dateStr = DateFormat('dd MMM yyyy, HH:mm').format(file.uploadedAt);
+
     return Container(
-      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: colors.bgPrimary,
+        color: colors.bgSurface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Handle
           Container(
             width: 40,
             height: 4,
+            margin: const EdgeInsets.only(bottom: 24),
             decoration: BoxDecoration(
               color: colors.borderSubtle,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          const SizedBox(height: 24),
+
+          // File Header
           Row(
             children: [
-              _buildFileIcon(colors),
+              _buildIcon(colors),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
@@ -53,126 +57,211 @@ class FileDetailSheet extends StatelessWidget {
                   children: [
                     Text(
                       file.name,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-                      maxLines: 1,
+                      style: Theme.of(context).textTheme.headlineSmall,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      file.formattedSize,
-                      style: TextStyle(color: colors.textSecondary, fontSize: 13),
+                      '${file.formattedSize} • $dateStr',
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                 ),
               ),
             ],
           ),
+
           const SizedBox(height: 32),
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: colors.bgSurface,
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: Column(
-              children: [
-                _buildInfoRow('Type', _getFileTypeLabel()),
-                const Divider(color: Colors.white10, height: 32),
-                _buildInfoRow('Location', _getLocationLabel(), icon: Icons.folder_open_rounded),
-                const Divider(color: Colors.white10, height: 32),
-                _buildInfoRow('Uploaded', uploadedStr),
-                const Divider(color: Colors.white10, height: 32),
-                _buildInfoRow('Size', file.formattedSize),
-              ],
-            ),
-          ),
-          const SizedBox(height: 32),
+
+          // Actions
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildActionButton(Icons.share_outlined, onShare),
-              const SizedBox(width: 12),
-              _buildActionButton(Icons.file_download_outlined, onDownload),
-              const SizedBox(width: 12),
-              _buildActionButton(Icons.edit_outlined, onRename),
-              const SizedBox(width: 12),
-              _buildActionButton(Icons.delete_outline_rounded, onDelete, isDestructive: true),
+              _ActionButton(
+                icon: Icons.share_rounded,
+                label: 'Share',
+                onTap: onShare,
+              ),
+              _ActionButton(
+                icon: Icons.download_rounded,
+                label: 'Download',
+                onTap: onDownload,
+              ),
+              _ActionButton(
+                icon: Icons.edit_rounded,
+                label: 'Rename',
+                onTap: onRename,
+              ),
+              _ActionButton(
+                icon: Icons.delete_outline_rounded,
+                label: 'Delete',
+                color: colors.error,
+                onTap: onDelete,
+              ),
             ],
           ),
-          const SizedBox(height: 16),
+
+          const SizedBox(height: 24),
+          const Divider(),
+          const SizedBox(height: 12),
+
+          // Details List
+          _DetailRow(label: 'Type', value: file.mimeType.toUpperCase()),
+          _DetailRow(label: 'Location', value: _getFolderName()),
+          _DetailRow(label: 'Checksum', value: _formatHash(file.sha256Hash)),
+
+          const SizedBox(height: 24),
         ],
       ),
     );
   }
 
-  Widget _buildInfoRow(String label, String value, {IconData? icon}) {
-    return Row(
-      children: [
-        Text(label, style: const TextStyle(color: Colors.white54, fontSize: 14)),
-        const Spacer(),
-        if (icon != null) ...[
-          Icon(icon, size: 16, color: Colors.white54),
-          const SizedBox(width: 8),
-        ],
-        Text(value, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
-      ],
+  Widget _buildIcon(AppColorsExtension colors) {
+    if (file.isImage) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: ThumbnailWidget(
+          file: file,
+          width: 64,
+          height: 64,
+          fallback: Container(
+            width: 64,
+            height: 64,
+            color: colors.bgSurfaceInset,
+            child: Icon(Icons.image_rounded, color: colors.textTertiary),
+          ),
+        ),
+      );
+    }
+
+    Color iconColor = colors.textPrimary;
+    if (file.isPdf) iconColor = colors.filePdf;
+    if (file.isVideo) iconColor = colors.fileVideo;
+    if (file.name.endsWith('.zip')) iconColor = colors.fileZip;
+    if (file.name.endsWith('.fig')) iconColor = colors.filePalette;
+
+    return Container(
+      width: 64,
+      height: 64,
+      decoration: BoxDecoration(
+        color: colors.bgSurfaceInset,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Icon(
+        _getIconData(),
+        color: iconColor,
+        size: 32,
+      ),
     );
   }
 
-  Widget _buildActionButton(IconData icon, VoidCallback onTap, {bool isDestructive = false}) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          height: 56,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: isDestructive ? Colors.red.withAlpha(40) : Colors.white10),
-          ),
-          child: Icon(icon, color: isDestructive ? Colors.red : Colors.white, size: 24),
+  IconData _getIconData() {
+    if (file.isPdf) return Icons.picture_as_pdf_rounded;
+    if (file.isVideo) return Icons.play_circle_fill_rounded;
+    if (file.name.endsWith('.zip')) return Icons.folder_zip_rounded;
+    return Icons.insert_drive_file_rounded;
+  }
+
+  String _getFolderName() {
+    if (file.folderId == null) return 'Root';
+    final hive = ServiceLocator.instance.hive;
+    return hive.getFolder(file.folderId!)?.name ?? 'Unknown';
+  }
+
+  String _formatHash(String? hash) {
+    if (hash == null || hash.isEmpty) return 'Not available';
+    if (hash.length > 20) {
+      return '${hash.substring(0, 10)}...${hash.substring(hash.length - 10)}';
+    }
+    return hash;
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color? color;
+
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
+    final themeColor = color ?? colors.accentPrimary;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Column(
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: themeColor.withAlpha(20),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: themeColor, size: 24),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: colors.textSecondary,
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildFileIcon(AppColorsExtension colors) {
-    Color iconColor = colors.fileVideo;
-    if (file.isPdf) iconColor = colors.filePdf;
-    if (file.name.endsWith('.fig')) iconColor = const Color(0xFF0F0F1D);
+class _DetailRow extends StatelessWidget {
+  final String label;
+  final String value;
 
-    return Container(
-      width: 56,
-      height: 56,
-      decoration: BoxDecoration(
-        color: iconColor.withAlpha(file.name.endsWith('.fig') ? 255 : 40),
-        borderRadius: BorderRadius.circular(12),
+  const _DetailRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(color: colors.textTertiary, fontSize: 13),
+          ),
+          const SizedBox(width: 24),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: TextStyle(
+                color: colors.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
-      alignment: Alignment.center,
-      child: file.name.endsWith('.fig') 
-        ? const Icon(Icons.palette_outlined, color: Colors.purple, size: 28)
-        : Text(_getFileTypeShort(), style: TextStyle(color: iconColor, fontWeight: FontWeight.bold, fontSize: 12)),
     );
-  }
-
-  String _getFileTypeShort() {
-    if (file.isPdf) return 'PDF';
-    if (file.isVideo) return 'MP4';
-    if (file.isAudio) return 'MP3';
-    return 'FILE';
-  }
-
-  String _getFileTypeLabel() {
-    if (file.isPdf) return 'PDF Document';
-    if (file.isVideo) return 'Video File';
-    if (file.isImage) return 'Image File';
-    if (file.isAudio) return 'Audio File';
-    if (file.name.endsWith('.fig')) return 'Design File';
-    return 'Binary File';
-  }
-
-  String _getLocationLabel() {
-    if (file.folderId == null) return 'Root';
-    final hive = ServiceLocator.instance.hive;
-    final folder = hive.getFolder(file.folderId!);
-    return folder?.name ?? 'Unknown';
   }
 }

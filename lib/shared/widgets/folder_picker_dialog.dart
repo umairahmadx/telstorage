@@ -1,148 +1,89 @@
 import 'package:flutter/material.dart';
-import '../../core/services/hive_service.dart';
 import '../../core/services/service_locator.dart';
 import '../../core/theme/app_theme.dart';
 
-/// Shows a bottom sheet for the user to pick a destination folder.
-/// Returns the chosen folder ID, or null if the user chose Root.
-/// Returns `false` if the user dismissed without choosing.
-Future<String?> showFolderPicker(
-  BuildContext context, {
-  String? currentFolderId,
-  String title = 'Upload to…',
-}) async {
-  return showModalBottomSheet<String?>(
-    context: context,
-    backgroundColor: Colors.transparent,
-    isScrollControlled: true,
-    builder: (_) => _FolderPickerSheet(
-      currentFolderId: currentFolderId,
-      title: title,
-    ),
-  );
+class FolderPickerDialog extends StatefulWidget {
+  final String? currentFolderId;
+  const FolderPickerDialog({super.key, this.currentFolderId});
+
+  @override
+  State<FolderPickerDialog> createState() => _FolderPickerDialogState();
 }
 
-class _FolderPickerSheet extends StatelessWidget {
-  final String? currentFolderId;
-  final String title;
-  const _FolderPickerSheet({this.currentFolderId, required this.title});
+class _FolderPickerDialogState extends State<FolderPickerDialog> {
+  String? _selectedFolderId;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedFolderId = widget.currentFolderId;
+  }
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
     final folders = ServiceLocator.instance.hive.allFolders
-        .where((f) => f.id != currentFolderId)
-        .toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
+        .where((f) => f.id != widget.currentFolderId)
+        .toList();
 
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.6,
+    return AlertDialog(
+      backgroundColor: colors.bgSurface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      title: Text('Move to Folder',
+          style: Theme.of(context).textTheme.headlineMedium),
+      content: SizedBox(
+        width: double.maxFinite,
+        height: 300,
+        child: folders.isEmpty
+            ? Center(
+                child: Text('No other folders available',
+                    style: TextStyle(color: colors.textTertiary)))
+            : ListView.builder(
+                shrinkWrap: true,
+                itemCount: folders.length + 1,
+                itemBuilder: (ctx, i) {
+                  if (i == 0) {
+                    return _buildFolderTile(
+                        null, 'Root Directory', _selectedFolderId == null, colors);
+                  }
+                  final f = folders[i - 1];
+                  return _buildFolderTile(
+                      f.id, f.name, _selectedFolderId == f.id, colors);
+                },
+              ),
       ),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // ── Handle ───────────────────────────────────────────────────────
-          const SizedBox(height: 12),
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: colors.selectionColor,
-              borderRadius: BorderRadius.circular(2),
-            ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('Cancel', style: TextStyle(color: colors.textSecondary)),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, _selectedFolderId),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: colors.accentPrimary,
+            foregroundColor: Theme.of(context).brightness == Brightness.dark ? Colors.black : Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
-          const SizedBox(height: 16),
-          // ── Title ────────────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Row(
-              children: [
-                const Icon(Icons.drive_file_move_rounded,
-                    color: AppTheme.primary),
-                const SizedBox(width: 10),
-                Text(title, style: Theme.of(context).textTheme.titleMedium),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Divider(),
-          // ── Root option ─────────────────────────────────────────────────
-          Flexible(
-            child: ListView(
-              shrinkWrap: true,
-              children: [
-                _FolderItem(
-                  icon: Icons.home_rounded,
-                  name: 'Root (No folder)',
-                  color: AppTheme.secondary,
-                  isSelected: currentFolderId == null,
-                  onTap: () =>
-                      Navigator.pop(context, HiveService.kRootFolderId),
-                ),
-                ...folders.map((f) => _FolderItem(
-                      icon: Icons.folder_rounded,
-                      name: f.name,
-                      color: AppTheme.warning,
-                      isSelected: f.id == currentFolderId,
-                      onTap: () => Navigator.pop(context, f.id),
-                    )),
-                if (folders.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
-                    child: Text(
-                      'No folders yet. Create one in the browser.',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
-                const SizedBox(height: 16),
-              ],
-            ),
-          ),
-        ],
-      ),
+          child: const Text('Move Here'),
+        ),
+      ],
     );
   }
-}
 
-class _FolderItem extends StatelessWidget {
-  final IconData icon;
-  final String name;
-  final Color color;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _FolderItem({
-    required this.icon,
-    required this.name,
-    required this.color,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildFolderTile(
+      String? id, String name, bool isSelected, AppColorsExtension colors) {
     return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-      leading: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: color.withAlpha(30),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Icon(icon, color: color, size: 20),
-      ),
-      title: Text(name, style: Theme.of(context).textTheme.labelLarge),
+      leading: Icon(Icons.folder_rounded,
+          color: isSelected ? colors.accentPrimary : colors.fileFolder),
+      title: Text(name,
+          style: TextStyle(
+            color: isSelected ? colors.textPrimary : colors.textSecondary,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          )),
       trailing: isSelected
-          ? const Icon(Icons.check_circle_rounded,
-              color: AppTheme.primary, size: 20)
+          ? Icon(Icons.check_circle_rounded, color: colors.accentPrimary)
           : null,
-      onTap: onTap,
+      onTap: () => setState(() => _selectedFolderId = id),
     );
   }
 }

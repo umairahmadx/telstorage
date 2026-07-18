@@ -1,19 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../../../core/models/file_record.dart';
 import '../../../core/models/folder_record.dart';
-import '../../../core/services/service_locator.dart';
-import '../../../core/routing/app_router.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../shared/utils/responsive.dart';
-import '../../../shared/widgets/app_shell.dart';
 import '../../../shared/widgets/thumbnail_widget.dart';
 import '../../../shared/widgets/mobile_shell.dart';
 import '../../../shared/widgets/share_link_sheet.dart';
 import '../../../shared/widgets/file_detail_sheet.dart';
 import '../bloc/browser_bloc.dart';
+import '../../downloads/bloc/transfer_cubit.dart';
 
 enum BrowserSortOption { name, date, size }
 
@@ -29,41 +25,19 @@ class BrowserScreen extends StatefulWidget {
 }
 
 class _BrowserScreenState extends State<BrowserScreen> {
-  late final BrowserBloc _bloc;
-  bool _isLoading = true;
-
   @override
   void initState() {
     super.initState();
-    _bloc = BrowserBloc();
-    _initServices();
-  }
-
-  @override
-  void dispose() {
-    _bloc.close();
-    super.dispose();
-  }
-
-  Future<void> _initServices() async {
-    try {
-      await ServiceLocator.instance.init();
-      if (mounted) {
-        setState(() => _isLoading = false);
-        _bloc.add(LoadDirectory(
-            folderId: widget.currentFolderId, category: widget.category));
-      }
-    } catch (e) {
-      if (!mounted) return;
-      Navigator.of(context).pushReplacementNamed(AppRouter.login);
-    }
+    context.read<BrowserBloc>().add(LoadDirectory(
+        folderId: widget.currentFolderId, category: widget.category));
   }
 
   void _snack(String msg, {bool success = false}) {
     if (!mounted) return;
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
-      backgroundColor: success ? Colors.green : AppTheme.danger,
+      backgroundColor: success ? colors.success : colors.error,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       margin: const EdgeInsets.all(16),
@@ -98,9 +72,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
   }
 
   void _showShareSheet(FileRecord file) {
-    final queue = ServiceLocator.instance.webShareQueue;
-    final existing =
-        queue.allShares.where((s) => s.fileId == file.fileId).firstOrNull;
+    final existing = context.read<TransferCubit>().getShareJob(file.fileId);
 
     showModalBottomSheet(
       context: context,
@@ -110,26 +82,15 @@ class _BrowserScreenState extends State<BrowserScreen> {
         file: file,
         shareUrl: existing?.shareUrl,
         onCopyLink: (pwd, expiryDays) async {
-          final queue = ServiceLocator.instance.webShareQueue;
-          await queue.enqueueShare(file, password: pwd, expiryDays: expiryDays);
+          context
+              .read<BrowserBloc>()
+              .add(EnqueueShare(file, password: pwd, expiryDays: expiryDays));
 
           if (!mounted || !ctx.mounted) return;
           Navigator.pop(ctx);
 
-          final all = queue.allShares;
-          final existing =
-              all.where((s) => s.fileId == file.fileId).firstOrNull;
-
-          if (existing != null &&
-              existing.isComplete &&
-              existing.shareUrl != null) {
-            await Clipboard.setData(ClipboardData(text: existing.shareUrl!));
-            _snack('Link copied to clipboard!', success: true);
-          } else {
-            _snack('Sharing started. Check "Transfer" tab for progress.',
-                success: true);
-            MobileShell.of(context)?.switchTab(3);
-          }
+          _snack('Sharing started. Check "Transfer" tab for progress.',
+              success: true);
         },
       ),
     );
@@ -140,12 +101,12 @@ class _BrowserScreenState extends State<BrowserScreen> {
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.surface,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         title: const Text('Rename File'),
         content: TextField(
           controller: ctrl,
           autofocus: true,
-          style: const TextStyle(color: Colors.white),
+          style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color),
         ),
         actions: [
           TextButton(
@@ -156,8 +117,9 @@ class _BrowserScreenState extends State<BrowserScreen> {
         ],
       ),
     );
+    if (!mounted) return;
     if (result != null && result.isNotEmpty) {
-      _bloc.add(RenameFile(file.fileId, result));
+      context.read<BrowserBloc>().add(RenameFile(file.fileId, result));
     }
   }
 
@@ -165,7 +127,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.surface,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         title: Text('Delete "${file.name}"?'),
         content: const Text('This cannot be undone.'),
         actions: [
@@ -174,17 +136,18 @@ class _BrowserScreenState extends State<BrowserScreen> {
               child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
+            style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
             child: const Text('Delete'),
           ),
         ],
       ),
     );
-    if (ok == true) _bloc.add(DeleteFile(file.fileId));
+    if (!mounted) return;
+    if (ok == true) context.read<BrowserBloc>().add(DeleteFile(file.fileId));
   }
 
   Future<void> _downloadAndView(FileRecord file) async {
-    await ServiceLocator.instance.downloadQueue.enqueueDownload(file);
+    context.read<BrowserBloc>().add(EnqueueDownload(file));
     _snack('"${file.name}" added to downloads', success: true);
   }
 
@@ -193,12 +156,12 @@ class _BrowserScreenState extends State<BrowserScreen> {
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.surface,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         title: const Text('New Folder'),
         content: TextField(
           controller: ctrl,
           autofocus: true,
-          style: const TextStyle(color: Colors.white),
+          style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color),
         ),
         actions: [
           TextButton(
@@ -209,47 +172,33 @@ class _BrowserScreenState extends State<BrowserScreen> {
         ],
       ),
     );
-    if (result != null && result.isNotEmpty) _bloc.add(CreateFolder(result));
+    if (!mounted) return;
+    if (result != null && result.isNotEmpty) {
+      context.read<BrowserBloc>().add(CreateFolder(result));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isMobile = Responsive.isMobile(context);
-    return BlocProvider.value(
-      value: _bloc,
-      child: BlocConsumer<BrowserBloc, BrowserState>(
-        listener: (context, state) {
-          if (state.errorMessage != null) _snack(state.errorMessage!);
-        },
-        builder: (context, state) {
-          if (_isLoading ||
-              (state.isLoading &&
-                  state.folders.isEmpty &&
-                  state.files.isEmpty)) {
-            return const Scaffold(
-                body: Center(child: CircularProgressIndicator()));
-          }
+    return BlocConsumer<BrowserBloc, BrowserState>(
+      listener: (context, state) {
+        if (state.errorMessage != null) _snack(state.errorMessage!);
+      },
+      builder: (context, state) {
+        if (state.isLoading && !state.isInitialized) {
+          return const Scaffold(
+              body: Center(child: CircularProgressIndicator()));
+        }
 
-          final scaffold = PopScope(
-            canPop: state.currentFolderId == null && state.category == null,
-            onPopInvokedWithResult: (didPop, result) {
-              if (didPop) return;
-
-              if (state.category != null) {
-                _bloc.add(LoadDirectory(folderId: state.currentFolderId));
-              } else if (state.currentFolderId != null) {
-                final folder = ServiceLocator.instance.hive
-                    .getFolder(state.currentFolderId!);
-                _bloc.add(LoadDirectory(folderId: folder?.parentId));
-              }
-            },
-            child: _buildScaffold(context, state),
-          );
-
-          if (isMobile) return scaffold;
-          return AppShell(selectedIndex: 1, child: scaffold);
-        },
-      ),
+        return PopScope(
+          canPop: state.currentFolderId == null && state.category == null,
+          onPopInvokedWithResult: (didPop, result) {
+            if (didPop) return;
+            context.read<BrowserBloc>().add(NavigateUp());
+          },
+          child: _buildScaffold(context, state),
+        );
+      },
     );
   }
 
@@ -276,6 +225,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
           _buildSearchBar(colors),
           _buildFilterTabs(colors, state),
           const SizedBox(height: 12),
+          if (state.isLoading && state.isInitialized)
+             const LinearProgressIndicator(minHeight: 2),
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -283,17 +234,16 @@ class _BrowserScreenState extends State<BrowserScreen> {
                 _buildSectionHeader('Folders',
                     trailing: IconButton(
                       icon:
-                          const Icon(Icons.add, size: 20, color: Colors.white),
+                          Icon(Icons.add, size: 20, color: colors.textPrimary),
                       onPressed: _createFolder,
                     )),
                 ...state.folders.map((f) {
-                  final count =
-                      ServiceLocator.instance.hive.filesInFolder(f.id).length;
+                  final count = state.folderItemCounts[f.id] ?? 0;
                   return _FolderTile(
                     folder: f,
                     itemCount: count,
                     onTap: () {
-                      _bloc.add(LoadDirectory(folderId: f.id));
+                      context.read<BrowserBloc>().add(LoadDirectory(folderId: f.id));
                     },
                     onMore: () {
                       // Folder more actions
@@ -304,7 +254,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
                 _buildSectionHeader('Files',
                     trailing: GestureDetector(
                       onTap: () =>
-                          _bloc.add(SortOptionChanged(BrowserSortOption.name)),
+                          context.read<BrowserBloc>().add(SortOptionChanged(BrowserSortOption.name)),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -344,8 +294,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
           borderRadius: BorderRadius.circular(25),
         ),
         child: TextField(
-          onChanged: (v) => _bloc.add(SearchQueryChanged(v)),
-          style: const TextStyle(color: Colors.white, fontSize: 15),
+          onChanged: (v) => context.read<BrowserBloc>().add(SearchQueryChanged(v)),
+          style: TextStyle(color: colors.textPrimary, fontSize: 15),
           decoration: InputDecoration(
             hintText: 'Search files and folders...',
             hintStyle: TextStyle(color: colors.textTertiary, fontSize: 14),
@@ -381,7 +331,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 4),
             child: GestureDetector(
               onTap: () {
-                _bloc.add(LoadDirectory(
+                context.read<BrowserBloc>().add(LoadDirectory(
                     folderId: state.currentFolderId, category: filter['key']));
               },
               child: Container(
@@ -394,7 +344,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
                 child: Text(
                   filter['label'] as String,
                   style: TextStyle(
-                    color: isSelected ? Colors.black : colors.textPrimary,
+                    color: isSelected ? (Theme.of(context).brightness == Brightness.dark ? Colors.black : Colors.white) : colors.textPrimary,
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
                   ),
@@ -446,11 +396,11 @@ class _FolderTile extends StatelessWidget {
               width: 52,
               height: 52,
               decoration: BoxDecoration(
-                color: const Color(0xFFFDE9C9),
+                color: colors.fileFolderBg,
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: const Icon(Icons.folder_rounded,
-                  color: Color(0xFFF5A623), size: 28),
+              child: Icon(Icons.folder_rounded,
+                  color: colors.fileFolder, size: 28),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -532,7 +482,7 @@ class _FileTile extends StatelessWidget {
             height: 52,
             fallback: Container(
                 color: colors.bgSurface,
-                child: const Icon(Icons.image, color: Colors.white24)),
+                child: Icon(Icons.image, color: colors.textPrimary.withAlpha(60))),
           ),
         ),
       );
@@ -543,34 +493,34 @@ class _FileTile extends StatelessWidget {
         width: 52,
         height: 52,
         decoration: BoxDecoration(
-          color: const Color(0xFF0F0F1D),
+          color: colors.bgSurfaceInset,
           borderRadius: BorderRadius.circular(14),
         ),
         alignment: Alignment.center,
         child:
-            const Icon(Icons.palette_outlined, color: Colors.purple, size: 26),
+            Icon(Icons.palette_outlined, color: colors.filePalette, size: 26),
       );
     }
 
-    Color bgColor = const Color(0xFF1A1A1E);
+    Color bgColor = colors.fileGenericBg;
     Widget icon;
 
     if (file.isPdf) {
-      bgColor = const Color(0xFF2C0E0E);
-      icon = const Text('PDF',
+      bgColor = colors.filePdfBg;
+      icon = Text('PDF',
           style: TextStyle(
-              color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12));
+              color: colors.filePdf, fontWeight: FontWeight.bold, fontSize: 12));
     } else if (file.isVideo) {
-      bgColor = const Color(0xFF10142D);
-      icon = const Icon(Icons.play_arrow_rounded,
-          color: Color(0xFF5B7FFF), size: 30);
+      bgColor = colors.fileVideoBg;
+      icon = Icon(Icons.play_arrow_rounded,
+          color: colors.fileVideo, size: 30);
     } else if (mime.startsWith('text/')) {
-      bgColor = const Color(0xFF0D172D);
-      icon = const Icon(Icons.description_rounded,
-          color: Color(0xFF4A6CF7), size: 26);
+      bgColor = colors.fileTextBg;
+      icon = Icon(Icons.description_rounded,
+          color: colors.filePdf, size: 26);
     } else {
-      icon = const Icon(Icons.insert_drive_file_rounded,
-          color: Colors.white38, size: 26);
+      icon = Icon(Icons.insert_drive_file_rounded,
+          color: colors.textTertiary, size: 26);
     }
 
     return Container(

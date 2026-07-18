@@ -22,7 +22,7 @@ class NotificationService {
         tag: 'NotificationService');
 
     const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+        AndroidInitializationSettings('@mipmap/launcher_icon');
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,
@@ -101,6 +101,7 @@ class NotificationService {
       channelDescription: 'Notifications for download and upload completions',
       importance: Importance.high,
       priority: Priority.high,
+      icon: '@mipmap/launcher_icon',
       showWhen: true,
     );
 
@@ -210,6 +211,7 @@ class NotificationService {
           'Real-time progress for uploads, downloads, and shares',
       importance: Importance.low,
       priority: Priority.low,
+      icon: '@mipmap/launcher_icon',
       onlyAlertOnce: true,
       showProgress: true,
       maxProgress: 100,
@@ -253,6 +255,7 @@ class NotificationService {
         channelDescription: 'Notifications for finished transfers',
         importance: Importance.high,
         priority: Priority.high,
+        icon: '@mipmap/launcher_icon',
         category: AndroidNotificationCategory.status,
         actions: actions,
       ),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../core/models/app_metadata.dart';
 import '../../../core/models/file_record.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/theme/app_theme.dart';
@@ -10,8 +10,7 @@ import '../../../shared/widgets/thumbnail_widget.dart';
 import '../../../shared/widgets/mobile_shell.dart';
 import '../../../shared/widgets/file_detail_sheet.dart';
 import '../../../shared/widgets/share_link_sheet.dart';
-import '../../storage/bloc/sync_cubit.dart';
-import '../../../core/services/auth_service.dart';
+import '../bloc/home_cubit.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,49 +19,10 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  late final SyncCubit _syncCubit;
-  AppMetadata? _meta;
-  String _userName = 'User';
-
   @override
   void initState() {
     super.initState();
-    _syncCubit = SyncCubit();
-    _initAndSync();
-    _loadUserInfo();
-  }
-
-  @override
-  void dispose() {
-    _syncCubit.close();
-    super.dispose();
-  }
-
-  Future<void> _loadUserInfo() async {
-    final email = await AuthService.instance.getEmail();
-    if (mounted && email != null) {
-      setState(() {
-        _userName = email.split('@').first;
-        if (_userName.isNotEmpty) {
-          _userName = _userName[0].toUpperCase() + _userName.substring(1);
-        }
-      });
-    }
-  }
-
-  Future<void> _initAndSync() async {
-    try {
-      // ServiceLocator is already initialized in AuthBloc or SplashScreen
-      // But we can call sync here as intended.
-      _syncCubit.sync().then((_) => _loadMeta());
-    } catch (_) {}
-  }
-
-  Future<void> _loadMeta() async {
-    try {
-      final m = await ServiceLocator.instance.metadata.fetch();
-      if (mounted) setState(() => _meta = m);
-    } catch (_) {}
+    context.read<HomeCubit>().initialize();
   }
 
   void _showFileDetail(FileRecord file) {
@@ -80,20 +40,14 @@ class _HomeScreenState extends State<HomeScreen> {
           Navigator.pop(ctx);
           _downloadFile(file);
         },
-        onRename: () {
-          Navigator.pop(ctx);
-        },
-        onDelete: () {
-          Navigator.pop(ctx);
-        },
+        onRename: () => Navigator.pop(ctx),
+        onDelete: () => Navigator.pop(ctx),
       ),
     );
   }
 
   void _showShareSheet(FileRecord file) {
-    final queue = ServiceLocator.instance.webShareQueue;
-    final existing =
-        queue.allShares.where((s) => s.fileId == file.fileId).firstOrNull;
+    final existing = context.read<HomeCubit>().getShareJob(file.fileId);
 
     showModalBottomSheet(
       context: context,
@@ -102,26 +56,41 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (ctx) => ShareLinkSheet(
         file: file,
         shareUrl: existing?.shareUrl,
-        onCopyLink: (pwd, expiry) {
-          if (!mounted) return;
+        onCopyLink: (pwd, expiry) async {
+          final cubit = context.read<HomeCubit>();
+          await cubit.shareFile(file, password: pwd, expiryDays: expiry);
+
+          if (!mounted || !ctx.mounted) return;
           Navigator.pop(ctx);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content: Text('Link copied with $expiry validity'),
-                backgroundColor: Colors.green),
-          );
+
+          final job = cubit.getShareJob(file.fileId);
+          if (job != null && job.isComplete && job.shareUrl != null) {
+            await Clipboard.setData(ClipboardData(text: job.shareUrl!));
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                  content: const Text('Link copied to clipboard!'),
+                  backgroundColor: Theme.of(context).extension<AppColorsExtension>()?.success ?? Colors.green),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                  content: const Text('Sharing started. Check "Transfer" tab.'),
+                  backgroundColor: Theme.of(context).extension<AppColorsExtension>()?.success ?? Colors.green),
+            );
+          }
         },
       ),
     );
   }
 
   Future<void> _downloadFile(FileRecord file) async {
-    await ServiceLocator.instance.downloadQueue.enqueueDownload(file);
+    await context.read<HomeCubit>().downloadFile(file);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
           content: Text('"${file.name}" added to downloads'),
-          backgroundColor: Colors.green),
+          backgroundColor: Theme.of(context).extension<AppColorsExtension>()?.success ?? Colors.green),
     );
   }
 
@@ -129,50 +98,74 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
 
-    return BlocProvider.value(
-      value: _syncCubit,
-      child: Scaffold(
-        appBar: AppBar(
-          leading: IconButton(
-            icon: const Icon(Icons.menu_rounded),
-            onPressed: () => MobileShell.of(context)?.openDrawer(),
-          ),
-          title: const Text('Home'),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.file_download_outlined),
-              onPressed: () => ServiceLocator.instance.navigation
-                  .navigateTo(AppDestination.transferDownloads),
+    return BlocBuilder<HomeCubit, HomeState>(
+      builder: (context, state) {
+        if (state.isLoading && state.userName == null) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        return Scaffold(
+          appBar: AppBar(
+            leading: IconButton(
+              icon: const Icon(Icons.menu_rounded),
+              onPressed: () => MobileShell.of(context)?.openDrawer(),
             ),
-          ],
-        ),
-        body: RefreshIndicator(
-          onRefresh: _loadMeta,
-          color: colors.accentPrimary,
-          backgroundColor: colors.bgSurface,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 16),
-                _buildGreetingCard(colors),
-                const SizedBox(height: 24),
-                _buildStorageOverview(colors),
-                const SizedBox(height: 32),
-                _buildRecentFilesHeader(colors),
-                const SizedBox(height: 16),
-                _buildRecentFilesList(colors),
-                const SizedBox(height: 40),
-              ],
+            title: const Text('Home'),
+            actions: [
+              if (state.isSyncing)
+                Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        value: state.syncProgress > 0 ? state.syncProgress : null,
+                        color: colors.accentPrimary,
+                      ),
+                    ),
+                  ),
+                ),
+              IconButton(
+                icon: const Icon(Icons.file_download_outlined),
+                onPressed: () => ServiceLocator.instance.navigation
+                    .navigateTo(AppDestination.transferDownloads),
+              ),
+            ],
+          ),
+          body: RefreshIndicator(
+            onRefresh: () => context.read<HomeCubit>().sync(),
+            color: colors.accentPrimary,
+            backgroundColor: colors.bgSurface,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 16),
+                  _buildGreetingCard(colors, state),
+                  const SizedBox(height: 24),
+                  _buildStorageOverview(colors, state),
+                  const SizedBox(height: 32),
+                  _buildRecentFilesHeader(colors),
+                  const SizedBox(height: 16),
+                  _buildRecentFilesList(colors, state),
+                  const SizedBox(height: 40),
+                ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildGreetingCard(AppColorsExtension colors) {
+  Widget _buildGreetingCard(AppColorsExtension colors, HomeState state) {
+    final name = state.userName ?? 'User';
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -188,7 +181,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Row(
                   children: [
                     Text(
-                      'Good morning, $_userName',
+                      'Good morning, $name',
                       style: Theme.of(context).textTheme.headlineMedium,
                     ),
                     const SizedBox(width: 8),
@@ -197,7 +190,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Your files are safe and synced.',
+                  state.isSyncing ? state.syncStatus : 'Your files are safe and synced.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ],
@@ -212,7 +205,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             alignment: Alignment.center,
             child: Text(
-              _userName.isNotEmpty ? _userName[0].toUpperCase() : 'U',
+              name.isNotEmpty ? name[0].toUpperCase() : 'U',
               style: TextStyle(
                 color: colors.textPrimary,
                 fontWeight: FontWeight.bold,
@@ -225,19 +218,16 @@ class _HomeScreenState extends State<HomeScreen> {
     ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.1, end: 0);
   }
 
-  Widget _buildStorageOverview(AppColorsExtension colors) {
-    final usedMb = _meta?.storageUsedMb ?? 0;
-    final limitMb = _meta?.storageLimitMb ?? 102400; // fallback to 100GB
+  Widget _buildStorageOverview(AppColorsExtension colors, HomeState state) {
+    final usedMb = state.storageUsedMb;
+    final limitMb = state.metadata?.storageLimitMb ?? 102400; // fallback to 100GB
     final usedText = usedMb >= 1024
         ? '${(usedMb / 1024).toStringAsFixed(1)} GB'
         : '${usedMb.toStringAsFixed(0)} MB';
 
-    final hive = ServiceLocator.instance.hive;
-    final totalFiles = hive.totalFiles;
-    final totalShares = ServiceLocator.instance.webShareQueue.allShares.length;
-    final totalDownloads = ServiceLocator.instance.downloadQueue.allJobs
-        .where((j) => j.isComplete)
-        .length;
+    final totalFiles = state.totalFiles;
+    final totalShares = state.totalShares;
+    final totalDownloads = state.totalDownloads;
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -340,40 +330,26 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildRecentFilesList(AppColorsExtension colors) {
-    if (!ServiceLocator.instance.isInitialized) {
+  Widget _buildRecentFilesList(AppColorsExtension colors, HomeState state) {
+    final files = state.recentFiles;
+
+    if (files.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(40.0),
-          child: CircularProgressIndicator(color: colors.accentPrimary),
+          child: Text('No recent files',
+              style: TextStyle(color: colors.textTertiary)),
         ),
       );
     }
 
-    return ValueListenableBuilder(
-      valueListenable: ServiceLocator.instance.hive.filesListenable,
-      builder: (context, _, __) {
-        final files = ServiceLocator.instance.hive.recentFiles(5);
-
-        if (files.isEmpty) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(40.0),
-              child: Text('No recent files',
-                  style: TextStyle(color: colors.textTertiary)),
-            ),
-          );
-        }
-
-        return Column(
-          children: files
-              .map((f) => _RecentFileTile(
-                    file: f,
-                    onMore: () => _showFileDetail(f),
-                  ))
-              .toList(),
-        );
-      },
+    return Column(
+      children: files
+          .map((f) => _RecentFileTile(
+                file: f,
+                onMore: () => _showFileDetail(f),
+              ))
+          .toList(),
     );
   }
 }
@@ -439,7 +415,7 @@ class _RecentFileTile extends StatelessWidget {
             height: 48,
             fallback: Container(
               color: colors.bgSurfaceInset,
-              child: const Icon(Icons.image_rounded, color: Colors.white24),
+              child: Icon(Icons.image_rounded, color: colors.textPrimary.withAlpha(60)),
             ),
           ),
         ),
@@ -460,12 +436,12 @@ class _RecentFileTile extends StatelessWidget {
         width: 48,
         height: 48,
         decoration: BoxDecoration(
-          color: const Color(0xFF0D0D1D),
+          color: colors.bgSurfaceInset,
           borderRadius: BorderRadius.circular(8),
         ),
         alignment: Alignment.center,
         child:
-            const Icon(Icons.palette_outlined, color: Colors.purple, size: 24),
+            Icon(Icons.palette_outlined, color: colors.filePalette, size: 24),
       );
     } else {
       iconColor = colors.fileZip;

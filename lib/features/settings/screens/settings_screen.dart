@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/services/auth_service.dart';
-import '../../../core/services/service_locator.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/theme_service.dart';
-import '../../../shared/utils/responsive.dart';
-import '../../../shared/widgets/app_shell.dart';
 import '../../../shared/widgets/mobile_shell.dart';
+import '../../home/bloc/home_cubit.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -15,133 +14,57 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  String _userName = 'User';
-  String _userEmail = '';
-  double _usedMb = 0;
-  late final Future<Map<String, dynamic>> _quotaFuture;
-
   @override
   void initState() {
     super.initState();
-    _quotaFuture = ServiceLocator.instance.webShareQueue.getBandwidthStatus();
-    _loadData();
-  }
-
-  Future<void> _loadData() async {
-    final email = await AuthService.instance.getEmail();
-    final used = ServiceLocator.instance.hive.totalSizeMb;
-    if (mounted) {
-      setState(() {
-        _userEmail = email ?? 'user@example.com';
-        _userName = _userEmail.split('@').first;
-        if (_userName.isNotEmpty) {
-          _userName = _userName[0].toUpperCase() + _userName.substring(1);
-        }
-        _usedMb = used;
-      });
-    }
+    context.read<HomeCubit>().refreshData();
   }
 
   @override
   Widget build(BuildContext context) {
-    final isMobile = Responsive.isMobile(context);
-    final scaffold = _buildScaffold(context);
-    if (isMobile) return scaffold;
-    return AppShell(selectedIndex: 4, child: scaffold);
-  }
-
-  Scaffold _buildScaffold(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
 
-    return Scaffold(
-      backgroundColor: colors.bgPrimary,
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.menu_rounded),
-          onPressed: () => MobileShell.of(context)?.openDrawer(),
-        ),
-        title: const Text('Settings'),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.search_rounded),
-            onPressed: () {
-              // Settings search logic
-            },
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        children: [
-          _buildProfileCard(colors),
-          const SizedBox(height: 32),
-          _sectionLabel('QUOTA'),
-          const SizedBox(height: 12),
-          _buildQuotaCard(colors),
-          const SizedBox(height: 32),
-          _sectionLabel('STORAGE'),
-          const SizedBox(height: 12),
-          _buildStorageCard(colors),
-          const SizedBox(height: 32),
-          _sectionLabel('PREFERENCES'),
-          const SizedBox(height: 12),
-          _buildAppearanceCard(colors),
-          const SizedBox(height: 16),
-          _buildAboutCard(colors),
-          const SizedBox(height: 32),
-          _buildLogoutButton(colors),
-          const SizedBox(height: 60),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildQuotaCard(AppColorsExtension colors) {
-    return FutureBuilder<Map<String, dynamic>>(
-      future: _quotaFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const SizedBox(
-              height: 80, child: Center(child: CircularProgressIndicator()));
-        }
-        if (snapshot.hasError || !snapshot.hasData) {
-          return Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: colors.bgSurface,
-              borderRadius: BorderRadius.circular(24),
+    return BlocBuilder<HomeCubit, HomeState>(
+      builder: (context, state) {
+        return Scaffold(
+          backgroundColor: colors.bgPrimary,
+          appBar: AppBar(
+            leading: IconButton(
+              icon: const Icon(Icons.menu_rounded),
+              onPressed: () => MobileShell.of(context)?.openDrawer(),
             ),
-            child: const Text('Web upload quota is currently unavailable.'),
-          );
-        }
-        final data = snapshot.data!;
-        final remaining = data['remaining_gb']?.toString() ?? '...';
-        final limit = data['limit_gb']?.toString() ?? '...';
-        final usedPct = (data['used_bytes'] as num? ?? 0) /
-            (data['limit_bytes'] as num? ?? 1);
-
-        return Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-              color: colors.bgSurface, borderRadius: BorderRadius.circular(24)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Web Upload Quota: $remaining GB of $limit GB remaining',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w600, fontSize: 13)),
-              const SizedBox(height: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: LinearProgressIndicator(
-                  value: usedPct.clamp(0.0, 1.0),
-                  minHeight: 6,
-                  backgroundColor: colors.bgSurfaceInset,
-                  valueColor:
-                      AlwaysStoppedAnimation<Color>(colors.accentPrimary),
-                ),
+            title: const Text('Settings'),
+            centerTitle: true,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.search_rounded),
+                onPressed: () {
+                  // Settings search logic
+                },
               ),
+            ],
+          ),
+          body: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            children: [
+              _buildProfileCard(colors, state),
+              const SizedBox(height: 32),
+              _sectionLabel('QUOTA'),
+              const SizedBox(height: 12),
+              _buildQuotaCard(colors, state),
+              const SizedBox(height: 32),
+              _sectionLabel('STORAGE'),
+              const SizedBox(height: 12),
+              _buildStorageCard(colors, state),
+              const SizedBox(height: 32),
+              _sectionLabel('PREFERENCES'),
+              const SizedBox(height: 12),
+              _buildAppearanceCard(colors),
+              const SizedBox(height: 16),
+              _buildAboutCard(colors),
+              const SizedBox(height: 32),
+              _buildLogoutButton(colors),
+              const SizedBox(height: 60),
             ],
           ),
         );
@@ -149,7 +72,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildProfileCard(AppColorsExtension colors) {
+  Widget _buildQuotaCard(AppColorsExtension colors, HomeState state) {
+    final data = state.webShareQuota;
+    
+    if (data == null) {
+      if (state.isLoading) {
+         return const SizedBox(
+              height: 80, child: Center(child: CircularProgressIndicator()));
+      }
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: colors.bgSurface,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: const Text('Web upload quota is currently unavailable.'),
+      );
+    }
+
+    final remaining = data['remaining_gb']?.toString() ?? '...';
+    final limit = data['limit_gb']?.toString() ?? '...';
+    final usedPct = (data['used_bytes'] as num? ?? 0) /
+        (data['limit_bytes'] as num? ?? 1);
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+          color: colors.bgSurface, borderRadius: BorderRadius.circular(24)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Web Upload Quota: $remaining GB of $limit GB remaining',
+              style: const TextStyle(
+                  fontWeight: FontWeight.w600, fontSize: 13)),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: LinearProgressIndicator(
+              value: usedPct.clamp(0.0, 1.0),
+              minHeight: 6,
+              backgroundColor: colors.bgSurfaceInset,
+              valueColor:
+                  AlwaysStoppedAnimation<Color>(colors.accentPrimary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileCard(AppColorsExtension colors, HomeState state) {
+    final name = state.userName ?? 'User';
+    final email = state.userEmail ?? '';
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -167,7 +142,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             alignment: Alignment.center,
             child: Text(
-              _userName.isNotEmpty ? _userName[0].toUpperCase() : 'U',
+              name.isNotEmpty ? name[0].toUpperCase() : 'U',
               style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
@@ -179,11 +154,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_userName,
+                Text(name,
                     style: const TextStyle(
                         fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
-                Text(_userEmail,
+                Text(email,
                     style:
                         const TextStyle(color: Colors.white54, fontSize: 13)),
               ],
@@ -195,10 +170,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildStorageCard(AppColorsExtension colors) {
-    final usedText = _usedMb >= 1024
-        ? '${(_usedMb / 1024).toStringAsFixed(1)} GB'
-        : '${_usedMb.toStringAsFixed(0)} MB';
+  Widget _buildStorageCard(AppColorsExtension colors, HomeState state) {
+    final usedMb = state.storageUsedMb;
+    final usedText = usedMb >= 1024
+        ? '${(usedMb / 1024).toStringAsFixed(1)} GB'
+        : '${usedMb.toStringAsFixed(0)} MB';
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -221,7 +197,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(10),
                   child: LinearProgressIndicator(
-                    value: (_usedMb / 102400).clamp(0.0, 1.0),
+                    value: (usedMb / 102400).clamp(0.0, 1.0),
                     minHeight: 6,
                     backgroundColor: colors.bgSurfaceInset,
                     valueColor:

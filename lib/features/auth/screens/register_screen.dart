@@ -5,7 +5,6 @@ import '../../../core/services/auth_service.dart';
 import '../../../core/services/telegram_service.dart';
 import '../../../core/services/metadata_service.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../shared/utils/responsive.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -90,102 +89,8 @@ class _RegisterScreenState extends State<RegisterScreen>
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop = Responsive.isDesktop(context);
-    return Scaffold(body: isDesktop ? _buildDesktop() : _buildMobile());
+    return Scaffold(body: _buildMobile());
   }
-
-  // ── Desktop ───────────────────────────────────────────────────────────────
-  Widget _buildDesktop() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Row(children: [
-      Expanded(child: _heroPanel()),
-      Container(
-        width: 520,
-        color: isDark ? AppTheme.darkBg : AppTheme.lightBg,
-        child: Center(
-            child: SingleChildScrollView(
-          padding: const EdgeInsets.all(48),
-          child: _buildForm(isDesktop: true),
-        )),
-      ),
-    ]);
-  }
-
-  Widget _heroPanel() {
-    final colors = Theme.of(context).extension<AppColorsExtension>()!;
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: colors.heroGradient,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Stack(children: [
-        Positioned(
-            top: -100,
-            right: -60,
-            child: _glowCircle(280, AppTheme.primary.withAlpha(35))),
-        Positioned(
-            bottom: -80,
-            left: -40,
-            child: _glowCircle(240, colors.glowColor)),
-        Center(
-            child: Padding(
-          padding: const EdgeInsets.all(48),
-          child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _logoBox(),
-                const SizedBox(height: 32),
-                Text('Get started\nfor free.',
-                    style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                        color: Colors.white, fontSize: 40, height: 1.2)),
-                const SizedBox(height: 16),
-                const Text(
-                    'Your own unlimited cloud drive,\npowered by your Telegram channel.',
-                    style: TextStyle(
-                        color: Colors.white60, fontSize: 16, height: 1.6)),
-                const SizedBox(height: 40),
-                _instructionCard(),
-              ]),
-        )),
-      ]),
-    );
-  }
-
-  Widget _instructionCard() => Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: AppTheme.primary.withAlpha(25),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppTheme.primary.withAlpha(60)),
-        ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Row(children: [
-            Icon(Icons.info_outline, color: AppTheme.primary, size: 18),
-            SizedBox(width: 8),
-            Text('Quick Setup',
-                style: TextStyle(
-                    color: AppTheme.primary,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14)),
-          ]),
-          const SizedBox(height: 12),
-          ...[
-            '1. Telegram → @BotFather → /newbot',
-            '2. Create a private channel',
-            '3. Add bot as admin with Pin Messages',
-            '4. Copy Bot Token and Channel ID here'
-          ].map((s) => Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Text(s,
-                    style:
-                        const TextStyle(color: Colors.white54, fontSize: 13)),
-              )),
-        ]),
-      );
 
   // ── Mobile ────────────────────────────────────────────────────────────────
   Widget _buildMobile() {
@@ -256,7 +161,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                   position: _slide,
                   child: Container(
                     decoration: BoxDecoration(
-                      color: isDark ? AppTheme.darkBg : Colors.white,
+                      color: colors.bgSurface,
                       borderRadius:
                           const BorderRadius.vertical(top: Radius.circular(32)),
                       boxShadow: [
@@ -273,7 +178,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                         24,
                         MediaQuery.of(context).viewInsets.bottom + 24,
                       ),
-                      child: _buildForm(isDesktop: false),
+                      child: _buildForm(),
                     ),
                   ),
                 ),
@@ -286,19 +191,10 @@ class _RegisterScreenState extends State<RegisterScreen>
   }
 
   // ── Form ──────────────────────────────────────────────────────────────────
-  Widget _buildForm({required bool isDesktop}) {
+  Widget _buildForm() {
     return Form(
       key: _formKey,
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        if (isDesktop) ...[
-          Text('Create your account',
-              style: Theme.of(context).textTheme.headlineMedium),
-          const SizedBox(height: 6),
-          Text('Set up TelStorage in under a minute',
-              style: Theme.of(context).textTheme.bodyMedium),
-          const SizedBox(height: 32),
-        ],
-
         // ── Account section ──────────────────────────────────────────────
         _sectionLabel('Account'),
         const SizedBox(height: 12),

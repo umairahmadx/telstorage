@@ -42,6 +42,20 @@ class ToggleItemSelection extends BrowserEvent {
 
 class ClearSelection extends BrowserEvent {}
 
+class EnqueueDownload extends BrowserEvent {
+  final FileRecord file;
+  EnqueueDownload(this.file);
+}
+
+class EnqueueShare extends BrowserEvent {
+  final FileRecord file;
+  final String? password;
+  final int? expiryDays;
+  EnqueueShare(this.file, {this.password, this.expiryDays});
+}
+
+class NavigateUp extends BrowserEvent {}
+
 // Mutation Events
 class CreateFolder extends BrowserEvent {
   final String name;
@@ -87,10 +101,12 @@ class BatchMove extends BrowserEvent {
 
 class BrowserState {
   final bool isLoading;
+  final bool isInitialized;
   final String? currentFolderId;
   final String? category;
   final List<FolderRecord> folders;
   final List<FileRecord> files;
+  final Map<String, int> folderItemCounts;
   final String searchQuery;
   final BrowserSortOption sortOption;
   final bool sortAscending;
@@ -104,10 +120,12 @@ class BrowserState {
 
   BrowserState({
     this.isLoading = false,
+    this.isInitialized = false,
     this.currentFolderId,
     this.category,
     this.folders = const [],
     this.files = const [],
+    this.folderItemCounts = const {},
     this.searchQuery = '',
     this.sortOption = BrowserSortOption.name,
     this.sortAscending = true,
@@ -124,12 +142,14 @@ class BrowserState {
 
   BrowserState copyWith({
     bool? isLoading,
+    bool? isInitialized,
     String? currentFolderId,
     bool clearFolderId = false,
     String? category,
     bool clearCategory = false,
     List<FolderRecord>? folders,
     List<FileRecord>? files,
+    Map<String, int>? folderItemCounts,
     String? searchQuery,
     BrowserSortOption? sortOption,
     bool? sortAscending,
@@ -144,10 +164,12 @@ class BrowserState {
   }) {
     return BrowserState(
       isLoading: isLoading ?? this.isLoading,
+      isInitialized: isInitialized ?? this.isInitialized,
       currentFolderId: clearFolderId ? null : (currentFolderId ?? this.currentFolderId),
       category: clearCategory ? null : (category ?? this.category),
       folders: folders ?? this.folders,
       files: files ?? this.files,
+      folderItemCounts: folderItemCounts ?? this.folderItemCounts,
       searchQuery: searchQuery ?? this.searchQuery,
       sortOption: sortOption ?? this.sortOption,
       sortAscending: sortAscending ?? this.sortAscending,
@@ -166,16 +188,10 @@ class BrowserState {
 
 class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
   final StorageRepository _repository = ServiceLocator.instance.storageRepository;
-  late final StreamSubscription _foldersSubscription;
-  late final StreamSubscription _filesSubscription;
+  StreamSubscription? _foldersSubscription;
+  StreamSubscription? _filesSubscription;
 
   BrowserBloc() : super(BrowserState()) {
-    _foldersSubscription = ServiceLocator.instance.hive.foldersListenable.value.watch().listen((_) {
-      add(LoadDirectory(folderId: state.currentFolderId, category: state.category));
-    });
-    _filesSubscription = ServiceLocator.instance.hive.filesListenable.value.watch().listen((_) {
-      add(LoadDirectory(folderId: state.currentFolderId, category: state.category));
-    });
     on<LoadDirectory>(_onLoadDirectory);
     on<SearchQueryChanged>(_onSearchQueryChanged);
     on<SortOptionChanged>(_onSortOptionChanged);
@@ -183,6 +199,9 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
     on<ToggleViewMode>(_onToggleViewMode);
     on<ToggleItemSelection>(_onToggleItemSelection);
     on<ClearSelection>(_onClearSelection);
+    on<EnqueueDownload>(_onEnqueueDownload);
+    on<EnqueueShare>(_onEnqueueShare);
+    on<NavigateUp>(_onNavigateUp);
     
     // Mutation Handlers
     on<CreateFolder>(_onCreateFolder);
@@ -193,6 +212,21 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
     on<DeleteFile>(_onDeleteFile);
     on<BatchDelete>(_onBatchDelete);
     on<BatchMove>(_onBatchMove);
+
+    _initSubscriptions();
+  }
+
+  void _initSubscriptions() {
+    _foldersSubscription = ServiceLocator.instance.hive.foldersListenable.value.watch().listen((_) {
+      if (state.isInitialized) {
+         add(LoadDirectory(folderId: state.currentFolderId, category: state.category));
+      }
+    });
+    _filesSubscription = ServiceLocator.instance.hive.filesListenable.value.watch().listen((_) {
+      if (state.isInitialized) {
+        add(LoadDirectory(folderId: state.currentFolderId, category: state.category));
+      }
+    });
   }
 
   Future<void> _onLoadDirectory(LoadDirectory event, Emitter<BrowserState> emit) async {
@@ -204,10 +238,16 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
       clearCategory: event.category == null,
     ));
 
-    final isOffline = !await Connectivity.hasConnection();
+    try {
+      if (!ServiceLocator.instance.isInitialized) {
+        await ServiceLocator.instance.init();
+      }
 
-    // Load from local Hive cache via Repository (offline-first)
-    _reloadContents(emit, isOffline: isOffline);
+      final isOffline = !await Connectivity.hasConnection();
+      _reloadContents(emit, isOffline: isOffline);
+    } catch (e) {
+      emit(state.copyWith(isLoading: false, errorMessage: 'Initialization failed: $e'));
+    }
   }
 
   void _reloadContents(Emitter<BrowserState> emit, {required bool isOffline}) {
@@ -237,10 +277,18 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
     // Apply sorting
     _sortItems(rawFolders, rawFiles, state.sortOption, state.sortAscending);
 
+    // Calculate folder item counts
+    final Map<String, int> counts = {};
+    for (final f in rawFolders) {
+      counts[f.id] = _repository.getFilesInFolderCount(f.id);
+    }
+
     emit(state.copyWith(
       isLoading: false,
+      isInitialized: true,
       folders: rawFolders,
       files: rawFiles,
+      folderItemCounts: counts,
       isOffline: isOffline,
       pendingActionsCount: ServiceLocator.instance.syncQueue.pendingCount,
     ));
@@ -336,6 +384,32 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
       selectedFolderIds: {},
       selectedFileIds: {},
     ));
+  }
+
+  Future<void> _onEnqueueDownload(EnqueueDownload event, Emitter<BrowserState> emit) async {
+    try {
+      await _repository.enqueueDownload(event.file);
+    } catch (e) {
+      emit(state.copyWith(errorMessage: 'Download failed to start: $e'));
+    }
+  }
+
+  Future<void> _onEnqueueShare(EnqueueShare event, Emitter<BrowserState> emit) async {
+    try {
+      await _repository.enqueueWebShare(event.file, 
+          password: event.password, expiryDays: event.expiryDays);
+    } catch (e) {
+      emit(state.copyWith(errorMessage: 'Sharing failed to start: $e'));
+    }
+  }
+
+  void _onNavigateUp(NavigateUp event, Emitter<BrowserState> emit) {
+    if (state.category != null) {
+      add(LoadDirectory(folderId: state.currentFolderId));
+    } else if (state.currentFolderId != null) {
+      final folder = _repository.getFolder(state.currentFolderId!);
+      add(LoadDirectory(folderId: folder?.parentId));
+    }
   }
 
   // ── Mutation Handlers ────────────────────────────────────────────────────────
@@ -440,8 +514,8 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
 
   @override
   Future<void> close() {
-    _foldersSubscription.cancel();
-    _filesSubscription.cancel();
+    _foldersSubscription?.cancel();
+    _filesSubscription?.cancel();
     return super.close();
   }
 }

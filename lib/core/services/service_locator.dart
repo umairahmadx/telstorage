@@ -45,8 +45,10 @@ class ServiceLocator {
   late StorageRepository _storageRepository;
   late ThumbnailRepository _thumbnailRepository;
   late WebShareQueueService _webShareQueue;
-  late NavigationService _navigation;
-  late TransferQueueService _transferQueue;
+
+  // These are always available as they don't depend on user credentials for creation
+  final NavigationService _navigation = NavigationService.instance;
+  final TransferQueueService _transferQueue = TransferQueueService.instance;
 
   TelegramService get telegram => _telegram;
   HiveService get hive => _hive;
@@ -106,8 +108,6 @@ class ServiceLocator {
       _thumbnailRepository = ThumbnailRepository(_telegram);
       _webShareQueue =
           WebShareQueueService(_downloadService, AppConstants.webSharesBox);
-      _navigation = NavigationService.instance;
-      _transferQueue = TransferQueueService.instance;
 
       await NotificationService.instance.init();
       await NotificationService.instance.requestPermissions();

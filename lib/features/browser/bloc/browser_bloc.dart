@@ -218,9 +218,10 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
     List<FileRecord> rawFiles = [];
 
     if (category != null) {
-      rawFiles = _repository.getFiles(null) // Fetch all to filter by category
-        ..addAll(_repository.getFiles('')) // Just in case
+      rawFiles = _repository.getFiles(folderId)
         ..retainWhere((f) => _matchesCategory(f, category));
+      // Usually don't show folders in filtered category view
+      rawFolders = [];
     } else {
       rawFolders = _repository.getFolders(folderId);
       rawFiles = _repository.getFiles(folderId);

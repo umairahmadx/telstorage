@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/services/auth_service.dart';
+import '../../../core/services/service_locator.dart';
 import '../../../core/theme/app_theme.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -30,7 +31,14 @@ class _SplashScreenState extends State<SplashScreen>
     if (!mounted) return;
 
     if (isLoggedIn) {
-      Navigator.of(context).pushReplacementNamed(AppRouter.home);
+      try {
+        await ServiceLocator.instance.init();
+        if (!mounted) return;
+        Navigator.of(context).pushReplacementNamed(AppRouter.home);
+      } catch (e) {
+        if (!mounted) return;
+        Navigator.of(context).pushReplacementNamed(AppRouter.login);
+      }
     } else {
       Navigator.of(context).pushReplacementNamed(AppRouter.login);
     }

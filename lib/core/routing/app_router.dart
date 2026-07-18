@@ -6,6 +6,7 @@ import '../../features/downloads/screens/downloads_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../../shared/widgets/mobile_shell.dart';
 import '../services/auth_service.dart';
+import '../services/service_locator.dart';
 
 class AppRouter {
   static const String splash = '/';
@@ -98,7 +99,14 @@ class _FallbackRedirectorScreenState extends State<FallbackRedirectorScreen> {
     final isLoggedIn = await AuthService.instance.isLoggedIn();
     if (!mounted) return;
     if (isLoggedIn) {
-      Navigator.of(context).pushReplacementNamed(AppRouter.home);
+      try {
+        await ServiceLocator.instance.init();
+        if (!mounted) return;
+        Navigator.of(context).pushReplacementNamed(AppRouter.home);
+      } catch (e) {
+        if (!mounted) return;
+        Navigator.of(context).pushReplacementNamed(AppRouter.login);
+      }
     } else {
       Navigator.of(context).pushReplacementNamed(AppRouter.login);
     }

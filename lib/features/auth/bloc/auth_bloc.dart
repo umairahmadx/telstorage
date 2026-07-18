@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/services/auth_service.dart';
+import '../../../core/services/service_locator.dart';
 
 // ── Events ────────────────────────────────────────────────────────────────────
 
@@ -49,8 +50,13 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   Future<void> _onAppStarted(AppStarted event, Emitter<AuthState> emit) async {
     final loggedIn = await _authService.isLoggedIn();
     if (loggedIn) {
-      final email = await _authService.getEmail() ?? 'user';
-      emit(Authenticated(email));
+      try {
+        await ServiceLocator.instance.init();
+        final email = await _authService.getEmail() ?? 'user';
+        emit(Authenticated(email));
+      } catch (e) {
+        emit(Unauthenticated());
+      }
     } else {
       emit(Unauthenticated());
     }
@@ -60,7 +66,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(AuthLoading());
     final result = await _authService.login(event.email, event.password);
     if (result['success'] == true) {
-      emit(Authenticated(event.email));
+      try {
+        await ServiceLocator.instance.init();
+        emit(Authenticated(event.email));
+      } catch (e) {
+        emit(AuthError('Failed to initialize services: $e'));
+      }
     } else {
       emit(AuthError(result['message'] ?? 'Login failed'));
     }

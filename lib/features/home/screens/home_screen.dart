@@ -52,7 +52,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _initAndSync() async {
     try {
-      await ServiceLocator.instance.init();
+      // ServiceLocator is already initialized in AuthBloc or SplashScreen
+      // But we can call sync here as intended.
       _syncCubit.sync().then((_) => _loadMeta());
     } catch (_) {}
   }
@@ -340,28 +341,39 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildRecentFilesList(AppColorsExtension colors) {
-    final hive = ServiceLocator.instance.isInitialized
-        ? ServiceLocator.instance.hive
-        : null;
-    final files = hive?.recentFiles(5) ?? [];
-
-    if (files.isEmpty) {
+    if (!ServiceLocator.instance.isInitialized) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(40.0),
-          child: Text('No recent files',
-              style: TextStyle(color: colors.textTertiary)),
+          child: CircularProgressIndicator(color: colors.accentPrimary),
         ),
       );
     }
 
-    return Column(
-      children: files
-          .map((f) => _RecentFileTile(
-                file: f,
-                onMore: () => _showFileDetail(f),
-              ))
-          .toList(),
+    return ValueListenableBuilder(
+      valueListenable: ServiceLocator.instance.hive.filesListenable,
+      builder: (context, _, __) {
+        final files = ServiceLocator.instance.hive.recentFiles(5);
+
+        if (files.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(40.0),
+              child: Text('No recent files',
+                  style: TextStyle(color: colors.textTertiary)),
+            ),
+          );
+        }
+
+        return Column(
+          children: files
+              .map((f) => _RecentFileTile(
+                    file: f,
+                    onMore: () => _showFileDetail(f),
+                  ))
+              .toList(),
+        );
+      },
     );
   }
 }

@@ -230,7 +230,22 @@ class _BrowserScreenState extends State<BrowserScreen> {
                 body: Center(child: CircularProgressIndicator()));
           }
 
-          final scaffold = _buildScaffold(context, state);
+          final scaffold = PopScope(
+            canPop: state.currentFolderId == null && state.category == null,
+            onPopInvokedWithResult: (didPop, result) {
+              if (didPop) return;
+
+              if (state.category != null) {
+                _bloc.add(LoadDirectory(folderId: state.currentFolderId));
+              } else if (state.currentFolderId != null) {
+                final folder = ServiceLocator.instance.hive
+                    .getFolder(state.currentFolderId!);
+                _bloc.add(LoadDirectory(folderId: folder?.parentId));
+              }
+            },
+            child: _buildScaffold(context, state),
+          );
+
           if (isMobile) return scaffold;
           return AppShell(selectedIndex: 1, child: scaffold);
         },

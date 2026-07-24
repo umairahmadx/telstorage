@@ -57,15 +57,34 @@ class FileManagerService {
     await _hive.moveFolder(folderId, parentId);
   }
 
+  bool _hasFilesInFolderTree(String folderId) {
+    if (_hive.filesInFolder(folderId).isNotEmpty) return true;
+    for (final sub in _hive.subfolders(folderId)) {
+      if (_hasFilesInFolderTree(sub.id)) return true;
+    }
+    return false;
+  }
+
+  void _collectSubfolderIds(String folderId, Set<String> idsToDelete) {
+    idsToDelete.add(folderId);
+    for (final sub in _hive.subfolders(folderId)) {
+      _collectSubfolderIds(sub.id, idsToDelete);
+    }
+  }
+
   Future<void> deleteFolder(String folderId) async {
-    final hasFiles = _hive.filesInFolder(folderId).isNotEmpty;
-    if (hasFiles) throw FolderNotEmptyException();
+    if (_hasFilesInFolderTree(folderId)) throw FolderNotEmptyException();
+
+    final idsToDelete = <String>{};
+    _collectSubfolderIds(folderId, idsToDelete);
 
     final meta = await _meta.fetch();
-    meta.folders.removeWhere((f) => f.id == folderId);
+    meta.folders.removeWhere((f) => idsToDelete.contains(f.id));
 
     await _meta.update(meta);
-    await _hive.deleteFolder(folderId);
+    for (final id in idsToDelete) {
+      await _hive.deleteFolder(id);
+    }
   }
 
   // ── File Operations ─────────────────────────────────────────
@@ -113,25 +132,27 @@ class FileManagerService {
       metadataFileId: newMetaFileId,
     );
 
-    // Update FileRef in global metadata
-    final appMeta = await _meta.fetch();
-    final ref = appMeta.files.where((f) => f.fileId == fileId).firstOrNull;
-    if (ref != null) {
-      appMeta.files.removeWhere((f) => f.fileId == fileId);
-      appMeta.files.add(FileRef(
-        fileId: fileId,
-        metaFileId: newMetaFileId,
-        name: newName,
-        folderId: ref.folderId,
-      ));
-      await _meta.update(appMeta);
-    }
+    final updatedRef = FileRef(
+      fileId: fileId,
+      metaFileId: newMetaFileId,
+      name: newName,
+      folderId: record.folderId,
+      sizeMb: record.sizeMb,
+      mimeType: record.mimeType,
+      uploadedAt: record.uploadedAt.toIso8601String(),
+      chunkCount: record.chunkCount,
+      sha256: record.sha256Hash,
+      metadataMessageId: newMsgId,
+      thumbnailFileId: record.thumbnailFileId,
+    );
+    await _meta.updateFileRef(updatedRef);
   }
 
   Future<void> moveFile(String fileId, String? newFolderId) async {
     final record = _hive.getFile(fileId);
     if (record == null) return;
 
+    final oldFolderId = record.folderId;
     final fileMeta = await _fetchFileMeta(
       record.metadataMessageId,
       record.metadataFileId,
@@ -154,28 +175,26 @@ class FileManagerService {
       metadataFileId: newMetaFileId,
     );
 
-    // Update FileRef in global metadata so re-login sees correct folder
-    final appMeta = await _meta.fetch();
-    final ref = appMeta.files.where((f) => f.fileId == fileId).firstOrNull;
-    if (ref != null) {
-      appMeta.files.removeWhere((f) => f.fileId == fileId);
-      appMeta.files.add(FileRef(
-        fileId: fileId,
-        metaFileId: newMetaFileId,
-        name: ref.name,
-        folderId: newFolderId,
-      ));
-      await _meta.update(appMeta);
-    }
+    final updatedRef = FileRef(
+      fileId: fileId,
+      metaFileId: newMetaFileId,
+      name: record.name,
+      folderId: newFolderId,
+      sizeMb: record.sizeMb,
+      mimeType: record.mimeType,
+      uploadedAt: record.uploadedAt.toIso8601String(),
+      chunkCount: record.chunkCount,
+      sha256: record.sha256Hash,
+      metadataMessageId: newMsgId,
+      thumbnailFileId: record.thumbnailFileId,
+    );
+    await _meta.updateFileRef(updatedRef, oldFolderId: oldFolderId);
   }
 
   Future<void> deleteFile(String fileId) async {
     final record = _hive.getFile(fileId);
     if (record == null) return;
 
-    // ── Step 1: Download chunk list BEFORE deleting anything ────────────────
-    // (old code deleted the metadata first, then tried to read it — that's
-    //  the bug this fixes)
     late Map<String, dynamic> fileMeta;
     try {
       fileMeta = await _fetchFileMeta(
@@ -186,29 +205,22 @@ class FileManagerService {
       AppLogger.w(
           'Could not fetch metadata for $fileId — deleting from cache only. Error: $e',
           tag: 'FileManager');
-      // If we can't fetch metadata, still clean up local cache
       await _hive.deleteFile(fileId);
       return;
     }
 
-    // ── Step 2: Delete each chunk from Telegram ──────────────────────────────
     final chunks = fileMeta['chunks'] as List? ?? [];
     for (final chunk in chunks) {
       try {
         await _telegram.deleteMessage(chunk['message_id'] as int);
-      } catch (_) {
-        // Ignore — chunk may already be deleted
-      }
+      } catch (_) {}
     }
 
-    // ── Step 3: Delete metadata JSON from Telegram ───────────────────────────
     await _telegram.deleteMessage(record.metadataMessageId);
 
-    // ── Step 4: Update global metadata ──────────────────────────────────────
     final meta = await _meta.fetch();
-    await _meta.removeFile(meta, fileId, record.sizeMb, record.mimeType);
+    await _meta.removeFile(meta, fileId, record.sizeMb, record.mimeType, folderId: record.folderId);
 
-    // ── Step 5: Remove from local cache ─────────────────────────────────────
     await _hive.deleteFile(fileId);
     AppLogger.i('File $fileId deleted successfully', tag: 'FileManager');
   }
@@ -219,6 +231,7 @@ class FileManagerService {
     required String? metadataFileId,
     required double sizeMb,
     required String mimeType,
+    String? folderId,
   }) async {
     Map<String, dynamic> fileMeta;
     try {
@@ -237,7 +250,7 @@ class FileManagerService {
     }
     await _telegram.deleteMessage(metadataMessageId);
     final meta = await _meta.fetch();
-    await _meta.removeFile(meta, fileId, sizeMb, mimeType);
+    await _meta.removeFile(meta, fileId, sizeMb, mimeType, folderId: folderId);
     AppLogger.i('File $fileId deleted from remote successfully', tag: 'FileManager');
   }
 
@@ -276,7 +289,7 @@ class FileManagerService {
       name: newName,
       sizeMb: record.sizeMb,
       mimeType: record.mimeType,
-      uploadedAt: record.uploadedAt,
+      uploadedAt: DateTime.now(),
       folderId: targetFolderId,
       chunkCount: record.chunkCount,
       sha256Hash: record.sha256Hash,
@@ -284,13 +297,19 @@ class FileManagerService {
 
     await _hive.saveFile(copyRecord);
 
-    final appMeta = await _meta.fetch();
-    appMeta.files.add(FileRef(
+    final newRef = FileRef(
       fileId: newFileId,
       metaFileId: newMetaFileId,
       name: newName,
       folderId: targetFolderId,
-    ));
-    await _meta.update(appMeta);
+      sizeMb: record.sizeMb,
+      mimeType: record.mimeType,
+      uploadedAt: copyRecord.uploadedAt.toIso8601String(),
+      chunkCount: record.chunkCount,
+      sha256: record.sha256Hash,
+      metadataMessageId: newMsgId,
+      thumbnailFileId: record.thumbnailFileId,
+    );
+    await _meta.addFileRef(newRef, record.sizeMb, record.mimeType);
   }
 }

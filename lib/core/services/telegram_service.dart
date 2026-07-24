@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../constants/app_constants.dart';
 import '../utils/app_logger.dart';
+import 'telegram_rate_limiter.dart';
 
 /// All raw Telegram Bot API calls
 class TelegramService {
@@ -22,6 +23,7 @@ class TelegramService {
   /// Upload a file (chunk or metadata json) → returns message_id and file_id
   Future<Map<String, dynamic>> uploadBytesWithFileId(
       Uint8List bytes, String filename) async {
+    await TelegramRateLimiter.instance.acquire();
     try {
       AppLogger.d('Uploading: $filename (${bytes.length} bytes)',
           tag: 'TelegramService');
@@ -67,6 +69,13 @@ class TelegramService {
         'message_id': messageId,
         'file_id': fileId,
       };
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 429) {
+        final retryAfter = e.response?.data?['parameters']?['retry_after'] as int? ?? 5;
+        TelegramRateLimiter.instance.report429(retryAfter);
+      }
+      AppLogger.e('Upload failed: $e', tag: 'TelegramService', error: e);
+      throw Exception('Failed to upload file: $e');
     } catch (e) {
       AppLogger.e('Upload failed: $e', tag: 'TelegramService', error: e);
       throw Exception('Failed to upload file: $e');
@@ -81,6 +90,7 @@ class TelegramService {
 
   /// Download file bytes by file_id (preferred method)
   Future<Uint8List> downloadByFileId(String fileId) async {
+    await TelegramRateLimiter.instance.acquire();
     try {
       AppLogger.d('Downloading file with file_id: $fileId',
           tag: 'TelegramService');
@@ -143,6 +153,7 @@ class TelegramService {
 
   /// Delete a message (used for cleanup)
   Future<void> deleteMessage(int messageId) async {
+    await TelegramRateLimiter.instance.acquire();
     try {
       await _dio.post(
         '$_base/deleteMessage',
@@ -160,6 +171,7 @@ class TelegramService {
   /// channel and reading back the document file_id, then deleting the copy.
   /// Used to discover the pinned metadata file_id on a fresh device.
   Future<String> getFileIdOfMessage(int messageId) async {
+    await TelegramRateLimiter.instance.acquire();
     try {
       AppLogger.d('Getting file_id for message $messageId via forward...',
           tag: 'TelegramService');
@@ -201,6 +213,7 @@ class TelegramService {
 
   /// Pin a message (used for .metadata.json)
   Future<void> pinMessage(int messageId) async {
+    await TelegramRateLimiter.instance.acquire();
     try {
       final response = await _dio.post(
         '$_base/pinChatMessage',
@@ -227,6 +240,7 @@ class TelegramService {
 
   /// Get pinned message_id
   Future<int> getPinnedMessageId() async {
+    await TelegramRateLimiter.instance.acquire();
     try {
       final res = await _dio.get(
         '$_base/getChat',

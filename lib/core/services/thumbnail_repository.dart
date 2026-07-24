@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/file_record.dart';
@@ -9,16 +10,33 @@ import 'telegram_service.dart';
 class ThumbnailRepository {
   final TelegramService _telegram;
   final Map<String, Future<dynamic>> _activeDownloads = {};
-  final Map<String, Uint8List> _webCache = {};
+  static const int _maxWebCacheSize = 200;
+  final LinkedHashMap<String, Uint8List> _webCache = LinkedHashMap();
 
   ThumbnailRepository(this._telegram);
+
+  void clearWebCache() {
+    _webCache.clear();
+    _activeDownloads.clear();
+  }
+
+  void _addToWebCache(String fileId, Uint8List bytes) {
+    if (_webCache.containsKey(fileId)) {
+      _webCache.remove(fileId);
+    } else if (_webCache.length >= _maxWebCacheSize) {
+      _webCache.remove(_webCache.keys.first);
+    }
+    _webCache[fileId] = bytes;
+  }
 
   Future<dynamic> getThumbnailData(FileRecord file) async {
     if (file.thumbnailFileId == null) return null;
 
     if (kIsWeb) {
       if (_webCache.containsKey(file.fileId)) {
-        return _webCache[file.fileId];
+        final bytes = _webCache.remove(file.fileId)!;
+        _webCache[file.fileId] = bytes; // MRU update
+        return bytes;
       }
       if (_activeDownloads.containsKey(file.fileId)) {
         return _activeDownloads[file.fileId];
@@ -27,7 +45,7 @@ class ThumbnailRepository {
       final downloadFuture = () async {
         try {
           final bytes = await _telegram.downloadByFileId(file.thumbnailFileId!);
-          _webCache[file.fileId] = bytes;
+          _addToWebCache(file.fileId, bytes);
           return bytes;
         } catch (e) {
           AppLogger.e('Failed to download web thumbnail: $e',

@@ -16,6 +16,8 @@ import 'sync_queue_service.dart';
 import 'thumbnail_repository.dart';
 import 'navigation_service.dart';
 import 'transfer_queue_service.dart';
+import 'lru_folder_cache_service.dart';
+import 'telegram_rate_limiter.dart';
 import '../../features/storage/data/repositories/storage_repository.dart';
 
 /// Single initialization point for all services.
@@ -131,6 +133,12 @@ class ServiceLocator {
   /// Call on logout to clear all service state.
   void reset() {
     AppLogger.i('Resetting ServiceLocator', tag: 'ServiceLocator');
+    LruFolderCacheService.instance.clear();
+    TelegramRateLimiter.instance.reset();
+    TransferQueueService.instance.clear();
+    if (_initialized) {
+      _thumbnailRepository.clearWebCache();
+    }
     _initialized = false;
     _initFuture = null;
   }

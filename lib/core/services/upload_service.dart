@@ -37,12 +37,30 @@ class UploadService {
 
   static const int _partSize = AppConstants.chunkSizeBytes; // 19 MB
 
-  Future<void> uploadFile(
+  Future<T> _withRetry<T>(Future<T> Function() fn, {int maxAttempts = 3}) async {
+    int attempt = 0;
+    while (true) {
+      try {
+        attempt++;
+        return await fn();
+      } catch (e) {
+        if (attempt >= maxAttempts) rethrow;
+        AppLogger.w(
+          'Upload attempt $attempt failed ($e), retrying in ${1 << (attempt - 1)}s...',
+          tag: 'UploadService',
+        );
+        await Future.delayed(Duration(seconds: 1 << (attempt - 1)));
+      }
+    }
+  }
+
+  Future<Map<String, dynamic>> uploadFile(
     Uint8List bytes,
     String name,
     String? folderId,
-    Function(double progress, String status) onProgress,
-  ) async {
+    Function(double progress, String status) onProgress, {
+    bool skipGlobalMetadataUpdate = false,
+  }) async {
     if (!await Connectivity.hasConnection()) {
       throw OfflineException('Cannot upload: no internet connection.');
     }
@@ -105,11 +123,11 @@ class UploadService {
 
         if (thumbResult != null) {
           internalOnProgress(0.10, 'Uploading thumbnail…');
-          final uploadRes = await _telegram.uploadBytesWithFileId(
+          final thumbUpload = await _telegram.uploadBytesWithFileId(
             thumbResult.bytes,
-            'thumb_$fileId.${thumbResult.extension}',
+            '.thumb_$name.${thumbResult.extension}',
           );
-          thumbnailFileId = uploadRes['file_id'] as String;
+          thumbnailFileId = thumbUpload['file_id'] as String?;
         }
       } catch (e) {
         AppLogger.e('Thumbnail upload step failed for $name: $e',
@@ -123,7 +141,8 @@ class UploadService {
         internalOnProgress(0.12, 'Uploading "$name"…');
         AppLogger.d('Small file — uploading directly', tag: 'UploadService');
 
-        final result = await _telegram.uploadBytesWithFileId(bytes, name);
+        final result =
+            await _withRetry(() => _telegram.uploadBytesWithFileId(bytes, name));
         chunkInfos.add(ChunkInfo(
           index: 1,
           messageId: result['message_id'] as int,
@@ -169,8 +188,8 @@ class UploadService {
               'Part ${i + 1}/${parts.length}: "$partName" (${(parts[i].length / 1048576).toStringAsFixed(2)} MB)',
               tag: 'UploadService');
 
-          final result =
-              await _telegram.uploadBytesWithFileId(parts[i], partName);
+          final result = await _withRetry(
+              () => _telegram.uploadBytesWithFileId(parts[i], partName));
           chunkInfos.add(ChunkInfo(
             index: i + 1,
             messageId: result['message_id'] as int,
@@ -209,11 +228,14 @@ class UploadService {
       fileMeta['metadata_message_id'] = metaResult['message_id'] as int;
       fileMeta['metadata_file_id'] = metaResult['file_id'] as String;
 
-      // ── Step 4: Update global metadata + local Hive ───────────────────────
+      // ── Step 4: Save to local Hive + batch or single metadata update ──────
       internalOnProgress(0.94, 'Updating storage index…');
-      final appMeta = await _metadata.fetch();
-      await _metadata.addFile(appMeta, fileMeta);
       await _hive.saveFile(FileRecord.fromMap(fileMeta));
+
+      if (!skipGlobalMetadataUpdate) {
+        final appMeta = await _metadata.fetch();
+        await _metadata.addFile(appMeta, fileMeta);
+      }
 
       internalOnProgress(1.0, 'Upload complete!');
       TransferQueueService.instance
@@ -225,6 +247,8 @@ class UploadService {
         body: '$name has been successfully uploaded.',
         payload: 'transfer_upload',
       );
+
+      return fileMeta;
     } catch (e) {
       final wasCancelled = transferId != null &&
           TransferQueueService.instance.isCancelled(transferId);
@@ -239,6 +263,11 @@ class UploadService {
       AppLogger.e('Upload failed: $e', tag: 'UploadService', error: e);
       throw Exception('Upload failed: $e');
     }
+  }
+
+  /// Batch update global metadata in 1 single API call for multi-file uploads.
+  Future<void> commitUploadBatch(List<Map<String, dynamic>> filesDataList) async {
+    await _metadata.addBatchFiles(filesDataList);
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────

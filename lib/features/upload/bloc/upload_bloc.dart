@@ -104,9 +104,13 @@ class UploadWaitingForNetwork extends UploadState {
 
 class UploadBloc extends Bloc<UploadEvent, UploadState> {
   final List<UploadTask> _queue = [];
+  final List<Map<String, dynamic>> _completedBatchMeta = [];
   int _completedCount = 0;
   int _totalCount = 0;
+  int _activeWorkers = 0;
   bool _isWaitingForNetwork = false;
+
+  static const int _maxConcurrentWorkers = 3;
 
   UploadBloc() : super(UploadIdle()) {
     on<StartUpload>(_onStartUpload);
@@ -133,23 +137,30 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
     _queue.addAll(event.tasks);
     _totalCount += event.tasks.length;
 
-    if (state is! UploadInProgress && !_isWaitingForNetwork) {
-      add(_ProcessNextUpload());
+    // Spawn workers up to the concurrency cap
+    if (!_isWaitingForNetwork) {
+      final workersToSpawn = (_maxConcurrentWorkers - _activeWorkers).clamp(0, _queue.length);
+      for (int i = 0; i < workersToSpawn; i++) {
+        add(_ProcessNextUpload());
+      }
     }
   }
 
   void _onCancelUploadTask(CancelUploadTask event, Emitter<UploadState> emit) {
-    final currentActive = _queue.isNotEmpty ? _queue.first : null;
     _queue.removeWhere((task) => task.id == event.taskId);
     if (_totalCount > 0) _totalCount--;
-
-    if (currentActive != null && currentActive.id == event.taskId) {
-      add(_ProcessNextUpload());
-    }
   }
 
   Future<void> _onProcessNextUpload(_ProcessNextUpload event, Emitter<UploadState> emit) async {
-    if (_queue.isEmpty) {
+    // All work done — commit batch and reset
+    if (_queue.isEmpty && _activeWorkers == 0) {
+      if (_completedBatchMeta.isNotEmpty) {
+        try {
+          await ServiceLocator.instance.uploadService
+              .commitUploadBatch(List.from(_completedBatchMeta));
+          _completedBatchMeta.clear();
+        } catch (_) {}
+      }
       _totalCount = 0;
       _completedCount = 0;
       _isWaitingForNetwork = false;
@@ -157,22 +168,31 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
       return;
     }
 
+    // No more queued items but workers still active — wait for them
+    if (_queue.isEmpty) return;
+
+    // Concurrency cap reached — this worker must wait
+    if (_activeWorkers >= _maxConcurrentWorkers) return;
+
     if (!ServiceLocator.instance.isInitialized) {
       emit(UploadError('Not logged in'));
       return;
     }
 
-    final task = _queue.first;
+    final task = _queue.removeAt(0);
 
     final isOnline = await Connectivity.hasConnection();
     if (!isOnline) {
+      _queue.insert(0, task); // Put it back
       _isWaitingForNetwork = true;
       emit(UploadWaitingForNetwork(task.name));
-      _retryWhenOnline(task);
+      _retryWhenOnline();
       return;
     }
 
     _isWaitingForNetwork = false;
+    _activeWorkers++;
+
     emit(UploadInProgress(
       progress: 0.0,
       status: 'Uploading ${task.name} (${_completedCount + 1}/$_totalCount)…',
@@ -182,7 +202,8 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
     ));
 
     try {
-      await ServiceLocator.instance.uploadService.uploadFile(
+      final isBatch = _totalCount > 1;
+      final fileMeta = await ServiceLocator.instance.uploadService.uploadFile(
         task.bytes,
         task.name,
         task.folderId,
@@ -192,9 +213,24 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
             'Uploading ${task.name} (${_completedCount + 1}/$_totalCount)…',
           ));
         },
+        skipGlobalMetadataUpdate: isBatch,
       );
+
+      if (isBatch && fileMeta.isNotEmpty) {
+        _completedBatchMeta.add(fileMeta);
+      }
+
       add(UploadCompleted());
     } catch (e) {
+      // Flush successful batch items before reporting failure
+      if (_completedBatchMeta.isNotEmpty) {
+        try {
+          await ServiceLocator.instance.uploadService
+              .commitUploadBatch(List.from(_completedBatchMeta));
+          _completedBatchMeta.clear();
+        } catch (_) {}
+      }
+
       final isOnline = await Connectivity.hasConnection();
       final isNetworkError = !isOnline ||
           e is OfflineException ||
@@ -206,8 +242,10 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
 
       if (isNetworkError) {
         _isWaitingForNetwork = true;
+        _activeWorkers--;
+        _queue.insert(0, task); // Re-queue for retry
         emit(UploadWaitingForNetwork(task.name));
-        _retryWhenOnline(task);
+        _retryWhenOnline();
       } else {
         add(UploadFailed(e.toString()));
       }
@@ -228,19 +266,17 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
   }
 
   void _onUploadCompleted(UploadCompleted event, Emitter<UploadState> emit) {
-    if (_queue.isNotEmpty) {
-      _queue.removeAt(0);
-      _completedCount++;
-    }
+    _completedCount++;
+    _activeWorkers--;
+    // Dispatch next worker — may spawn additional parallel workers too
     add(_ProcessNextUpload());
   }
 
   void _onUploadFailed(UploadFailed event, Emitter<UploadState> emit) {
-    if (_queue.isNotEmpty) {
-      final failedTask = _queue.removeAt(0);
-      _completedCount++;
-      emit(UploadSingleError(fileName: failedTask.name, message: event.message));
-    }
+    _completedCount++;
+    _activeWorkers--;
+    emit(UploadSingleError(fileName: 'File', message: event.message));
+    // Continue processing remaining queue
     add(_ProcessNextUpload());
   }
 
@@ -248,19 +284,24 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
     _queue.clear();
     _totalCount = 0;
     _completedCount = 0;
+    _activeWorkers = 0;
     _isWaitingForNetwork = false;
     emit(UploadIdle());
   }
 
-  Future<void> _retryWhenOnline(UploadTask task) async {
+  Future<void> _retryWhenOnline() async {
     while (true) {
       await Future.delayed(const Duration(seconds: 5));
       if (isClosed) return;
       if (await Connectivity.hasConnection()) {
         _isWaitingForNetwork = false;
-        add(_ProcessNextUpload());
+        // Re-spawn workers up to the cap
+        for (int i = _activeWorkers; i < _maxConcurrentWorkers && _queue.isNotEmpty; i++) {
+          add(_ProcessNextUpload());
+        }
         break;
       }
     }
   }
 }
+

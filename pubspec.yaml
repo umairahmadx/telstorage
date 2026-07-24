@@ -52,8 +52,9 @@ dependencies:
   path_provider: ^2.1.2
   path: ^1.9.0
 
-  # Background service for large uploads
+  # Background service for large uploads & background sync
   flutter_background_service: ^5.0.5
+  workmanager: ^0.5.2
 
   # Animations
   flutter_animate: ^4.5.0
@@ -70,6 +71,7 @@ dependencies:
 
   # Video thumbnail extraction
   get_thumbnail_video: ^0.7.3
+  image: ^4.2.0
 
   # Web platform APIs
   web: ^1.1.1

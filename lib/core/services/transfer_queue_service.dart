@@ -195,4 +195,10 @@ class TransferQueueService {
     _tasksNotifier.value = persistedTasks;
     _updateNotification();
   }
+
+  void clear() {
+    _tasksNotifier.value = [];
+    _lastUpdateTimes.clear();
+    _lastProgresses.clear();
+  }
 }

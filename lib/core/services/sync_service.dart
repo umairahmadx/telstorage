@@ -72,7 +72,17 @@ class SyncService {
       }
 
       // ── Files: build index of what Telegram knows about ───────────────────
-      final fileRefs = appMeta.files;
+      final List<FileRef> fileRefs = [];
+      if (appMeta.isPartitioned && appMeta.folderPartitionsMap.isNotEmpty) {
+        for (final folderId in appMeta.folderPartitionsMap.keys) {
+          final partition = await _metadata.fetchFolderPartition(folderId);
+          if (partition != null) {
+            fileRefs.addAll(partition.files);
+          }
+        }
+      } else {
+        fileRefs.addAll(appMeta.files);
+      }
       AppLogger.d('${fileRefs.length} file(s) on Telegram', tag: 'SyncService');
 
       final List<FileRef> legacySyncQueue = [];
@@ -209,9 +219,6 @@ class SyncService {
 
         AppLogger.d('Background sync completed for: ${ref.name}',
             tag: 'SyncService');
-
-        // Delay 200ms to avoid rate-limiting issues
-        await Future.delayed(const Duration(milliseconds: 200));
       } catch (e) {
         AppLogger.w('Background sync failed for ${ref.name}: $e',
             tag: 'SyncService');

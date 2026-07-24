@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import '../constants/app_constants.dart';
@@ -27,6 +28,9 @@ class SyncLogItem {
 class SyncQueueService {
   final FileManagerService _fileManager;
   bool _isProcessing = false;
+  bool _isFlushing = false;
+  Timer? _debounceTimer;
+  DateTime? _firstUnflushedAt;
   final ValueNotifier<int> pendingCountNotifier = ValueNotifier<int>(0);
   final ValueNotifier<List<SyncLogItem>> logsNotifier = ValueNotifier<List<SyncLogItem>>([]);
 
@@ -50,6 +54,23 @@ class SyncQueueService {
     );
     logsNotifier.value = [log, ...logsNotifier.value];
     _updatePendingCount();
+
+    _firstUnflushedAt ??= DateTime.now();
+
+    // Check 60-second hard ceiling
+    if (DateTime.now().difference(_firstUnflushedAt!) >= const Duration(seconds: 60)) {
+      AppLogger.i('60s max-wait flush ceiling reached — forcing immediate sync flush',
+          tag: 'SyncQueue');
+      _debounceTimer?.cancel();
+      processQueue();
+      return;
+    }
+
+    // 10-second sliding debounce timer
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(seconds: 10), () {
+      processQueue();
+    });
   }
 
   void _updatePendingCount() {
@@ -62,7 +83,7 @@ class SyncQueueService {
 
   Future<void> processQueue() async {
     _updatePendingCount();
-    if (_isProcessing) return;
+    if (_isProcessing || _isFlushing) return;
     if (pendingCount == 0) return;
 
     if (!await Connectivity.hasConnection()) {
@@ -70,6 +91,7 @@ class SyncQueueService {
       return;
     }
 
+    _isFlushing = true;
     _isProcessing = true;
     AppLogger.i('SyncQueue: starting processing of $pendingCount actions...', tag: 'SyncQueue');
 
@@ -125,7 +147,9 @@ class SyncQueueService {
         }
       }
     } finally {
+      _isFlushing = false;
       _isProcessing = false;
+      _firstUnflushedAt = null;
       _updatePendingCount();
       AppLogger.i('SyncQueue: processing finished.', tag: 'SyncQueue');
     }
@@ -180,7 +204,15 @@ class SyncQueueService {
 
       case 'deleteFolder':
         final folderId = payload['folderId'] as String;
-        await _fileManager.deleteFolder(folderId);
+        try {
+          await _fileManager.deleteFolder(folderId);
+        } catch (e) {
+          if (e is FolderNotEmptyException) {
+            AppLogger.w('SyncQueue: Folder $folderId was not empty on remote, skipping deletion', tag: 'SyncQueue');
+          } else {
+            rethrow;
+          }
+        }
         break;
 
       case 'renameFile':

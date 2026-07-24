@@ -1,5 +1,6 @@
-import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
+import 'package:image/image.dart' as img;
 import 'package:get_thumbnail_video/index.dart';
 import 'package:get_thumbnail_video/video_thumbnail.dart';
 import 'package:pdfx/pdfx.dart';
@@ -8,6 +9,18 @@ import '../utils/app_logger.dart';
 import 'thumbnail_helper_native.dart'
     if (dart.library.js_interop) 'thumbnail_helper_web.dart';
 
+Uint8List _isolateProcessImage(Uint8List bytes) {
+  try {
+    final decoded = img.decodeImage(bytes);
+    if (decoded != null) {
+      final resized = img.copyResize(decoded, width: ThumbnailGenerator.maxDimension, height: ThumbnailGenerator.maxDimension);
+      final encoded = Uint8List.fromList(img.encodeJpg(resized, quality: ThumbnailGenerator.quality));
+      return ThumbnailGenerator.compressUnder5KB(encoded);
+    }
+  } catch (_) {}
+  return bytes;
+}
+
 class ThumbnailResult {
   final Uint8List bytes;
   final String extension;
@@ -15,8 +28,31 @@ class ThumbnailResult {
 }
 
 class ThumbnailGenerator {
-  static const int maxDimension = 150;
-  static const int quality = 70;
+  static const int maxDimension = 50;
+  static const int quality = 60;
+  static const int maxByteSize = 5120; // Strict 5 KB limit
+
+  static Uint8List compressUnder5KB(Uint8List rawBytes) {
+    if (rawBytes.length <= maxByteSize) return rawBytes;
+    try {
+      final decoded = img.decodeImage(rawBytes);
+      if (decoded != null) {
+        int q = 50;
+        int dim = 45;
+        while (dim >= 25) {
+          final resized = img.copyResize(decoded, width: dim, height: dim);
+          final encoded = Uint8List.fromList(img.encodeJpg(resized, quality: q));
+          if (encoded.length <= maxByteSize) return encoded;
+          if (q > 20) {
+            q -= 15;
+          } else {
+            dim -= 10;
+          }
+        }
+      }
+    } catch (_) {}
+    return rawBytes;
+  }
 
   static Future<ThumbnailResult?> generate({
     required Uint8List bytes,
@@ -24,15 +60,23 @@ class ThumbnailGenerator {
     required String mimeType,
   }) async {
     try {
+      Uint8List? thumbBytes;
+      String ext = 'jpg';
+
       if (mimeType.startsWith('image/')) {
-        final thumbBytes = await generateImageThumbnail(bytes);
-        return ThumbnailResult(thumbBytes, 'jpg');
+        thumbBytes = await generateImageThumbnail(bytes);
+        ext = 'jpg';
       } else if (mimeType.startsWith('video/')) {
-        final thumbBytes = await generateVideoThumbnail(bytes, filename);
-        return ThumbnailResult(thumbBytes, 'jpg');
+        thumbBytes = await generateVideoThumbnail(bytes, filename);
+        ext = 'jpg';
       } else if (mimeType == 'application/pdf') {
-        final thumbBytes = await generatePdfThumbnail(bytes);
-        return ThumbnailResult(thumbBytes, 'png');
+        thumbBytes = await generatePdfThumbnail(bytes);
+        ext = 'png';
+      }
+
+      if (thumbBytes != null) {
+        final compressedBytes = compressUnder5KB(thumbBytes);
+        return ThumbnailResult(compressedBytes, ext);
       }
     } catch (e) {
       AppLogger.w('Thumbnail generation failed for $filename ($mimeType): $e',
@@ -42,6 +86,10 @@ class ThumbnailGenerator {
   }
 
   static Future<Uint8List> generateImageThumbnail(Uint8List bytes) async {
+    try {
+      return await compute(_isolateProcessImage, bytes);
+    } catch (_) {}
+
     final ui.Codec codec = await ui.instantiateImageCodec(
       bytes,
       targetWidth: maxDimension,

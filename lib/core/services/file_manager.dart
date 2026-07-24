@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:uuid/uuid.dart';
 import '../models/app_metadata.dart';
 import '../models/folder_record.dart';
+import '../models/file_record.dart';
 import '../utils/app_logger.dart';
 import 'hive_service.dart';
 import 'metadata_service.dart';
@@ -229,5 +230,63 @@ class FileManagerService {
     final meta = await _meta.fetch();
     await _meta.removeFile(meta, fileId, sizeMb, mimeType);
     AppLogger.i('File $fileId deleted from remote successfully', tag: 'FileManager');
+  }
+
+  Future<void> copyFile(String fileId, String? targetFolderId) async {
+    final record = _hive.getFile(fileId);
+    if (record == null) return;
+
+    final fileMeta = await _fetchFileMeta(
+      record.metadataMessageId,
+      record.metadataFileId,
+    );
+
+    final nameParts = (fileMeta['name'] as String? ?? 'file').split('.');
+    String newName;
+    if (nameParts.length > 1 && fileMeta['name'].toString().contains('.')) {
+      final ext = nameParts.removeLast();
+      newName = '${nameParts.join('.')}_copy.$ext';
+    } else {
+      newName = '${fileMeta['name']}_copy';
+    }
+
+    final newFileId = const Uuid().v4();
+    fileMeta['id'] = newFileId;
+    fileMeta['name'] = newName;
+    fileMeta['folder_id'] = targetFolderId;
+    fileMeta['uploaded_at'] = DateTime.now().toIso8601String();
+
+    final uploadResult = await _telegram.uploadBytesWithFileId(
+      Uint8List.fromList(utf8.encode(jsonEncode(jsonEncode(fileMeta) == '' ? {} : fileMeta))),
+      '$newFileId.json',
+    );
+
+    final newMsgId = uploadResult['message_id'] as int;
+    final newMetaFileId = uploadResult['file_id'] as String;
+
+    final copyRecord = FileRecord(
+      fileId: newFileId,
+      metadataMessageId: newMsgId,
+      metadataFileId: newMetaFileId,
+      thumbnailFileId: record.thumbnailFileId,
+      name: newName,
+      sizeMb: record.sizeMb,
+      mimeType: record.mimeType,
+      uploadedAt: DateTime.now(),
+      folderId: targetFolderId,
+      chunkCount: record.chunkCount,
+      sha256Hash: record.sha256Hash,
+    );
+
+    await _hive.saveFile(copyRecord);
+
+    final appMeta = await _meta.fetch();
+    appMeta.files.add(FileRef(
+      fileId: newFileId,
+      metaFileId: newMetaFileId,
+      name: newName,
+      folderId: targetFolderId,
+    ));
+    await _meta.update(appMeta);
   }
 }

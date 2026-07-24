@@ -92,6 +92,12 @@ class SyncQueueService {
         await _fileManager.moveFile(fileId, folderId);
         break;
 
+      case 'copyFile':
+        final fileId = payload['fileId'] as String;
+        final targetFolderId = payload['targetFolderId'] as String?;
+        await _fileManager.copyFile(fileId, targetFolderId);
+        break;
+
       case 'deleteFile':
         final fileId = payload['fileId'] as String;
         final metadataMessageId = payload['metadataMessageId'] as int;

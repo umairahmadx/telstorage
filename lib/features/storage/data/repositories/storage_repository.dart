@@ -7,25 +7,28 @@ import '../../../../core/services/hive_service.dart';
 import '../../../../core/services/file_manager.dart';
 import '../../../../core/services/metadata_service.dart';
 import '../../../../core/services/auth_service.dart';
-import '../../../../core/utils/connectivity.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/services/sync_queue_service.dart';
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/models/web_share_job.dart';
 import 'package:hive/hive.dart';
 
 class StorageRepository {
   final HiveService _hive;
-  final FileManagerService _fileManager;
+  final FileManagerService fileManager;
   final MetadataService _metadataService;
 
   StorageRepository(
     this._hive,
-    this._fileManager,
+    this.fileManager,
     this._metadataService,
   );
 
   Box<PendingAction> get _pendingBox =>
       Hive.box<PendingAction>(AppConstants.pendingActionsBox);
+
+  SyncQueueService get _syncQueue => ServiceLocator.instance.syncQueue;
+  SyncQueueService get syncQueue => ServiceLocator.instance.syncQueue;
 
   // ── Stats & Metadata ──────────────────────────────────────────────────
 
@@ -105,52 +108,46 @@ class StorageRepository {
     return _hive.recentFiles(limit);
   }
 
-  // ── Mutating Operations (Sync / Queue offline) ────────────────────────
+  // ── Mutating Operations (Local-First Optimistic Execution) ─────────────
 
   Future<void> createFolder(String name, {String? parentId}) async {
-    if (await Connectivity.hasConnection()) {
-      await _fileManager.createFolder(name, parentId: parentId);
-    } else {
-      final folderId = const Uuid().v4();
-      final folder = FolderRecord(
-        id: folderId,
-        name: name,
-        parentId: parentId,
-        createdAt: DateTime.now(),
-      );
-      await _hive.saveFolder(folder);
+    final folderId = const Uuid().v4();
+    final folder = FolderRecord(
+      id: folderId,
+      name: name,
+      parentId: parentId,
+      createdAt: DateTime.now(),
+    );
+    await _hive.saveFolder(folder);
 
-      final pending = PendingAction(
-        id: const Uuid().v4(),
-        actionType: 'createFolder',
-        payload: {
-          'id': folderId,
-          'name': name,
-          'parentId': parentId,
-        },
-        timestamp: DateTime.now(),
-      );
-      await _pendingBox.put(pending.id, pending);
-    }
+    final pending = PendingAction(
+      id: const Uuid().v4(),
+      actionType: 'createFolder',
+      payload: {
+        'id': folderId,
+        'name': name,
+        'parentId': parentId,
+      },
+      timestamp: DateTime.now(),
+    );
+    await _pendingBox.put(pending.id, pending);
+    _syncQueue.processQueue();
   }
 
   Future<void> renameFolder(String folderId, String newName) async {
-    if (await Connectivity.hasConnection()) {
-      await _fileManager.renameFolder(folderId, newName);
-    } else {
-      await _hive.renameFolder(folderId, newName);
+    await _hive.renameFolder(folderId, newName);
 
-      final pending = PendingAction(
-        id: const Uuid().v4(),
-        actionType: 'renameFolder',
-        payload: {
-          'folderId': folderId,
-          'name': newName,
-        },
-        timestamp: DateTime.now(),
-      );
-      await _pendingBox.put(pending.id, pending);
-    }
+    final pending = PendingAction(
+      id: const Uuid().v4(),
+      actionType: 'renameFolder',
+      payload: {
+        'folderId': folderId,
+        'name': newName,
+      },
+      timestamp: DateTime.now(),
+    );
+    await _pendingBox.put(pending.id, pending);
+    _syncQueue.processQueue();
   }
 
   Future<void> deleteFolder(String folderId) async {
@@ -158,91 +155,120 @@ class StorageRepository {
         _hive.subfolders(folderId).isNotEmpty;
     if (hasFiles) throw FolderNotEmptyException();
 
-    if (await Connectivity.hasConnection()) {
-      await _fileManager.deleteFolder(folderId);
-    } else {
-      await _hive.deleteFolder(folderId);
+    await _hive.deleteFolder(folderId);
 
-      final pending = PendingAction(
-        id: const Uuid().v4(),
-        actionType: 'deleteFolder',
-        payload: {
-          'folderId': folderId,
-        },
-        timestamp: DateTime.now(),
-      );
-      await _pendingBox.put(pending.id, pending);
-    }
+    final pending = PendingAction(
+      id: const Uuid().v4(),
+      actionType: 'deleteFolder',
+      payload: {
+        'folderId': folderId,
+      },
+      timestamp: DateTime.now(),
+    );
+    await _pendingBox.put(pending.id, pending);
+    _syncQueue.processQueue();
   }
 
   Future<void> renameFile(String fileId, String newName) async {
-    if (await Connectivity.hasConnection()) {
-      await _fileManager.renameFile(fileId, newName);
-    } else {
-      await _hive.updateFile(fileId, name: newName);
+    await _hive.updateFile(fileId, name: newName);
 
-      final pending = PendingAction(
-        id: const Uuid().v4(),
-        actionType: 'renameFile',
-        payload: {
-          'fileId': fileId,
-          'name': newName,
-        },
-        timestamp: DateTime.now(),
-      );
-      await _pendingBox.put(pending.id, pending);
-    }
+    final pending = PendingAction(
+      id: const Uuid().v4(),
+      actionType: 'renameFile',
+      payload: {
+        'fileId': fileId,
+        'name': newName,
+      },
+      timestamp: DateTime.now(),
+    );
+    await _pendingBox.put(pending.id, pending);
+    _syncQueue.processQueue();
   }
 
   Future<void> moveFile(String fileId, String? newFolderId) async {
-    if (await Connectivity.hasConnection()) {
-      await _fileManager.moveFile(fileId, newFolderId);
-    } else {
-      await _hive.updateFile(
-        fileId,
-        folderId: newFolderId,
-        clearFolderId: newFolderId == null,
-      );
+    await _hive.updateFile(
+      fileId,
+      folderId: newFolderId,
+      clearFolderId: newFolderId == null,
+    );
 
-      final pending = PendingAction(
-        id: const Uuid().v4(),
-        actionType: 'moveFile',
-        payload: {
-          'fileId': fileId,
-          'folderId': newFolderId,
-        },
-        timestamp: DateTime.now(),
-      );
-      await _pendingBox.put(pending.id, pending);
+    final pending = PendingAction(
+      id: const Uuid().v4(),
+      actionType: 'moveFile',
+      payload: {
+        'fileId': fileId,
+        'folderId': newFolderId,
+      },
+      timestamp: DateTime.now(),
+    );
+    await _pendingBox.put(pending.id, pending);
+    _syncQueue.processQueue();
+  }
+
+  Future<void> copyFile(String fileId, String? targetFolderId) async {
+    final original = _hive.getFile(fileId);
+    if (original == null) return;
+
+    final newFileId = const Uuid().v4();
+    final nameParts = original.name.split('.');
+    String newName;
+    if (nameParts.length > 1 && original.name.contains('.')) {
+      final ext = nameParts.removeLast();
+      newName = '${nameParts.join('.')}_copy.$ext';
+    } else {
+      newName = '${original.name}_copy';
     }
+
+    final copyRecord = FileRecord(
+      fileId: newFileId,
+      metadataMessageId: original.metadataMessageId,
+      metadataFileId: original.metadataFileId,
+      thumbnailFileId: original.thumbnailFileId,
+      name: newName,
+      sizeMb: original.sizeMb,
+      mimeType: original.mimeType,
+      uploadedAt: DateTime.now(),
+      folderId: targetFolderId,
+      chunkCount: original.chunkCount,
+      sha256Hash: original.sha256Hash,
+    );
+
+    await _hive.saveFile(copyRecord);
+
+    final pending = PendingAction(
+      id: const Uuid().v4(),
+      actionType: 'copyFile',
+      payload: {
+        'fileId': fileId,
+        'targetFolderId': targetFolderId,
+      },
+      timestamp: DateTime.now(),
+    );
+    await _pendingBox.put(pending.id, pending);
+    _syncQueue.processQueue();
   }
 
   Future<void> deleteFile(String fileId) async {
     final record = _hive.getFile(fileId);
     if (record == null) return;
 
-    if (await Connectivity.hasConnection()) {
-      await _fileManager.deleteFile(fileId);
-    } else {
-      // Offline: we need the file meta info to delete from Telegram later!
-      // Since it's stored in the FileRecord, we serialize the necessary info in payload.
-      final payload = {
-        'fileId': fileId,
-        'metadataMessageId': record.metadataMessageId,
-        'metadataFileId': record.metadataFileId,
-        'sizeMb': record.sizeMb,
-        'mimeType': record.mimeType,
-      };
+    final payload = {
+      'fileId': fileId,
+      'metadataMessageId': record.metadataMessageId,
+      'metadataFileId': record.metadataFileId,
+      'sizeMb': record.sizeMb,
+      'mimeType': record.mimeType,
+    };
 
-      await _hive.deleteFile(fileId);
+    await _hive.deleteFile(fileId);
 
-      final pending = PendingAction(
-        id: const Uuid().v4(),
-        actionType: 'deleteFile',
-        payload: payload,
-        timestamp: DateTime.now(),
-      );
-      await _pendingBox.put(pending.id, pending);
-    }
+    final pending = PendingAction(
+      id: const Uuid().v4(),
+      actionType: 'deleteFile',
+      payload: payload,
+      timestamp: DateTime.now(),
+    );
+    await _pendingBox.put(pending.id, pending);
+    _syncQueue.processQueue();
   }
 }

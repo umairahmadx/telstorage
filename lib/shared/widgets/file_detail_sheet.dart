@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/models/file_record.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/app_icons.dart';
 import '../../core/services/service_locator.dart';
 import 'thumbnail_widget.dart';
 
@@ -85,34 +86,34 @@ class FileDetailSheet extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _ActionButton(
-                  icon: Icons.share_rounded,
+                  icon: AppIcons.share,
                   label: 'Share',
                   onTap: onShare,
                 ),
                 _ActionButton(
-                  icon: Icons.download_rounded,
+                  icon: AppIcons.download,
                   label: 'Download',
                   onTap: onDownload,
                 ),
                 _ActionButton(
-                  icon: Icons.edit_rounded,
+                  icon: AppIcons.rename,
                   label: 'Rename',
                   onTap: onRename,
                 ),
                 if (onMove != null)
                   _ActionButton(
-                    icon: Icons.content_cut_rounded,
+                    icon: AppIcons.cut,
                     label: 'Cut',
                     onTap: onMove!,
                   ),
                 if (onCopy != null)
                   _ActionButton(
-                    icon: Icons.copy_rounded,
+                    icon: AppIcons.copyLink,
                     label: 'Copy',
                     onTap: onCopy!,
                   ),
                 _ActionButton(
-                  icon: Icons.delete_outline_rounded,
+                  icon: AppIcons.delete,
                   label: 'Delete',
                   color: colors.error,
                   onTap: onDelete,

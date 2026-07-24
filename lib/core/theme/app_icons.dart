@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 
 /// Central icon registry for the app.
 /// All screens must reference these constants - no hardcoded [Icons.xxx] allowed.
 abstract final class AppIcons {
   // -- Actions --------------------------------------------------------------
   static const IconData share         = Icons.ios_share_rounded;
+  static const IconData cut           = CupertinoIcons.scissors;
   static const IconData copyLink      = Icons.copy_rounded;
   static const IconData download      = Icons.download_rounded;
   static const IconData upload        = Icons.cloud_upload_outlined;

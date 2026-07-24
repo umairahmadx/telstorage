@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../core/models/file_record.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/app_icons.dart';
 import 'qr_dialog.dart';
 
 class ShareLinkSheet extends StatefulWidget {
@@ -99,7 +100,7 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.calendar_today_outlined,
+                  Icon(AppIcons.calendar,
                       size: 20, color: colors.textTertiary),
                   const SizedBox(width: 16),
                   Expanded(
@@ -116,7 +117,7 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
                       ],
                     ),
                   ),
-                  Icon(Icons.keyboard_arrow_down_rounded,
+                  Icon(AppIcons.dropdownArrow,
                       color: colors.textTertiary),
                 ],
               ),
@@ -134,7 +135,7 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
             ),
             child: Row(
               children: [
-                Icon(Icons.lock_outline_rounded,
+                Icon(AppIcons.lock,
                     size: 20, color: colors.textTertiary),
                 const SizedBox(width: 16),
                 Expanded(
@@ -182,7 +183,7 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16)),
                   ),
-                  icon: const Icon(Icons.link_rounded),
+                  icon: const Icon(AppIcons.link),
                   label: const Text('Copy Link',
                       style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
@@ -204,7 +205,7 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Icon(
-                    Icons.qr_code_2_rounded,
+                    AppIcons.qrCode,
                     color:
                         widget.shareUrl == null ? colors.textTertiary : colors.textPrimary,
                   ),

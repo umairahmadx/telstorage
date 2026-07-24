@@ -8,6 +8,7 @@ import '../../../core/models/download_job.dart';
 import '../../../core/models/web_share_job.dart';
 import '../../../core/models/file_record.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/app_icons.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/navigation/navigation_intent.dart';
 import '../../../shared/widgets/mobile_shell.dart';
@@ -637,14 +638,14 @@ class _DownloadItemTile extends StatelessWidget {
                     ),
                     // Share icon
                     IconButton(
-                      icon: Icon(Icons.ios_share_rounded,
+                      icon: Icon(AppIcons.share,
                           color: colors.accentPrimary, size: 20),
                       tooltip: 'Share',
                       onPressed: onShare,
                     ),
                     // Delete icon
                     IconButton(
-                      icon: Icon(Icons.delete_outline_rounded,
+                      icon: Icon(AppIcons.delete,
                           color: colors.error, size: 20),
                       tooltip: 'Delete from phone',
                       onPressed: onDelete,
@@ -840,21 +841,21 @@ class _SharedItemTile extends StatelessWidget {
               // Copy link icon
               if (share.isComplete && share.shareUrl != null)
                 IconButton(
-                  icon: Icon(Icons.copy_rounded,
+                  icon: Icon(AppIcons.copyLink,
                       size: 18, color: colors.accentPrimary),
                   tooltip: 'Copy link',
                   onPressed: onCopy,
                 ),
               // Share link icon
               IconButton(
-                icon: Icon(Icons.ios_share_rounded,
+                icon: Icon(AppIcons.share,
                     size: 18, color: colors.accentPrimary),
                 tooltip: 'Share link',
                 onPressed: onShare,
               ),
               // Delete icon
               IconButton(
-                icon: Icon(Icons.delete_outline_rounded,
+                icon: Icon(AppIcons.delete,
                     size: 18, color: colors.error),
                 tooltip: 'Delete link',
                 onPressed: onDelete,

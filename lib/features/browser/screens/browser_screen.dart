@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../core/models/file_record.dart';
 import '../../../core/models/folder_record.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/app_icons.dart';
 import '../../../shared/widgets/thumbnail_widget.dart';
 import '../../../shared/widgets/mobile_shell.dart';
 import '../../../shared/widgets/share_link_sheet.dart';
@@ -194,7 +195,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
               ),
               const SizedBox(height: 8),
               _FolderActionTile(
-                icon: Icons.edit_rounded,
+                icon: AppIcons.rename,
                 label: 'Rename',
                 onTap: () {
                   Navigator.pop(ctx);
@@ -202,7 +203,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
                 },
               ),
               _FolderActionTile(
-                icon: Icons.content_cut_rounded,
+                icon: AppIcons.cut,
                 label: 'Cut',
                 onTap: () {
                   Navigator.pop(ctx);
@@ -215,7 +216,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
                 },
               ),
               _FolderActionTile(
-                icon: Icons.copy_rounded,
+                icon: AppIcons.copyLink,
                 label: 'Copy',
                 onTap: () {
                   Navigator.pop(ctx);
@@ -430,12 +431,12 @@ class _BrowserScreenState extends State<BrowserScreen> {
                   },
                 ),
                 IconButton(
-                  icon: Icon(Icons.copy_rounded, color: colors.textPrimary),
+                  icon: Icon(AppIcons.copyLink, color: colors.textPrimary),
                   tooltip: 'Copy',
                   onPressed: () => _setClipboard(ClipboardMode.copy),
                 ),
                 IconButton(
-                  icon: Icon(Icons.content_cut_rounded, color: colors.textPrimary),
+                  icon: Icon(AppIcons.cut, color: colors.textPrimary),
                   tooltip: 'Cut (Move)',
                   onPressed: () => _setClipboard(ClipboardMode.move),
                 ),

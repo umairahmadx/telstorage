@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/models/file_record.dart';
 import '../../core/services/service_locator.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/app_icons.dart';
 import '../../core/utils/thumbnail_helper_native.dart'
     if (dart.library.js_interop) '../../core/utils/thumbnail_helper_web.dart';
 
@@ -114,26 +115,26 @@ class _ThumbnailWidgetState extends State<ThumbnailWidget> {
   }
 
   Widget _buildThumbnailerFallback(AppColorsExtension colors) {
-    IconData iconData = Icons.insert_drive_file_rounded;
+    IconData iconData = AppIcons.fileGeneric;
     Color iconColor = colors.textPrimary;
     Color iconBg = colors.bgSurfaceInset;
 
     if (widget.file.isPdf) {
-      iconData = Icons.picture_as_pdf_rounded;
+      iconData = AppIcons.filePdf;
       iconColor = colors.filePdf;
       iconBg = colors.filePdfBg;
     } else if (widget.file.isVideo) {
-      iconData = Icons.play_circle_fill_rounded;
+      iconData = AppIcons.fileVideo;
       iconColor = colors.fileVideo;
       iconBg = colors.fileVideoBg;
     } else if (widget.file.name.endsWith('.zip') ||
         widget.file.mimeType.contains('zip') ||
         widget.file.mimeType.contains('archive')) {
-      iconData = Icons.folder_zip_rounded;
+      iconData = AppIcons.fileArchive;
       iconColor = colors.fileZip;
       iconBg = colors.bgSurfaceInset;
     } else if (widget.file.isImage) {
-      iconData = Icons.image_rounded;
+      iconData = AppIcons.fileImage;
       iconColor = colors.accentPrimary;
       iconBg = colors.bgSurfaceInset;
     }

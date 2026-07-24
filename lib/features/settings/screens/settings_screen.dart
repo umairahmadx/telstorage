@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/routing/app_router.dart';
 import '../../../core/services/auth_service.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/app_icons.dart';
 import '../../../core/services/theme_service.dart';
 import '../../../shared/widgets/mobile_shell.dart';
 import '../../../shared/widgets/app_segmented_control.dart';
@@ -333,7 +334,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           _buildToolTile(
             colors,
-            icon: Icons.sync_rounded,
+            icon: AppIcons.syncing,
             title: 'Sync Center & Logs',
             subtitle: 'Real-time sync queue and activity logs',
             onTap: () {
@@ -345,7 +346,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Divider(color: colors.borderSubtle, height: 1),
           _buildToolTile(
             colors,
-            icon: Icons.share_outlined,
+            icon: AppIcons.share,
             title: 'Public Web Shares',
             subtitle: 'Manage active storage.to shared links',
             onTap: () {
@@ -355,7 +356,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Divider(color: colors.borderSubtle, height: 1),
           _buildToolTile(
             colors,
-            icon: Icons.info_outline_rounded,
+            icon: AppIcons.info,
             title: 'About TelStorage',
             subtitle: 'v1.0.0 — Telegram-powered Cloud Storage',
             onTap: () {

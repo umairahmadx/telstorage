@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/app_icons.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/navigation/navigation_intent.dart';
 
@@ -41,7 +42,7 @@ class AppDrawer extends StatelessWidget {
                       errorBuilder: (ctx, err, stack) => Padding(
                         padding: const EdgeInsets.all(8.0),
                         child: Icon(
-                          Icons.cloud_queue_rounded,
+                          AppIcons.cloudQueue,
                           color: colors.bgPrimary,
                           size: 24,
                         ),
@@ -62,7 +63,7 @@ class AppDrawer extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             _DrawerItem(
-              icon: Icons.home_outlined,
+              icon: AppIcons.navHomeOutlined,
               label: 'Home',
               isSelected: currentIndex == 0,
               onTap: () {
@@ -72,7 +73,7 @@ class AppDrawer extends StatelessWidget {
               },
             ),
             _DrawerItem(
-              icon: Icons.folder_outlined,
+              icon: AppIcons.navFiles,
               label: 'Files',
               isSelected: currentIndex == 1,
               onTap: () {
@@ -82,7 +83,7 @@ class AppDrawer extends StatelessWidget {
               },
             ),
             _DrawerItem(
-              icon: Icons.download_rounded,
+              icon: AppIcons.navDownloads,
               label: 'Downloads',
               isSelected: currentIndex == 3 &&
                   ServiceLocator.instance.navigation.lastTransferTab == 0,
@@ -93,7 +94,7 @@ class AppDrawer extends StatelessWidget {
               },
             ),
             _DrawerItem(
-              icon: Icons.cloud_upload_outlined,
+              icon: AppIcons.navUploads,
               label: 'Uploads',
               isSelected: currentIndex == 3 &&
                   ServiceLocator.instance.navigation.lastTransferTab == 1,
@@ -104,7 +105,7 @@ class AppDrawer extends StatelessWidget {
               },
             ),
             _DrawerItem(
-              icon: Icons.share_rounded,
+              icon: AppIcons.navShared,
               label: 'Shared',
               isSelected: currentIndex == 3 &&
                   ServiceLocator.instance.navigation.lastTransferTab == 2,
@@ -119,7 +120,7 @@ class AppDrawer extends StatelessWidget {
               child: Divider(color: colors.borderSubtle),
             ),
             _DrawerItem(
-              icon: Icons.settings_outlined,
+              icon: AppIcons.navSettings,
               label: 'Settings',
               isSelected: currentIndex == 4,
               onTap: () {

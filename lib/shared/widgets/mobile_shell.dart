@@ -8,6 +8,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/app_icons.dart';
 import '../../core/services/service_locator.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/services/transfer_queue_service.dart';
@@ -158,7 +159,7 @@ class MobileShellState extends State<MobileShell> {
             Row(
               children: [
                 _AddActionItem(
-                  icon: Icons.upload_file_rounded,
+                  icon: AppIcons.uploadFile,
                   label: 'Upload File',
                   color: AppTheme.primary,
                   onTap: () {
@@ -168,7 +169,7 @@ class MobileShellState extends State<MobileShell> {
                 ),
                 if (_currentIndex == 1) // Only show in Files tab
                   _AddActionItem(
-                    icon: Icons.create_new_folder_rounded,
+                    icon: AppIcons.newFolder,
                     label: 'New Folder',
                     color: AppTheme.warning,
                     onTap: () {
@@ -357,26 +358,26 @@ class _MobileNavBar extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               _NavItem(
-                icon: Icons.home_filled,
+                icon: AppIcons.navHome,
                 label: 'Home',
                 selected: currentIndex == 0,
                 onTap: () => onTap(0),
               ),
               _NavItem(
-                icon: Icons.folder_outlined,
+                icon: AppIcons.navFiles,
                 label: 'Files',
                 selected: currentIndex == 1,
                 onTap: () => onTap(1),
               ),
               const SizedBox(width: 60), // Space for FAB
               _NavItem(
-                icon: Icons.sync_alt_rounded,
+                icon: AppIcons.navTransfer,
                 label: 'Transfer',
                 selected: currentIndex == 3,
                 onTap: () => onTap(3),
               ),
               _NavItem(
-                icon: Icons.more_horiz_rounded,
+                icon: AppIcons.more,
                 label: 'More',
                 selected: currentIndex == 4,
                 onTap: () => onTap(4),
@@ -402,7 +403,7 @@ class _MobileNavBar extends StatelessWidget {
                   ],
                 ),
                 child: Icon(
-                  Icons.add_rounded,
+                  AppIcons.add,
                   color: colors.bgPrimary,
                   size: 32,
                 ),

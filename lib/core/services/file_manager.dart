@@ -48,6 +48,15 @@ class FileManagerService {
     await _hive.renameFolder(folderId, newName);
   }
 
+  Future<void> moveFolder(String folderId, String? parentId) async {
+    final meta = await _meta.fetch();
+    final folder = meta.folders.firstWhere((f) => f.id == folderId);
+    folder.parentId = parentId;
+
+    await _meta.update(meta);
+    await _hive.moveFolder(folderId, parentId);
+  }
+
   Future<void> deleteFolder(String folderId) async {
     final hasFiles = _hive.filesInFolder(folderId).isNotEmpty;
     if (hasFiles) throw FolderNotEmptyException();

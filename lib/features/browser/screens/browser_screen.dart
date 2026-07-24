@@ -8,6 +8,8 @@ import '../../../shared/widgets/thumbnail_widget.dart';
 import '../../../shared/widgets/mobile_shell.dart';
 import '../../../shared/widgets/share_link_sheet.dart';
 import '../../../shared/widgets/file_detail_sheet.dart';
+import '../../../shared/widgets/app_search_field.dart';
+import '../../../shared/widgets/app_surface_card.dart';
 import '../../../core/services/service_locator.dart';
 import '../../sync/screens/sync_screen.dart';
 import '../bloc/browser_bloc.dart';
@@ -33,8 +35,6 @@ class _BrowserScreenState extends State<BrowserScreen> {
     context.read<BrowserBloc>().add(LoadDirectory(
         folderId: widget.currentFolderId, category: widget.category));
   }
-
-  void _snack(String msg, {bool success = false}) {}
 
   void _showFileDetail(FileRecord file) {
     showModalBottomSheet(
@@ -63,7 +63,6 @@ class _BrowserScreenState extends State<BrowserScreen> {
             folderIds: {},
             sourceFolderId: file.folderId,
           ));
-          _snack('Cut "${file.name}". Navigate to target folder and tap Paste Here.', success: true);
         },
         onCopy: () {
           Navigator.pop(ctx);
@@ -73,7 +72,6 @@ class _BrowserScreenState extends State<BrowserScreen> {
             folderIds: {},
             sourceFolderId: file.folderId,
           ));
-          _snack('Copied "${file.name}". Navigate to target folder and tap Paste Here.', success: true);
         },
         onDelete: () {
           Navigator.pop(ctx);
@@ -101,8 +99,6 @@ class _BrowserScreenState extends State<BrowserScreen> {
           if (!mounted || !ctx.mounted) return;
           Navigator.pop(ctx);
 
-          _snack('Sharing started. Check "Transfer" tab for progress.',
-              success: true);
         },
       ),
     );
@@ -158,6 +154,146 @@ class _BrowserScreenState extends State<BrowserScreen> {
     if (ok == true) context.read<BrowserBloc>().add(DeleteFile(file.fileId));
   }
 
+  void _showFolderActions(FolderRecord folder) {
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: colors.bgSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.folder_rounded,
+                        color: colors.fileFolder, size: 24),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        folder.name,
+                        style: TextStyle(
+                          color: colors.textPrimary,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              _FolderActionTile(
+                icon: Icons.edit_rounded,
+                label: 'Rename',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _renameFolder(folder);
+                },
+              ),
+              _FolderActionTile(
+                icon: Icons.content_cut_rounded,
+                label: 'Cut',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  context.read<BrowserBloc>().add(SetClipboard(
+                        mode: ClipboardMode.move,
+                        fileIds: {},
+                        folderIds: {folder.id},
+                        sourceFolderId: folder.parentId,
+                      ));
+                },
+              ),
+              _FolderActionTile(
+                icon: Icons.copy_rounded,
+                label: 'Copy',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  context.read<BrowserBloc>().add(SetClipboard(
+                        mode: ClipboardMode.copy,
+                        fileIds: {},
+                        folderIds: {folder.id},
+                        sourceFolderId: folder.parentId,
+                      ));
+                },
+              ),
+              _FolderActionTile(
+                icon: Icons.delete_outline_rounded,
+                label: 'Delete',
+                color: colors.error,
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _deleteFolder(folder);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _renameFolder(FolderRecord folder) async {
+    final ctrl = TextEditingController(text: folder.name);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        title: const Text('Rename Folder'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, ctrl.text),
+              child: const Text('OK')),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (result != null && result.isNotEmpty) {
+      context.read<BrowserBloc>().add(RenameFolder(folder.id, result));
+    }
+  }
+
+  Future<void> _deleteFolder(FolderRecord folder) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        title: Text('Delete "${folder.name}"?'),
+        content: const Text('Only empty folders can be deleted.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (ok == true) context.read<BrowserBloc>().add(DeleteFolder(folder.id));
+  }
+
   Future<void> _confirmBatchDelete(BuildContext context, BrowserState state) async {
     final count = state.selectedFileIds.length + state.selectedFolderIds.length;
     final confirmed = await showDialog<bool>(
@@ -187,20 +323,16 @@ class _BrowserScreenState extends State<BrowserScreen> {
 
   void _setClipboard(ClipboardMode mode) {
     final state = context.read<BrowserBloc>().state;
-    final total = state.selectedFileIds.length + state.selectedFolderIds.length;
     context.read<BrowserBloc>().add(SetClipboard(
       mode: mode,
       fileIds: Set.from(state.selectedFileIds),
       folderIds: Set.from(state.selectedFolderIds),
       sourceFolderId: state.currentFolderId,
     ));
-    final actionLabel = mode == ClipboardMode.move ? 'Cut' : 'Copied';
-    _snack('$actionLabel $total item(s). Navigate to destination and tap Paste Here.', success: true);
   }
 
   Future<void> _downloadAndView(FileRecord file) async {
     context.read<BrowserBloc>().add(EnqueueDownload(file));
-    _snack('Downloading "${file.name}"...', success: true);
   }
 
   Future<void> _createFolder() async {
@@ -233,9 +365,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<BrowserBloc, BrowserState>(
-      listener: (context, state) {
-        if (state.errorMessage != null) _snack(state.errorMessage!);
-      },
+      listener: (context, state) {},
       builder: (context, state) {
         if (state.isLoading && !state.isInitialized) {
           return const Scaffold(
@@ -321,7 +451,6 @@ class _BrowserScreenState extends State<BrowserScreen> {
                           bloc.add(EnqueueDownload(file));
                         }
                       }
-                      _snack('${state.selectedFileIds.length} file(s) added to downloads', success: true);
                       bloc.add(ClearSelection());
                     },
                   ),
@@ -402,7 +531,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
         children: [
           Column(
             children: [
-              _buildSearchBar(colors),
+              _buildSearchBar(),
               _buildFilterTabs(colors, state),
               const SizedBox(height: 12),
               if (state.isLoading && state.isInitialized)
@@ -420,11 +549,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
                               icon: Icon(Icons.add, size: 20, color: colors.textPrimary),
                               onPressed: _createFolder,
                             )),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: colors.bgSurface,
-                            borderRadius: BorderRadius.circular(24),
-                          ),
+                        AppSurfaceCard(
+                          radius: 24,
                           child: Column(
                             children: List.generate(state.folders.length, (fi) {
                               final f = state.folders[fi];
@@ -446,11 +572,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
                                 onLongPress: () {
                                   context.read<BrowserBloc>().add(ToggleItemSelection(f.id, isFolder: true));
                                 },
-                                onMore: () {
-                                  if (state.isMultiSelect) {
-                                    context.read<BrowserBloc>().add(ToggleItemSelection(f.id, isFolder: true));
-                                  }
-                                },
+                                onMore: () => _showFolderActions(f),
                               );
                             }),
                           ),
@@ -488,11 +610,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
                           ),
                         )
                       else
-                        Container(
-                          decoration: BoxDecoration(
-                            color: colors.bgSurface,
-                            borderRadius: BorderRadius.circular(24),
-                          ),
+                        AppSurfaceCard(
+                          radius: 24,
                           child: Column(
                             children: List.generate(state.files.length, (fi) {
                               final f = state.files[fi];
@@ -669,28 +788,11 @@ class _BrowserScreenState extends State<BrowserScreen> {
     );
   }
 
-  Widget _buildSearchBar(AppColorsExtension colors) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-      child: Container(
-        height: 50,
-        decoration: BoxDecoration(
-          color: colors.bgSurface,
-          borderRadius: BorderRadius.circular(25),
-        ),
-        child: TextField(
-          onChanged: (v) => context.read<BrowserBloc>().add(SearchQueryChanged(v)),
-          style: TextStyle(color: colors.textPrimary, fontSize: 15),
-          decoration: InputDecoration(
-            hintText: 'Search files and folders...',
-            hintStyle: TextStyle(color: colors.textTertiary, fontSize: 14),
-            prefixIcon: Icon(Icons.search_rounded,
-                color: colors.textTertiary, size: 20),
-            border: InputBorder.none,
-            contentPadding: const EdgeInsets.symmetric(vertical: 14),
-          ),
-        ),
-      ),
+  Widget _buildSearchBar() {
+    return AppSearchField(
+      hintText: 'Search files and folders...',
+      onChanged: (v) =>
+          context.read<BrowserBloc>().add(SearchQueryChanged(v)),
     );
   }
 
@@ -857,6 +959,38 @@ class _FolderTile extends StatelessWidget {
         if (!isLast)
           Divider(indent: 10, endIndent: 10, color: colors.borderSubtle),
       ],
+    );
+  }
+}
+
+class _FolderActionTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color? color;
+
+  const _FolderActionTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
+    final tint = color ?? colors.textPrimary;
+
+    return ListTile(
+      leading: Icon(icon, color: tint),
+      title: Text(
+        label,
+        style: TextStyle(
+          color: tint,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      onTap: onTap,
     );
   }
 }

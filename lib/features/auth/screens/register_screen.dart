@@ -59,7 +59,6 @@ class _RegisterScreenState extends State<RegisterScreen>
       );
       if (result['success'] != true) {
         if (!mounted) return;
-        _showError(result['message'] ?? 'Registration failed');
         return;
       }
       final telegram = TelegramService();
@@ -71,20 +70,9 @@ class _RegisterScreenState extends State<RegisterScreen>
       Navigator.of(context).pushReplacementNamed(AppRouter.home);
     } catch (e) {
       if (!mounted) return;
-      _showError('Error: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  void _showError(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      behavior: SnackBarBehavior.floating,
-      backgroundColor: AppTheme.error,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-    ));
   }
 
   @override

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 /// Central icon registry for the app.
-/// All screens must reference these constants — no hardcoded [Icons.xxx] allowed.
+/// All screens must reference these constants - no hardcoded [Icons.xxx] allowed.
 abstract final class AppIcons {
   // -- Actions --------------------------------------------------------------
   static const IconData share         = Icons.ios_share_rounded;

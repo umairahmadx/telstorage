@@ -569,6 +569,9 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
   Future<void> _onBatchMove(BatchMove event, Emitter<BrowserState> emit) async {
     emit(state.copyWith(isLoading: true));
     try {
+      for (final folderId in List.from(state.selectedFolderIds)) {
+        await _repository.moveFolder(folderId, event.targetFolderId);
+      }
       for (final fileId in List.from(state.selectedFileIds)) {
         await _repository.moveFile(fileId, event.targetFolderId);
       }
@@ -583,6 +586,9 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
   Future<void> _onBatchCopy(BatchCopy event, Emitter<BrowserState> emit) async {
     emit(state.copyWith(isLoading: true));
     try {
+      for (final folderId in List.from(state.selectedFolderIds)) {
+        await _repository.copyFolder(folderId, event.targetFolderId);
+      }
       for (final fileId in List.from(state.selectedFileIds)) {
         await _repository.copyFile(fileId, event.targetFolderId);
       }
@@ -627,10 +633,16 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
 
     try {
       if (mode == ClipboardMode.move) {
+        for (final folderId in List.from(state.clipboardFolderIds)) {
+          await _repository.moveFolder(folderId, targetFolderId);
+        }
         for (final fileId in List.from(state.clipboardFileIds)) {
           await _repository.moveFile(fileId, targetFolderId);
         }
       } else if (mode == ClipboardMode.copy) {
+        for (final folderId in List.from(state.clipboardFolderIds)) {
+          await _repository.copyFolder(folderId, targetFolderId);
+        }
         for (final fileId in List.from(state.clipboardFileIds)) {
           await _repository.copyFile(fileId, targetFolderId);
         }

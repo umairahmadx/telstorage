@@ -93,6 +93,14 @@ class HiveService {
     await record.save();
   }
 
+  Future<void> moveFolder(String folderId, String? parentId) async {
+    final record = _folders.get(folderId);
+    if (record == null) return;
+
+    record.parentId = parentId;
+    await record.save();
+  }
+
   Future<void> deleteFolder(String folderId) async {
     await _folders.delete(folderId);
   }

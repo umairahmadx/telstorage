@@ -14,6 +14,10 @@ import '../../../shared/widgets/mobile_shell.dart';
 import '../../../shared/widgets/thumbnail_widget.dart';
 import '../../../shared/widgets/file_detail_sheet.dart';
 import '../../../shared/widgets/share_link_sheet.dart';
+import '../../../shared/widgets/app_common_widgets.dart';
+import '../../../shared/widgets/app_search_field.dart';
+import '../../../shared/widgets/app_segmented_control.dart';
+import '../../../shared/widgets/app_surface_card.dart';
 import '../../../core/services/transfer_queue_service.dart';
 import '../../../core/models/transfer_task.dart';
 import '../bloc/transfer_cubit.dart';
@@ -111,20 +115,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
           if (job != null && job.isComplete && job.shareUrl != null) {
             await Clipboard.setData(ClipboardData(text: job.shareUrl!));
             if (!mounted) return;
-            final colors = Theme.of(context).extension<AppColorsExtension>()!;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                  content: const Text('Link copied to clipboard!'),
-                  backgroundColor: colors.success),
-            );
           } else {
-            final colors = Theme.of(context).extension<AppColorsExtension>()!;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                  content:
-                      const Text('Sharing started. View progress in "Shared" tab.'),
-                  backgroundColor: colors.success),
-            );
             setState(() => _activeTab = 2); // Switch to Shared tab
           }
         },
@@ -134,13 +125,6 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
 
   Future<void> _downloadFile(FileRecord file) async {
     await context.read<TransferCubit>().enqueueDownload(file);
-    if (!mounted) return;
-    final colors = Theme.of(context).extension<AppColorsExtension>()!;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-          content: Text('"${file.name}" added to downloads'),
-          backgroundColor: colors.success),
-    );
   }
 
 
@@ -325,8 +309,8 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
           body: Column(
             children: [
               _buildActiveTransfers(state),
-              _buildSearchBar(colors),
-              _buildSegmentedControl(colors),
+              _buildSearchBar(),
+              _buildSegmentedControl(),
               Expanded(
                 child: _buildTabContent(colors, state),
               ),
@@ -390,71 +374,24 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     );
   }
 
-  Widget _buildSearchBar(AppColorsExtension colors) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-      child: Container(
-        height: 50,
-        decoration: BoxDecoration(
-          color: colors.bgSurface,
-          borderRadius: BorderRadius.circular(25),
-        ),
-        child: TextField(
-          style: TextStyle(color: colors.textPrimary, fontSize: 15),
-          decoration: InputDecoration(
-            hintText: 'Search shared files and links...',
-            hintStyle: TextStyle(color: colors.textTertiary, fontSize: 14),
-            prefixIcon: Icon(Icons.search_rounded,
-                color: colors.textTertiary, size: 20),
-            border: InputBorder.none,
-            contentPadding: const EdgeInsets.symmetric(vertical: 14),
-          ),
-        ),
-      ),
+  Widget _buildSearchBar() {
+    return const AppSearchField(
+      hintText: 'Search shared files and links...',
     );
   }
 
-  Widget _buildSegmentedControl(AppColorsExtension colors) {
-    final tabs = ['Downloads', 'Uploads', 'Shared'];
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Container(
-        height: 48,
-        decoration: BoxDecoration(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Row(
-          children: List.generate(tabs.length, (i) {
-            final isSelected = _activeTab == i;
-            return Expanded(
-              child: GestureDetector(
-                onTap: () {
-                  setState(() => _activeTab = i);
-                  ServiceLocator.instance.navigation
-                      .updateRememberedTransferTab(i);
-                },
-                child: Container(
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color:
-                        isSelected ? colors.accentPrimary : Colors.transparent,
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: Text(
-                    tabs[i],
-                    style: TextStyle(
-                      color: isSelected ? colors.bgPrimary : colors.textSecondary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              ),
-            );
-          }),
-        ),
-      ),
+  Widget _buildSegmentedControl() {
+    return AppSegmentedControl<int>(
+      value: _activeTab,
+      segments: const [
+        AppSegment(value: 0, label: 'Downloads'),
+        AppSegment(value: 1, label: 'Uploads'),
+        AppSegment(value: 2, label: 'Shared'),
+      ],
+      onChanged: (i) {
+        setState(() => _activeTab = i);
+        ServiceLocator.instance.navigation.updateRememberedTransferTab(i);
+      },
     );
   }
 
@@ -479,17 +416,14 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       controller: _scrollController,
       padding: const EdgeInsets.all(20),
       children: [
-        _sectionLabel(colors, 'Downloads'),
+        const AppSectionLabel('Downloads'),
         const SizedBox(height: 12),
         if (jobs.isEmpty)
-          _buildEmptyState(
-              'No downloads yet', Icons.download_rounded, colors)
+          const AppEmptyState(
+              message: 'No downloads yet', icon: Icons.download_rounded)
         else
-          Container(
-            decoration: BoxDecoration(
-              color: colors.bgSurface,
-              borderRadius: BorderRadius.circular(24),
-            ),
+          AppSurfaceCard(
+            radius: 24,
             child: Column(
               children: List.generate(jobs.length, (i) {
                 final job = jobs[i];
@@ -518,17 +452,14 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       children: [
         _buildUploadZone(colors),
         const SizedBox(height: 24),
-        _sectionLabel(colors, 'Recent Uploads'),
+        const AppSectionLabel('Recent Uploads'),
         const SizedBox(height: 12),
         if (uploads.isEmpty)
-          _buildEmptyState(
-              'No uploads yet', Icons.cloud_upload_outlined, colors)
+          const AppEmptyState(
+              message: 'No uploads yet', icon: Icons.cloud_upload_outlined)
         else
-          Container(
-            decoration: BoxDecoration(
-              color: colors.bgSurface,
-              borderRadius: BorderRadius.circular(24),
-            ),
+          AppSurfaceCard(
+            radius: 24,
             child: Column(
               children: List.generate(uploads.length, (i) {
                 final file = uploads[i];
@@ -581,17 +512,14 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       controller: _scrollController,
       padding: const EdgeInsets.all(20),
       children: [
-        _sectionLabel(colors, 'Shared Files'),
+        const AppSectionLabel('Shared Files'),
         const SizedBox(height: 12),
         if (shares.isEmpty)
-          _buildEmptyState(
-              'No web shares yet', Icons.public_rounded, colors)
+          const AppEmptyState(
+              message: 'No web shares yet', icon: Icons.public_rounded)
         else
-          Container(
-            decoration: BoxDecoration(
-              color: colors.bgSurface,
-              borderRadius: BorderRadius.circular(24),
-            ),
+          AppSurfaceCard(
+            radius: 24,
             child: Column(
               children: List.generate(shares.length, (i) {
                 final share = shares[i];
@@ -602,10 +530,6 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                       ? () {
                           Clipboard.setData(
                               ClipboardData(text: share.shareUrl!));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('Link copied to clipboard!')),
-                          );
                         }
                       : null,
                   onShare: () {
@@ -635,27 +559,6 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     );
   }
 
-  // ── HELPERS ───────────────────────────────────────────────────────────────
-
-  Widget _sectionLabel(AppColorsExtension colors, String text) => Text(
-        text,
-        style: TextStyle(
-            fontSize: 20, fontWeight: FontWeight.bold, color: colors.textPrimary),
-      );
-
-  Widget _buildEmptyState(
-      String msg, IconData icon, AppColorsExtension colors) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 100),
-      child: Column(
-        children: [
-          Center(child: Icon(icon, size: 48, color: colors.textTertiary)),
-          const SizedBox(height: 16),
-          Text(msg, style: TextStyle(color: colors.textTertiary)),
-        ],
-      ),
-    );
-  }
 }
 
 // ── TILE WIDGETS ─────────────────────────────────────────────────────────────

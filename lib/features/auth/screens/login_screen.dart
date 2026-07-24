@@ -58,14 +58,6 @@ class _LoginScreenState extends State<LoginScreen>
           Navigator.of(context).pushReplacementNamed(AppRouter.home);
         } else if (state is AuthError) {
           HapticFeedback.vibrate();
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(state.message),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: AppTheme.error,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12)),
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          ));
         }
       },
       builder: (context, state) {

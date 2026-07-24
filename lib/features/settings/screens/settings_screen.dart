@@ -5,6 +5,8 @@ import '../../../core/services/auth_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/theme_service.dart';
 import '../../../shared/widgets/mobile_shell.dart';
+import '../../../shared/widgets/app_segmented_control.dart';
+import '../../../shared/widgets/app_surface_card.dart';
 import '../../home/bloc/home_cubit.dart';
 import '../../sync/screens/sync_screen.dart';
 import 'about_screen.dart';
@@ -95,13 +97,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final email = state.userEmail ?? '';
     final initial = name.isNotEmpty ? name[0].toUpperCase() : 'U';
 
-    return Container(
+    return AppSurfaceCard(
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: colors.bgSurface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: colors.borderSubtle, width: 1),
-      ),
+      borderColor: colors.borderSubtle,
       child: Row(
         children: [
           Container(
@@ -175,20 +173,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ? '${(usedMb / 1024).toStringAsFixed(1)} GB'
         : '${usedMb.toStringAsFixed(0)} MB';
 
-    return GestureDetector(
+    return AppSurfaceCard(
       onTap: () {
         Navigator.of(context, rootNavigator: true).push(
           MaterialPageRoute(builder: (_) => const StorageDetailsScreen()),
         );
       },
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: colors.bgSurface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: colors.borderSubtle, width: 1),
-        ),
-        child: Row(
+      padding: const EdgeInsets.all(18),
+      borderColor: colors.borderSubtle,
+      child: Row(
           children: [
             Container(
               width: 44,
@@ -246,18 +239,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Icon(Icons.chevron_right_rounded, color: colors.textTertiary, size: 20),
           ],
         ),
-      ),
     );
   }
 
   Widget _buildAppearanceCard(AppColorsExtension colors) {
-    return Container(
+    return AppSurfaceCard(
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: colors.bgSurface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: colors.borderSubtle, width: 1),
-      ),
+      borderColor: colors.borderSubtle,
       child: Column(
         children: [
           Row(
@@ -313,9 +301,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
               builder: (context, currentMode, _) {
                 return Row(
                   children: [
-                    _buildThemeToggle(ThemeMode.light, 'Light', currentMode, colors),
-                    _buildThemeToggle(ThemeMode.dark, 'Dark', currentMode, colors),
-                    _buildThemeToggle(ThemeMode.system, 'System', currentMode, colors),
+                    Expanded(
+                      child: AppSegmentedControl<ThemeMode>(
+                        value: currentMode,
+                        padding: EdgeInsets.zero,
+                        height: 36,
+                        radius: 8,
+                        fontSize: 13,
+                        segments: const [
+                          AppSegment(value: ThemeMode.light, label: 'Light'),
+                          AppSegment(value: ThemeMode.dark, label: 'Dark'),
+                          AppSegment(value: ThemeMode.system, label: 'System'),
+                        ],
+                        onChanged: ThemeService.instance.setThemeMode,
+                      ),
+                    ),
                   ],
                 );
               },
@@ -326,42 +326,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildThemeToggle(
-    ThemeMode mode,
-    String label,
-    ThemeMode currentMode,
-    AppColorsExtension colors,
-  ) {
-    final isSelected = currentMode == mode;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => ThemeService.instance.setThemeMode(mode),
-        child: Container(
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: isSelected ? colors.accentPrimary : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: isSelected ? colors.bgPrimary : colors.textSecondary,
-              fontWeight: FontWeight.w600,
-              fontSize: 13,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildToolsCard(AppColorsExtension colors) {
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.bgSurface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: colors.borderSubtle, width: 1),
-      ),
+    return AppSurfaceCard(
+      borderColor: colors.borderSubtle,
       child: Column(
         children: [
           _buildToolTile(

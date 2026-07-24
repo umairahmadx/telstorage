@@ -10,6 +10,7 @@ import '../../../shared/widgets/thumbnail_widget.dart';
 import '../../../shared/widgets/mobile_shell.dart';
 import '../../../shared/widgets/file_detail_sheet.dart';
 import '../../../shared/widgets/share_link_sheet.dart';
+import '../../../shared/widgets/app_surface_card.dart';
 import '../bloc/home_cubit.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -47,7 +48,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showShareSheet(FileRecord file) {
-    final colors = Theme.of(context).extension<AppColorsExtension>()!;
     final existing = context.read<HomeCubit>().getShareJob(file.fileId);
 
     showModalBottomSheet(
@@ -68,17 +68,6 @@ class _HomeScreenState extends State<HomeScreen> {
           if (job != null && job.isComplete && job.shareUrl != null) {
             await Clipboard.setData(ClipboardData(text: job.shareUrl!));
             if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                  content: const Text('Link copied to clipboard!'),
-                  backgroundColor: colors.success),
-            );
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                  content: const Text('Sharing started. Check "Transfer" tab.'),
-                  backgroundColor: colors.success),
-            );
           }
         },
       ),
@@ -86,15 +75,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _downloadFile(FileRecord file) async {
-    final colors = Theme.of(context).extension<AppColorsExtension>()!;
     await context.read<HomeCubit>().downloadFile(file);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('"${file.name}" added to downloads'),
-        backgroundColor: colors.success,
-      ),
-    );
   }
 
   @override
@@ -232,12 +213,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final totalShares = state.totalShares;
     final totalDownloads = state.totalDownloads;
 
-    return Container(
+    return AppSurfaceCard(
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: colors.bgSurface,
-        borderRadius: BorderRadius.circular(28),
-      ),
+      radius: 28,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -346,11 +324,8 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.bgSurface,
-        borderRadius: BorderRadius.circular(24),
-      ),
+    return AppSurfaceCard(
+      radius: 24,
       child: Column(
         children: List.generate(files.length, (i) => _RecentFileTile(
           file: files[i],

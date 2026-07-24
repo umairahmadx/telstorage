@@ -138,6 +138,8 @@ class SyncQueueService {
         return 'Created folder "${payload['name']}"';
       case 'renameFolder':
         return 'Renamed folder to "${payload['name']}"';
+      case 'moveFolder':
+        return 'Moved folder';
       case 'deleteFolder':
         return 'Deleted folder';
       case 'renameFile':
@@ -168,6 +170,12 @@ class SyncQueueService {
         final folderId = payload['folderId'] as String;
         final name = payload['name'] as String;
         await _fileManager.renameFolder(folderId, name);
+        break;
+
+      case 'moveFolder':
+        final folderId = payload['folderId'] as String;
+        final parentId = payload['parentId'] as String?;
+        await _fileManager.moveFolder(folderId, parentId);
         break;
 
       case 'deleteFolder':

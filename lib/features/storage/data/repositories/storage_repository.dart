@@ -110,7 +110,7 @@ class StorageRepository {
 
   // ── Mutating Operations (Local-First Optimistic Execution) ─────────────
 
-  Future<void> createFolder(String name, {String? parentId}) async {
+  Future<String> createFolder(String name, {String? parentId}) async {
     final folderId = const Uuid().v4();
     final folder = FolderRecord(
       id: folderId,
@@ -132,6 +132,7 @@ class StorageRepository {
     );
     await _pendingBox.put(pending.id, pending);
     _syncQueue.processQueue();
+    return folderId;
   }
 
   Future<void> renameFolder(String folderId, String newName) async {
@@ -167,6 +168,67 @@ class StorageRepository {
     );
     await _pendingBox.put(pending.id, pending);
     _syncQueue.processQueue();
+  }
+
+  Future<void> moveFolder(String folderId, String? newParentId) async {
+    if (folderId == newParentId || _isDescendant(newParentId, folderId)) {
+      throw StateError('Cannot move a folder into itself.');
+    }
+
+    await _hive.moveFolder(folderId, newParentId);
+
+    final pending = PendingAction(
+      id: const Uuid().v4(),
+      actionType: 'moveFolder',
+      payload: {
+        'folderId': folderId,
+        'parentId': newParentId,
+      },
+      timestamp: DateTime.now(),
+    );
+    await _pendingBox.put(pending.id, pending);
+    _syncQueue.processQueue();
+  }
+
+  Future<void> copyFolder(String folderId, String? targetParentId) async {
+    if (folderId == targetParentId || _isDescendant(targetParentId, folderId)) {
+      throw StateError('Cannot copy a folder into itself.');
+    }
+
+    await _copyFolderRecursive(folderId, targetParentId, renameRoot: true);
+  }
+
+  Future<String?> _copyFolderRecursive(
+    String folderId,
+    String? targetParentId, {
+    bool renameRoot = false,
+  }) async {
+    final folder = _hive.getFolder(folderId);
+    if (folder == null) return null;
+
+    final newFolderId = await createFolder(
+      renameRoot ? '${folder.name}_copy' : folder.name,
+      parentId: targetParentId,
+    );
+
+    for (final file in _hive.filesInFolder(folderId)) {
+      await copyFile(file.fileId, newFolderId);
+    }
+
+    for (final child in _hive.subfolders(folderId)) {
+      await _copyFolderRecursive(child.id, newFolderId);
+    }
+
+    return newFolderId;
+  }
+
+  bool _isDescendant(String? maybeChildId, String ancestorId) {
+    var currentId = maybeChildId;
+    while (currentId != null) {
+      if (currentId == ancestorId) return true;
+      currentId = _hive.getFolder(currentId)?.parentId;
+    }
+    return false;
   }
 
   Future<void> renameFile(String fileId, String newName) async {

@@ -17,6 +17,7 @@ import '../../features/browser/screens/browser_screen.dart';
 import '../../features/downloads/screens/downloads_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../../features/upload/bloc/upload_bloc.dart';
+import '../../features/browser/bloc/browser_bloc.dart';
 
 import 'app_drawer.dart';
 
@@ -132,14 +133,15 @@ class MobileShellState extends State<MobileShell> {
   int get currentIndex => _currentIndex;
 
   void _showAddMenu() {
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
         padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: AppTheme.black,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        decoration: BoxDecoration(
+          color: colors.bgSurface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -148,7 +150,7 @@ class MobileShellState extends State<MobileShell> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.white10,
+                color: colors.borderSubtle,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -158,7 +160,7 @@ class MobileShellState extends State<MobileShell> {
                 _AddActionItem(
                   icon: Icons.upload_file_rounded,
                   label: 'Upload File',
-                  color: Colors.blue,
+                  color: AppTheme.primary,
                   onTap: () {
                     Navigator.pop(ctx);
                     _pickAndUpload();
@@ -171,10 +173,7 @@ class MobileShellState extends State<MobileShell> {
                     color: AppTheme.warning,
                     onTap: () {
                       Navigator.pop(ctx);
-                      // This is a bit tricky since BrowserScreen is inside IndexedStack.
-                      // We can use a global notification or event bus, but for now
-                      // let's assume we can trigger a re-render or similar.
-                      // In a real app, a GlobalKey or a dedicated Bloc event would be better.
+                      _showCreateFolderDialog();
                     },
                   ),
               ],
@@ -184,6 +183,56 @@ class MobileShellState extends State<MobileShell> {
         ),
       ),
     );
+  }
+
+  Future<void> _showCreateFolderDialog() async {
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
+    final ctrl = TextEditingController();
+    final folderName = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: colors.bgSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          'New Folder',
+          style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold),
+        ),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          style: TextStyle(color: colors.textPrimary),
+          decoration: InputDecoration(
+            hintText: 'Folder name',
+            hintStyle: TextStyle(color: colors.textTertiary),
+            enabledBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: colors.borderSubtle),
+            ),
+            focusedBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: colors.accentPrimary),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: TextStyle(color: colors.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: colors.accentPrimary,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text('Create', style: TextStyle(color: colors.bgPrimary)),
+          ),
+        ],
+      ),
+    );
+
+    if (folderName != null && folderName.isNotEmpty && mounted) {
+      context.read<BrowserBloc>().add(CreateFolder(folderName));
+    }
   }
 
   Future<void> _pickAndUpload() async {
@@ -251,6 +300,7 @@ class _AddActionItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
@@ -267,8 +317,8 @@ class _AddActionItem extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(label,
-                style: const TextStyle(
-                    color: Colors.white,
+                style: TextStyle(
+                    color: colors.textPrimary,
                     fontSize: 13,
                     fontWeight: FontWeight.w500)),
           ],
@@ -290,7 +340,6 @@ class _MobileNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       height: 90,
@@ -321,7 +370,7 @@ class _MobileNavBar extends StatelessWidget {
               ),
               const SizedBox(width: 60), // Space for FAB
               _NavItem(
-                icon: Icons.swap_calls_rounded,
+                icon: Icons.sync_alt_rounded,
                 label: 'Transfer',
                 selected: currentIndex == 3,
                 onTap: () => onTap(3),
@@ -346,7 +395,7 @@ class _MobileNavBar extends StatelessWidget {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withAlpha(50),
+                      color: colors.textPrimary.withAlpha(30),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -354,7 +403,7 @@ class _MobileNavBar extends StatelessWidget {
                 ),
                 child: Icon(
                   Icons.add_rounded,
-                  color: isDark ? Colors.black : Colors.white,
+                  color: colors.bgPrimary,
                   size: 32,
                 ),
               ),

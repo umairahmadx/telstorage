@@ -21,8 +21,8 @@ class QrDialog extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
       title: Text(
         title,
-        style: const TextStyle(
-            color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+        style: TextStyle(
+            color: colors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
         textAlign: TextAlign.center,
       ),
       content: Column(
@@ -31,7 +31,7 @@ class QrDialog extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppTheme.white,
               borderRadius: BorderRadius.circular(20),
             ),
             child: QrImageView(
@@ -53,9 +53,9 @@ class QrDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Close',
+          child: Text('Close',
               style:
-                  TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold)),
         ),
       ],
     );

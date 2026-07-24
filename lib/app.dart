@@ -7,6 +7,7 @@ import 'features/auth/bloc/auth_bloc.dart';
 import 'features/upload/bloc/upload_bloc.dart';
 import 'features/home/bloc/home_cubit.dart';
 import 'features/downloads/bloc/transfer_cubit.dart';
+import 'features/browser/bloc/browser_bloc.dart';
 
 class TelStorageApp extends StatelessWidget {
   const TelStorageApp({super.key});
@@ -26,6 +27,9 @@ class TelStorageApp extends StatelessWidget {
         ),
         BlocProvider<TransferCubit>(
           create: (context) => TransferCubit(),
+        ),
+        BlocProvider<BrowserBloc>(
+          create: (context) => BrowserBloc(),
         ),
       ],
       child: ValueListenableBuilder<ThemeMode>(

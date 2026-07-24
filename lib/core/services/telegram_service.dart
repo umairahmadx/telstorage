@@ -39,7 +39,26 @@ class TelegramService {
 
       final result = res.data['result'];
       final messageId = result['message_id'] as int;
-      final fileId = result['document']['file_id'] as String;
+
+      // Fallback for different media types
+      String? fileId;
+      if (result['document'] != null) {
+        fileId = result['document']['file_id'] as String;
+      } else if (result['photo'] != null &&
+          result['photo'] is List &&
+          (result['photo'] as List).isNotEmpty) {
+        fileId = (result['photo'] as List).last['file_id'] as String;
+      } else if (result['video'] != null) {
+        fileId = result['video']['file_id'] as String;
+      } else if (result['audio'] != null) {
+        fileId = result['audio']['file_id'] as String;
+      }
+
+      if (fileId == null) {
+        AppLogger.e('No file_id found in result: $result',
+            tag: 'TelegramService');
+        throw Exception('Telegram response missing file_id');
+      }
 
       AppLogger.d(
           'Uploaded successfully, message_id: $messageId, file_id: $fileId',

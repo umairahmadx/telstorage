@@ -108,6 +108,11 @@ class AppTheme {
           thickness: 1,
           space: 0,
         ),
+        iconButtonTheme: const IconButtonThemeData(
+          style: ButtonStyle(
+            visualDensity: VisualDensity.compact,
+          ),
+        ),
         extensions: const [
           AppColorsExtension(
             bgPrimary: black,
@@ -176,6 +181,11 @@ class AppTheme {
           color: Color(0xFFD9D9D9),
           thickness: 1,
           space: 0,
+        ),
+        iconButtonTheme: const IconButtonThemeData(
+          style: ButtonStyle(
+            visualDensity: VisualDensity.compact,
+          ),
         ),
         extensions: const [
           AppColorsExtension(

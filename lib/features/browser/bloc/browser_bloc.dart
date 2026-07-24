@@ -85,6 +85,12 @@ class MoveFile extends BrowserEvent {
   MoveFile(this.fileId, this.targetFolderId);
 }
 
+class CopyFile extends BrowserEvent {
+  final String fileId;
+  final String? targetFolderId;
+  CopyFile(this.fileId, this.targetFolderId);
+}
+
 class DeleteFile extends BrowserEvent {
   final String fileId;
   DeleteFile(this.fileId);
@@ -95,6 +101,34 @@ class BatchDelete extends BrowserEvent {}
 class BatchMove extends BrowserEvent {
   final String? targetFolderId;
   BatchMove(this.targetFolderId);
+}
+
+class BatchCopy extends BrowserEvent {
+  final String? targetFolderId;
+  BatchCopy(this.targetFolderId);
+}
+
+enum ClipboardMode { copy, move }
+
+class SetClipboard extends BrowserEvent {
+  final ClipboardMode mode;
+  final Set<String> fileIds;
+  final Set<String> folderIds;
+  final String? sourceFolderId;
+
+  SetClipboard({
+    required this.mode,
+    required this.fileIds,
+    required this.folderIds,
+    required this.sourceFolderId,
+  });
+}
+
+class ClearClipboard extends BrowserEvent {}
+
+class PasteClipboard extends BrowserEvent {
+  final String? targetFolderId;
+  PasteClipboard(this.targetFolderId);
 }
 
 // ── States ────────────────────────────────────────────────────────────────────
@@ -114,6 +148,10 @@ class BrowserState {
   final bool isGridView;
   final Set<String> selectedFolderIds;
   final Set<String> selectedFileIds;
+  final ClipboardMode? clipboardMode;
+  final Set<String> clipboardFileIds;
+  final Set<String> clipboardFolderIds;
+  final String? clipboardSourceFolderId;
   final String? errorMessage;
   final bool isOffline;
   final int pendingActionsCount;
@@ -133,12 +171,17 @@ class BrowserState {
     this.isGridView = false,
     this.selectedFolderIds = const {},
     this.selectedFileIds = const {},
+    this.clipboardMode,
+    this.clipboardFileIds = const {},
+    this.clipboardFolderIds = const {},
+    this.clipboardSourceFolderId,
     this.errorMessage,
     this.isOffline = false,
     this.pendingActionsCount = 0,
   });
 
   bool get isMultiSelect => selectedFolderIds.isNotEmpty || selectedFileIds.isNotEmpty;
+  bool get hasClipboard => clipboardFileIds.isNotEmpty || clipboardFolderIds.isNotEmpty;
 
   BrowserState copyWith({
     bool? isLoading,
@@ -157,6 +200,11 @@ class BrowserState {
     bool? isGridView,
     Set<String>? selectedFolderIds,
     Set<String>? selectedFileIds,
+    ClipboardMode? clipboardMode,
+    Set<String>? clipboardFileIds,
+    Set<String>? clipboardFolderIds,
+    String? clipboardSourceFolderId,
+    bool clearClipboard = false,
     String? errorMessage,
     bool clearErrorMessage = false,
     bool? isOffline,
@@ -177,6 +225,10 @@ class BrowserState {
       isGridView: isGridView ?? this.isGridView,
       selectedFolderIds: selectedFolderIds ?? this.selectedFolderIds,
       selectedFileIds: selectedFileIds ?? this.selectedFileIds,
+      clipboardMode: clearClipboard ? null : (clipboardMode ?? this.clipboardMode),
+      clipboardFileIds: clearClipboard ? const {} : (clipboardFileIds ?? this.clipboardFileIds),
+      clipboardFolderIds: clearClipboard ? const {} : (clipboardFolderIds ?? this.clipboardFolderIds),
+      clipboardSourceFolderId: clearClipboard ? null : (clipboardSourceFolderId ?? this.clipboardSourceFolderId),
       errorMessage: clearErrorMessage ? null : (errorMessage ?? this.errorMessage),
       isOffline: isOffline ?? this.isOffline,
       pendingActionsCount: pendingActionsCount ?? this.pendingActionsCount,
@@ -209,9 +261,14 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
     on<DeleteFolder>(_onDeleteFolder);
     on<RenameFile>(_onRenameFile);
     on<MoveFile>(_onMoveFile);
+    on<CopyFile>(_onCopyFile);
     on<DeleteFile>(_onDeleteFile);
     on<BatchDelete>(_onBatchDelete);
     on<BatchMove>(_onBatchMove);
+    on<BatchCopy>(_onBatchCopy);
+    on<SetClipboard>(_onSetClipboard);
+    on<ClearClipboard>(_onClearClipboard);
+    on<PasteClipboard>(_onPasteClipboard);
 
     _initSubscriptions();
   }
@@ -470,6 +527,17 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
     }
   }
 
+  Future<void> _onCopyFile(CopyFile event, Emitter<BrowserState> emit) async {
+    emit(state.copyWith(isLoading: true));
+    try {
+      await _repository.copyFile(event.fileId, event.targetFolderId);
+      ServiceLocator.instance.syncQueue.processQueue();
+      _reloadContents(emit, isOffline: state.isOffline);
+    } catch (e) {
+      emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
+    }
+  }
+
   Future<void> _onDeleteFile(DeleteFile event, Emitter<BrowserState> emit) async {
     emit(state.copyWith(isLoading: true));
     try {
@@ -506,6 +574,70 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
       }
       ServiceLocator.instance.syncQueue.processQueue();
       emit(state.copyWith(selectedFolderIds: {}, selectedFileIds: {}));
+      _reloadContents(emit, isOffline: state.isOffline);
+    } catch (e) {
+      emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
+    }
+  }
+
+  Future<void> _onBatchCopy(BatchCopy event, Emitter<BrowserState> emit) async {
+    emit(state.copyWith(isLoading: true));
+    try {
+      for (final fileId in List.from(state.selectedFileIds)) {
+        await _repository.copyFile(fileId, event.targetFolderId);
+      }
+      ServiceLocator.instance.syncQueue.processQueue();
+      emit(state.copyWith(selectedFolderIds: {}, selectedFileIds: {}));
+      _reloadContents(emit, isOffline: state.isOffline);
+    } catch (e) {
+      emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
+    }
+  }
+
+  void _onSetClipboard(SetClipboard event, Emitter<BrowserState> emit) {
+    emit(state.copyWith(
+      clipboardMode: event.mode,
+      clipboardFileIds: event.fileIds,
+      clipboardFolderIds: event.folderIds,
+      clipboardSourceFolderId: event.sourceFolderId,
+      selectedFolderIds: {},
+      selectedFileIds: {},
+    ));
+  }
+
+  void _onClearClipboard(ClearClipboard event, Emitter<BrowserState> emit) {
+    emit(state.copyWith(clearClipboard: true));
+  }
+
+  Future<void> _onPasteClipboard(PasteClipboard event, Emitter<BrowserState> emit) async {
+    if (!state.hasClipboard) return;
+
+    final targetFolderId = event.targetFolderId;
+    final mode = state.clipboardMode;
+
+    if (targetFolderId == state.clipboardSourceFolderId && mode == ClipboardMode.move) {
+      emit(state.copyWith(
+        clearClipboard: true,
+        errorMessage: 'Source and destination folders are the same.',
+      ));
+      return;
+    }
+
+    emit(state.copyWith(isLoading: true));
+
+    try {
+      if (mode == ClipboardMode.move) {
+        for (final fileId in List.from(state.clipboardFileIds)) {
+          await _repository.moveFile(fileId, targetFolderId);
+        }
+      } else if (mode == ClipboardMode.copy) {
+        for (final fileId in List.from(state.clipboardFileIds)) {
+          await _repository.copyFile(fileId, targetFolderId);
+        }
+      }
+
+      ServiceLocator.instance.syncQueue.processQueue();
+      emit(state.copyWith(clearClipboard: true));
       _reloadContents(emit, isOffline: state.isOffline);
     } catch (e) {
       emit(state.copyWith(isLoading: false, errorMessage: e.toString()));

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import '../constants/app_constants.dart';
 import '../models/pending_action.dart';
@@ -5,11 +6,33 @@ import '../utils/app_logger.dart';
 import '../utils/connectivity.dart';
 import 'file_manager.dart';
 
+class SyncLogItem {
+  final String id;
+  final String actionType;
+  final String description;
+  final DateTime timestamp;
+  final String status; // 'pending', 'syncing', 'completed', 'failed'
+  final String? error;
+
+  SyncLogItem({
+    required this.id,
+    required this.actionType,
+    required this.description,
+    required this.timestamp,
+    required this.status,
+    this.error,
+  });
+}
+
 class SyncQueueService {
   final FileManagerService _fileManager;
   bool _isProcessing = false;
+  final ValueNotifier<int> pendingCountNotifier = ValueNotifier<int>(0);
+  final ValueNotifier<List<SyncLogItem>> logsNotifier = ValueNotifier<List<SyncLogItem>>([]);
 
-  SyncQueueService(this._fileManager);
+  SyncQueueService(this._fileManager) {
+    _updatePendingCount();
+  }
 
   Box<PendingAction> get _pendingBox =>
       Hive.box<PendingAction>(AppConstants.pendingActionsBox);
@@ -17,7 +40,28 @@ class SyncQueueService {
   bool get isProcessing => _isProcessing;
   int get pendingCount => _pendingBox.length;
 
+  void notifyItemAdded(String actionType, String description) {
+    final log = SyncLogItem(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      actionType: actionType,
+      description: description,
+      timestamp: DateTime.now(),
+      status: 'pending',
+    );
+    logsNotifier.value = [log, ...logsNotifier.value];
+    _updatePendingCount();
+  }
+
+  void _updatePendingCount() {
+    pendingCountNotifier.value = _pendingBox.length;
+  }
+
+  void clearLogs() {
+    logsNotifier.value = [];
+  }
+
   Future<void> processQueue() async {
+    _updatePendingCount();
     if (_isProcessing) return;
     if (pendingCount == 0) return;
 
@@ -30,31 +74,82 @@ class SyncQueueService {
     AppLogger.i('SyncQueue: starting processing of $pendingCount actions...', tag: 'SyncQueue');
 
     try {
-      // Get actions sorted by timestamp/insertion order
       final actions = _pendingBox.values.toList()
         ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
       for (final action in actions) {
         AppLogger.d('SyncQueue: processing action ${action.actionType} (${action.id})', tag: 'SyncQueue');
+        final desc = _getActionDescription(action);
+
+        final syncingLog = SyncLogItem(
+          id: action.id,
+          actionType: action.actionType,
+          description: desc,
+          timestamp: DateTime.now(),
+          status: 'syncing',
+        );
+        logsNotifier.value = [syncingLog, ...logsNotifier.value.where((l) => l.id != action.id)];
+
         try {
           await _executeAction(action);
           await _pendingBox.delete(action.id);
+          _updatePendingCount();
+
+          final completedLog = SyncLogItem(
+            id: action.id,
+            actionType: action.actionType,
+            description: desc,
+            timestamp: DateTime.now(),
+            status: 'completed',
+          );
+          logsNotifier.value = [completedLog, ...logsNotifier.value.where((l) => l.id != action.id)];
+
           AppLogger.d('SyncQueue: successfully processed & deleted action ${action.id}', tag: 'SyncQueue');
         } catch (e) {
           AppLogger.e('SyncQueue: failed to process action ${action.id}: $e', tag: 'SyncQueue', error: e);
-          // If it's a structural or critical issue (e.g. folder not empty on remote but we deleted it locally),
-          // we might want to skip it to avoid getting stuck forever.
-          // For now, we continue to the next one, but keep the failing one to retry or report.
-          // Let's remove it if it's a FolderNotEmptyException, or retry later.
+          final failedLog = SyncLogItem(
+            id: action.id,
+            actionType: action.actionType,
+            description: desc,
+            timestamp: DateTime.now(),
+            status: 'failed',
+            error: e.toString(),
+          );
+          logsNotifier.value = [failedLog, ...logsNotifier.value.where((l) => l.id != action.id)];
+
           if (e.toString().contains('not empty') || e.toString().contains('FolderNotEmptyException')) {
             await _pendingBox.delete(action.id);
+            _updatePendingCount();
           }
-          break; // Stop processing the rest of the queue for safety
+          break;
         }
       }
     } finally {
       _isProcessing = false;
+      _updatePendingCount();
       AppLogger.i('SyncQueue: processing finished.', tag: 'SyncQueue');
+    }
+  }
+
+  String _getActionDescription(PendingAction action) {
+    final payload = action.payload;
+    switch (action.actionType) {
+      case 'createFolder':
+        return 'Created folder "${payload['name']}"';
+      case 'renameFolder':
+        return 'Renamed folder to "${payload['name']}"';
+      case 'deleteFolder':
+        return 'Deleted folder';
+      case 'renameFile':
+        return 'Renamed file to "${payload['name']}"';
+      case 'moveFile':
+        return 'Moved file';
+      case 'copyFile':
+        return 'Copied file';
+      case 'deleteFile':
+        return 'Deleted file';
+      default:
+        return action.actionType;
     }
   }
 
@@ -93,9 +188,18 @@ class SyncQueueService {
         break;
 
       case 'copyFile':
-        final fileId = payload['fileId'] as String;
+        final originalFileId = (payload['originalFileId'] ?? payload['fileId']) as String;
+        final newFileId = payload['newFileId'] as String?;
+        final newName = payload['newName'] as String?;
         final targetFolderId = payload['targetFolderId'] as String?;
-        await _fileManager.copyFile(fileId, targetFolderId);
+        if (newFileId != null && newName != null) {
+          await _fileManager.copyFile(
+            originalFileId: originalFileId,
+            newFileId: newFileId,
+            newName: newName,
+            targetFolderId: targetFolderId,
+          );
+        }
         break;
 
       case 'deleteFile':

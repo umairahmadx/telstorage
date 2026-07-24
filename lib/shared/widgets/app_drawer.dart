@@ -28,27 +28,33 @@ class AppDrawer extends StatelessWidget {
               child: Row(
                 children: [
                   Container(
-                    width: 36,
-                    height: 36,
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
                       color: colors.accentPrimary,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    padding: const EdgeInsets.all(6),
+                    clipBehavior: Clip.antiAlias,
                     child: Image.asset(
                       'assets/images/logo.png',
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.black
-                          : Colors.white,
+                      fit: BoxFit.cover,
+                      errorBuilder: (ctx, err, stack) => Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Icon(
+                          Icons.cloud_queue_rounded,
+                          color: colors.bgPrimary,
+                          size: 24,
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Text(
+                  Text(
                     'TelStorage',
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: colors.textPrimary,
                     ),
                   ),
                 ],
@@ -76,7 +82,7 @@ class AppDrawer extends StatelessWidget {
               },
             ),
             _DrawerItem(
-              icon: Icons.file_download_outlined,
+              icon: Icons.download_rounded,
               label: 'Downloads',
               isSelected: currentIndex == 3 &&
                   ServiceLocator.instance.navigation.lastTransferTab == 0,
@@ -87,7 +93,7 @@ class AppDrawer extends StatelessWidget {
               },
             ),
             _DrawerItem(
-              icon: Icons.file_upload_outlined,
+              icon: Icons.cloud_upload_outlined,
               label: 'Uploads',
               isSelected: currentIndex == 3 &&
                   ServiceLocator.instance.navigation.lastTransferTab == 1,
@@ -98,7 +104,7 @@ class AppDrawer extends StatelessWidget {
               },
             ),
             _DrawerItem(
-              icon: Icons.people_outline_rounded,
+              icon: Icons.share_rounded,
               label: 'Shared',
               isSelected: currentIndex == 3 &&
                   ServiceLocator.instance.navigation.lastTransferTab == 2,
@@ -108,9 +114,9 @@ class AppDrawer extends StatelessWidget {
                     .navigateTo(AppDestination.transferShared);
               },
             ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              child: Divider(color: Colors.white10),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              child: Divider(color: colors.borderSubtle),
             ),
             _DrawerItem(
               icon: Icons.settings_outlined,

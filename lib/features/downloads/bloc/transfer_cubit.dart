@@ -135,6 +135,22 @@ class TransferCubit extends Cubit<TransferState> {
     return ServiceLocator.instance.storageRepository.getWebShareJob(fileId);
   }
 
+  Future<void> deleteShareJob(String fileId) async {
+    try {
+      await ServiceLocator.instance.webShareQueue.deleteShare(fileId);
+    } catch (e) {
+      emit(state.copyWith(errorMessage: e.toString()));
+    }
+  }
+
+  Future<void> deleteDownloadedFile(String fileId) async {
+    try {
+      await ServiceLocator.instance.downloadQueue.deleteJobAndLocalFile(fileId);
+    } catch (e) {
+      emit(state.copyWith(errorMessage: e.toString()));
+    }
+  }
+
   @override
   Future<void> close() {
     ServiceLocator.instance.transferQueue.tasksNotifier.removeListener(_onTasksChanged);

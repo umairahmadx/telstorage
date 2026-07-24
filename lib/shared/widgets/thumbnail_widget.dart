@@ -1,10 +1,10 @@
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:thumbnailer/thumbnailer.dart';
 
 import '../../core/models/file_record.dart';
 import '../../core/services/service_locator.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/utils/thumbnail_helper_native.dart'
     if (dart.library.js_interop) '../../core/utils/thumbnail_helper_web.dart';
 
@@ -13,7 +13,6 @@ class ThumbnailWidget extends StatefulWidget {
   final double width;
   final double height;
   final BoxFit fit;
-  final Widget fallback;
 
   const ThumbnailWidget({
     super.key,
@@ -21,7 +20,6 @@ class ThumbnailWidget extends StatefulWidget {
     required this.width,
     required this.height,
     this.fit = BoxFit.cover,
-    required this.fallback,
   });
 
   @override
@@ -38,34 +36,8 @@ class _ThumbnailWidgetState extends State<ThumbnailWidget> {
   }
 
   void _initThumbnail() {
-    if (widget.file.isVideo && !kIsWeb) {
-      _thumbnailFuture = _generateVideoThumbnail();
-    } else {
-      _thumbnailFuture = ServiceLocator.instance.thumbnailRepository
-          .getThumbnailData(widget.file);
-    }
-  }
-
-  Future<String?> _generateVideoThumbnail() async {
-    try {
-      final cachedPath =
-          await ThumbnailHelper.cachedVideoThumbnailPath(widget.file.fileId);
-      if (cachedPath != null) return cachedPath;
-
-      final downloadJob = ServiceLocator.instance.downloadQueue.allJobs
-          .where((j) => j.fileId == widget.file.fileId && j.isComplete)
-          .firstOrNull;
-
-      if (downloadJob?.localPath != null) {
-        return ThumbnailHelper.generateVideoThumbnail(
-          widget.file.fileId,
-          downloadJob!.localPath!,
-        );
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
+    _thumbnailFuture = ServiceLocator.instance.thumbnailRepository
+        .getThumbnailData(widget.file);
   }
 
   @override
@@ -79,72 +51,106 @@ class _ThumbnailWidgetState extends State<ThumbnailWidget> {
 
   @override
   Widget build(BuildContext context) {
-    // For documents and other non-media, use thumbnailer for branded icons
-    if (!widget.file.isImage && !widget.file.isVideo) {
-      return SizedBox(
-        width: widget.width,
-        height: widget.height,
-        child: Thumbnail(
-          mimeType: widget.file.mimeType,
-          widgetSize: widget.width,
-          name: widget.file.name,
-          onlyIcon: true,
-          useWaterMark: false,
-        ),
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
+
+    // For files with uploaded thumbnails (Images, Videos, PDFs)
+    if (widget.file.thumbnailFileId != null) {
+      return FutureBuilder<dynamic>(
+        future: _thumbnailFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.done) {
+            final data = snapshot.data;
+
+            if (data == null) return _buildThumbnailerFallback(colors);
+
+            ImageProvider imageProvider;
+            if (kIsWeb && data is Uint8List) {
+              imageProvider = MemoryImage(data);
+            } else if (data is String) {
+              final nativeProvider =
+                  ThumbnailHelper.imageProviderFromPath(data);
+              if (nativeProvider == null) return _buildThumbnailerFallback(colors);
+              imageProvider = nativeProvider;
+            } else if (data is Uint8List) {
+              imageProvider = MemoryImage(data);
+            } else {
+              return _buildThumbnailerFallback(colors);
+            }
+
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image(
+                image: imageProvider,
+                width: widget.width,
+                height: widget.height,
+                fit: widget.fit,
+                errorBuilder: (_, __, ___) => _buildThumbnailerFallback(colors),
+              ),
+            );
+          }
+
+          return Container(
+            width: widget.width,
+            height: widget.height,
+            decoration: BoxDecoration(
+              color: colors.bgSurfaceInset,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Center(
+              child: SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: colors.textTertiary),
+              ),
+            ),
+          );
+        },
       );
     }
 
-    // For images and videos (using Telegram provided thumbs or local generation)
-    return FutureBuilder<dynamic>(
-      future: _thumbnailFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.done) {
-          final data = snapshot.data;
+    // No uploaded thumbnail -> Use thumbnailer directly
+    return _buildThumbnailerFallback(colors);
+  }
 
-          if (data == null) return widget.fallback;
+  Widget _buildThumbnailerFallback(AppColorsExtension colors) {
+    IconData iconData = Icons.insert_drive_file_rounded;
+    Color iconColor = colors.textPrimary;
+    Color iconBg = colors.bgSurfaceInset;
 
-          ImageProvider imageProvider;
-          if (kIsWeb && data is Uint8List) {
-            imageProvider = MemoryImage(data);
-          } else if (data is String) {
-            final nativeProvider = ThumbnailHelper.imageProviderFromPath(data);
-            if (nativeProvider == null) return widget.fallback;
-            imageProvider = nativeProvider;
-          } else if (data is Uint8List) {
-            imageProvider = MemoryImage(data);
-          } else {
-            return widget.fallback;
-          }
+    if (widget.file.isPdf) {
+      iconData = Icons.picture_as_pdf_rounded;
+      iconColor = colors.filePdf;
+      iconBg = colors.filePdfBg;
+    } else if (widget.file.isVideo) {
+      iconData = Icons.play_circle_fill_rounded;
+      iconColor = colors.fileVideo;
+      iconBg = colors.fileVideoBg;
+    } else if (widget.file.name.endsWith('.zip') ||
+        widget.file.mimeType.contains('zip') ||
+        widget.file.mimeType.contains('archive')) {
+      iconData = Icons.folder_zip_rounded;
+      iconColor = colors.fileZip;
+      iconBg = colors.bgSurfaceInset;
+    } else if (widget.file.isImage) {
+      iconData = Icons.image_rounded;
+      iconColor = colors.accentPrimary;
+      iconBg = colors.bgSurfaceInset;
+    }
 
-          return ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Image(
-              image: imageProvider,
-              width: widget.width,
-              height: widget.height,
-              fit: widget.fit,
-              errorBuilder: (_, __, ___) => widget.fallback,
-            ),
-          );
-        }
-
-        return Container(
-          width: widget.width,
-          height: widget.height,
-          decoration: BoxDecoration(
-            color: Colors.white.withAlpha(10),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Center(
-            child: SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                  strokeWidth: 2, color: Colors.white24),
-            ),
-          ),
-        );
-      },
+    return Container(
+      width: widget.width,
+      height: widget.height,
+      decoration: BoxDecoration(
+        color: iconBg,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      alignment: Alignment.center,
+      child: Icon(
+        iconData,
+        color: iconColor,
+        size: (widget.width * 0.45).clamp(16.0, 40.0),
+      ),
     );
   }
 }

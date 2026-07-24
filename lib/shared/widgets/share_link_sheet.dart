@@ -62,10 +62,10 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
                   children: [
                     Text(
                       widget.file.name,
-                      style: const TextStyle(
+                      style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color: Colors.white),
+                          color: colors.textPrimary),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -81,8 +81,8 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
             ],
           ),
           const SizedBox(height: 32),
-          const Text('Expires',
-              style: TextStyle(color: Colors.white70, fontSize: 14)),
+          Text('Expires',
+              style: TextStyle(color: colors.textSecondary, fontSize: 14)),
           const SizedBox(height: 12),
           PopupMenuButton<int>(
             onSelected: (days) => setState(() => _expiryDays = days),
@@ -99,32 +99,32 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.calendar_today_outlined,
-                      size: 20, color: Colors.white54),
+                  Icon(Icons.calendar_today_outlined,
+                      size: 20, color: colors.textTertiary),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('In $_expiryDays days',
-                            style: const TextStyle(
-                                color: Colors.white,
+                            style: TextStyle(
+                                color: colors.textPrimary,
                                 fontWeight: FontWeight.w600)),
                         Text(dateStr,
-                            style: const TextStyle(
-                                color: Colors.white38, fontSize: 11)),
+                            style: TextStyle(
+                                color: colors.textTertiary, fontSize: 11)),
                       ],
                     ),
                   ),
-                  const Icon(Icons.keyboard_arrow_down_rounded,
-                      color: Colors.white54),
+                  Icon(Icons.keyboard_arrow_down_rounded,
+                      color: colors.textTertiary),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 24),
-          const Text('Password (Optional)',
-              style: TextStyle(color: Colors.white70, fontSize: 14)),
+          Text('Password (Optional)',
+              style: TextStyle(color: colors.textSecondary, fontSize: 14)),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -134,19 +134,19 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.lock_outline_rounded,
-                    size: 20, color: Colors.white54),
+                Icon(Icons.lock_outline_rounded,
+                    size: 20, color: colors.textTertiary),
                 const SizedBox(width: 16),
-                const Expanded(
+                Expanded(
                   child: Text('Set password',
                       style: TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.w500)),
+                          color: colors.textPrimary, fontWeight: FontWeight.w500)),
                 ),
                 Switch(
                   value: _setPassword,
                   onChanged: (v) => setState(() => _setPassword = v),
-                  activeTrackColor: Colors.white,
-                  activeThumbColor: Colors.black,
+                  activeTrackColor: colors.accentPrimary,
+                  activeThumbColor: colors.bgPrimary,
                 ),
               ],
             ),
@@ -156,10 +156,10 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
             TextField(
               controller: _passCtrl,
               obscureText: true,
-              style: const TextStyle(color: Colors.white),
+              style: TextStyle(color: colors.textPrimary),
               decoration: InputDecoration(
                 hintText: 'Enter password',
-                hintStyle: const TextStyle(color: Colors.white24),
+                hintStyle: TextStyle(color: colors.textTertiary),
                 filled: true,
                 fillColor: colors.bgSurface,
                 border: OutlineInputBorder(
@@ -176,8 +176,8 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
                   onPressed: () => widget.onCopyLink(
                       _setPassword ? _passCtrl.text : null, _expiryDays),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
+                    backgroundColor: colors.accentPrimary,
+                    foregroundColor: colors.bgPrimary,
                     minimumSize: const Size(double.infinity, 56),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16)),
@@ -206,7 +206,7 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
                   child: Icon(
                     Icons.qr_code_2_rounded,
                     color:
-                        widget.shareUrl == null ? Colors.white24 : Colors.white,
+                        widget.shareUrl == null ? colors.textTertiary : colors.textPrimary,
                   ),
                 ),
               ),

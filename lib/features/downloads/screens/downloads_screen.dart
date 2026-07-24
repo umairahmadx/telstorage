@@ -11,6 +11,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/navigation/navigation_intent.dart';
 import '../../../shared/widgets/mobile_shell.dart';
+import '../../../shared/widgets/thumbnail_widget.dart';
 import '../../../shared/widgets/file_detail_sheet.dart';
 import '../../../shared/widgets/share_link_sheet.dart';
 import '../../../core/services/transfer_queue_service.dart';
@@ -140,6 +141,145 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
           content: Text('"${file.name}" added to downloads'),
           backgroundColor: colors.success),
     );
+  }
+
+
+  void _showShareOptionsDialog(DownloadJob job, FileRecord? file) {
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: colors.bgSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: colors.textTertiary.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Share "${job.name}"',
+                style: TextStyle(
+                  color: colors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 20),
+              if (job.isComplete && job.localPath != null)
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: colors.accentPrimary.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.description_outlined, color: colors.accentPrimary),
+                  ),
+                  title: Text(
+                    'Share as File',
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Send local file to apps',
+                    style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                  ),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    // ignore: deprecated_member_use
+                    await Share.shareXFiles(
+                      [XFile(job.localPath!)],
+                      text: job.name,
+                    );
+                  },
+                ),
+              const SizedBox(height: 8),
+              if (file != null)
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: colors.accentPrimary.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.link_rounded, color: colors.accentPrimary),
+                  ),
+                  title: Text(
+                    'Share as Link',
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Generate web share link',
+                    style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showShareSheet(file);
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmDeleteLocalFile(DownloadJob job) async {
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: colors.bgSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          'Delete from Phone?',
+          style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'This will remove "${job.name}" from your phone storage. It remains safe in Telegram Cloud.',
+          style: TextStyle(color: colors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel', style: TextStyle(color: colors.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: colors.error,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text('Delete', style: TextStyle(color: colors.bgPrimary)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await context.read<TransferCubit>().deleteDownloadedFile(job.fileId);
+    }
   }
 
   @override
@@ -304,7 +444,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                   child: Text(
                     tabs[i],
                     style: TextStyle(
-                      color: isSelected ? (Theme.of(context).brightness == Brightness.dark ? Colors.black : Colors.white) : colors.textSecondary,
+                      color: isSelected ? colors.bgPrimary : colors.textSecondary,
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
                     ),
@@ -353,13 +493,12 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
             child: Column(
               children: List.generate(jobs.length, (i) {
                 final job = jobs[i];
+                final file = context.read<TransferCubit>().getFile(job.fileId);
                 return _DownloadItemTile(
                   job: job,
                   isLast: i == jobs.length - 1,
-                  onMore: () {
-                    final file = context.read<TransferCubit>().getFile(job.fileId);
-                    if (file != null) _showFileDetail(file);
-                  },
+                  onShare: () => _showShareOptionsDialog(job, file),
+                  onDelete: () => _confirmDeleteLocalFile(job),
                 );
               }),
             ),
@@ -459,10 +598,16 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                 return _SharedItemTile(
                   share: share,
                   isLast: i == shares.length - 1,
-                  onMore: () {
-                    final file = context.read<TransferCubit>().getFile(share.fileId);
-                    if (file != null) _showFileDetail(file);
-                  },
+                  onCopy: share.shareUrl != null
+                      ? () {
+                          Clipboard.setData(
+                              ClipboardData(text: share.shareUrl!));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Link copied to clipboard!')),
+                          );
+                        }
+                      : null,
                   onShare: () {
                     if (share.shareUrl != null) {
                       SharePlus.instance.share(
@@ -471,9 +616,16 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                         ),
                       );
                     } else {
-                      final file = context.read<TransferCubit>().getFile(share.fileId);
+                      final file = context
+                          .read<TransferCubit>()
+                          .getFile(share.fileId);
                       if (file != null) _showShareSheet(file);
                     }
+                  },
+                  onDelete: () async {
+                    await context
+                        .read<TransferCubit>()
+                        .deleteShareJob(share.fileId);
                   },
                 );
               }),
@@ -511,9 +663,10 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
 class _DownloadItemTile extends StatelessWidget {
   final DownloadJob job;
   final bool isLast;
-  final VoidCallback? onMore;
+  final VoidCallback? onShare;
+  final VoidCallback? onDelete;
   const _DownloadItemTile(
-      {required this.job, this.isLast = false, this.onMore});
+      {required this.job, this.isLast = false, this.onShare, this.onDelete});
 
   @override
   Widget build(BuildContext context) {
@@ -525,6 +678,8 @@ class _DownloadItemTile extends StatelessWidget {
             ? 'Paused'
             : '${(job.progress * 100).toInt()}% complete');
 
+    final file = context.read<TransferCubit>().getFile(job.fileId);
+
     return GestureDetector(
       onTap: isComplete && job.localPath != null
           ? () => OpenFile.open(job.localPath)
@@ -532,44 +687,44 @@ class _DownloadItemTile extends StatelessWidget {
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: colors.bgSurfaceInset,
-                        borderRadius: BorderRadius.circular(12),
+                    if (file != null)
+                      ThumbnailWidget(file: file, width: 40, height: 40)
+                    else
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: colors.bgSurfaceInset,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                            isComplete
+                                ? Icons.insert_drive_file_outlined
+                                : Icons.file_download_outlined,
+                            color: colors.textPrimary,
+                            size: 20),
                       ),
-                      child: Icon(
-                          isComplete
-                              ? Icons.insert_drive_file_outlined
-                              : Icons.file_download_outlined,
-                          color: colors.textPrimary,
-                          size: 24),
-                    ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             job.name,
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleLarge
-                                ?.copyWith(
-                                  color:
-                                      isComplete ? colors.accentPrimary : null,
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: isComplete ? colors.accentPrimary : colors.textPrimary,
                                 ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 2),
                           Text(
                             '${job.sizeMb.toStringAsFixed(1)} MB • $statusText',
                             style: Theme.of(context).textTheme.bodySmall,
@@ -577,10 +732,19 @@ class _DownloadItemTile extends StatelessWidget {
                         ],
                       ),
                     ),
+                    // Share icon
                     IconButton(
-                      icon: Icon(Icons.more_horiz_rounded,
-                          color: colors.textSecondary),
-                      onPressed: onMore,
+                      icon: Icon(Icons.ios_share_rounded,
+                          color: colors.accentPrimary, size: 20),
+                      tooltip: 'Share',
+                      onPressed: onShare,
+                    ),
+                    // Delete icon
+                    IconButton(
+                      icon: Icon(Icons.delete_outline_rounded,
+                          color: colors.error, size: 20),
+                      tooltip: 'Delete from phone',
+                      onPressed: onDelete,
                     ),
                   ],
                 ),
@@ -631,38 +795,48 @@ class _UploadItemTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
     final isComplete = progress >= 1.0;
+    
+    // Attempt to find the FileRecord to show a proper thumbnail
+    final file = context.read<TransferCubit>().state.uploadJobs
+        .where((f) => f.name == name).firstOrNull;
 
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: iconColor.withAlpha(40),
-                      borderRadius: BorderRadius.circular(12),
+                  if (file != null)
+                    ThumbnailWidget(file: file, width: 40, height: 40)
+                  else
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: iconColor.withAlpha(40),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(Icons.description_rounded,
+                          color: iconColor, size: 20),
                     ),
-                    child: Icon(Icons.description_rounded,
-                        color: iconColor, size: 24),
-                  ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           name,
-                          style: Theme.of(context).textTheme.titleLarge,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: colors.textPrimary,
+                              ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 2),
                         Text(
                           '$size • $status',
                           style: Theme.of(context).textTheme.bodySmall,
@@ -703,70 +877,84 @@ class _UploadItemTile extends StatelessWidget {
 class _SharedItemTile extends StatelessWidget {
   final WebShareJob share;
   final bool isLast;
-  final VoidCallback? onMore;
+  final VoidCallback? onCopy;
   final VoidCallback? onShare;
+  final VoidCallback? onDelete;
   const _SharedItemTile(
-      {required this.share, this.isLast = false, this.onMore, this.onShare});
+      {required this.share,
+      this.isLast = false,
+      this.onCopy,
+      this.onShare,
+      this.onDelete});
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
+    final file = context.read<TransferCubit>().getFile(share.fileId);
+
     return Column(
       children: [
-        ListTile(
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          leading: Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: colors.bgSurfaceInset,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(_getIcon(share.mimeType),
-                color: _getColor(colors, share.mimeType), size: 24),
-          ),
-          title:
-              Text(share.name, style: Theme.of(context).textTheme.titleLarge),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
             children: [
-              Text(
-                'Shared by you • ${_formatDate(share.completedAt)}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              if (share.isComplete && share.shareUrl != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  share.shareUrl!,
-                  style: TextStyle(color: colors.accentPrimary, fontSize: 11),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+              // Thumbnail
+              file != null
+                  ? ThumbnailWidget(file: file, width: 40, height: 40)
+                  : Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: colors.bgSurfaceInset,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(_getIcon(share.mimeType),
+                          color: _getColor(colors, share.mimeType), size: 20),
+                    ),
+              const SizedBox(width: 12),
+              // Text
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      share.name,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: colors.textPrimary,
+                          ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Shared • ${_formatDate(share.completedAt)}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                 ),
-              ],
-            ],
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+              ),
+              // Copy link icon
               if (share.isComplete && share.shareUrl != null)
                 IconButton(
-                  icon: const Icon(Icons.copy_rounded, size: 18),
-                  onPressed: () {
-                    Clipboard.setData(ClipboardData(text: share.shareUrl!));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('Link copied to clipboard!')),
-                    );
-                  },
+                  icon: Icon(Icons.copy_rounded,
+                      size: 18, color: colors.accentPrimary),
+                  tooltip: 'Copy link',
+                  onPressed: onCopy,
                 ),
+              // Share link icon
               IconButton(
-                icon: const Icon(Icons.share_outlined, size: 20),
+                icon: Icon(Icons.ios_share_rounded,
+                    size: 18, color: colors.accentPrimary),
+                tooltip: 'Share link',
                 onPressed: onShare,
               ),
+              // Delete icon
               IconButton(
-                icon: const Icon(Icons.more_horiz_rounded, size: 20),
-                onPressed: onMore,
+                icon: Icon(Icons.delete_outline_rounded,
+                    size: 18, color: colors.error),
+                tooltip: 'Delete link',
+                onPressed: onDelete,
               ),
             ],
           ),
@@ -778,10 +966,10 @@ class _SharedItemTile extends StatelessWidget {
   }
 
   IconData _getIcon(String mime) {
-    if (mime.startsWith('image/')) return Icons.image_outlined;
-    if (mime.startsWith('video/')) return Icons.play_circle_outline;
-    if (mime == 'application/pdf') return Icons.description_outlined;
-    return Icons.insert_drive_file_outlined;
+    if (mime.startsWith('image/')) return Icons.image_rounded;
+    if (mime.startsWith('video/')) return Icons.play_circle_fill_rounded;
+    if (mime == 'application/pdf') return Icons.picture_as_pdf_rounded;
+    return Icons.insert_drive_file_rounded;
   }
 
   Color _getColor(AppColorsExtension colors, String mime) {
@@ -828,8 +1016,8 @@ class _ActiveTransferCard extends StatelessWidget {
                 task.type == TransferType.upload
                     ? Icons.cloud_upload_outlined
                     : (task.type == TransferType.download
-                        ? Icons.file_download_outlined
-                        : Icons.share_outlined),
+                        ? Icons.download_rounded
+                        : Icons.share_rounded),
                 size: 16,
                 color: colors.accentPrimary,
               ),
@@ -873,7 +1061,7 @@ class _ActiveTransferCard extends StatelessWidget {
               ),
             ],
           ),
-          const Spacer(),
+          const SizedBox(height: 4),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [

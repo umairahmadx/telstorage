@@ -8,6 +8,8 @@ import '../../../shared/widgets/thumbnail_widget.dart';
 import '../../../shared/widgets/mobile_shell.dart';
 import '../../../shared/widgets/share_link_sheet.dart';
 import '../../../shared/widgets/file_detail_sheet.dart';
+import '../../../core/services/service_locator.dart';
+import '../../sync/screens/sync_screen.dart';
 import '../bloc/browser_bloc.dart';
 import '../../downloads/bloc/transfer_cubit.dart';
 
@@ -337,49 +339,61 @@ class _BrowserScreenState extends State<BrowserScreen> {
                 icon: Icon(Icons.menu_rounded, color: colors.textPrimary),
                 onPressed: () => MobileShell.of(context)?.openDrawer(),
               ),
-              title: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Files',
-                    style: TextStyle(
-                      color: colors.textPrimary,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  if (state.pendingActionsCount > 0) ...[
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: colors.accentPrimary.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: colors.accentPrimary.withValues(alpha: 0.4), width: 1),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.cloud_upload_outlined, size: 12, color: colors.accentPrimary),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${state.pendingActionsCount}',
-                            style: TextStyle(
-                              color: colors.accentPrimary,
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ],
+              title: Text(
+                'Files',
+                style: TextStyle(
+                  color: colors.textPrimary,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               centerTitle: true,
               actions: [
+                ValueListenableBuilder<int>(
+                  valueListenable: ServiceLocator.instance.syncQueue.pendingCountNotifier,
+                  builder: (context, pendingCount, _) {
+                    final badgeText = pendingCount > 9 ? '+9' : '+$pendingCount';
+                    return Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.sync_rounded, color: colors.textPrimary),
+                          tooltip: 'Sync Center',
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const SyncScreen()),
+                            );
+                          },
+                        ),
+                        if (pendingCount > 0)
+                          Positioned(
+                            right: 6,
+                            top: 6,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: colors.accentPrimary,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                              child: Text(
+                                badgeText,
+                                style: TextStyle(
+                                  color: colors.bgPrimary,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
                 IconButton(
-                  icon: Icon(Icons.file_download_outlined, color: colors.textPrimary),
+                  icon: Icon(Icons.download_rounded, color: colors.textPrimary),
                   onPressed: () => MobileShell.of(context)?.switchTab(3),
                 ),
               ],
@@ -397,78 +411,113 @@ class _BrowserScreenState extends State<BrowserScreen> {
                 child: ListView(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   children: [
-                    if (state.folders.isNotEmpty) ...[
-                      _buildSectionHeader('Folders',
-                          trailing: IconButton(
-                            icon: Icon(Icons.add, size: 20, color: colors.textPrimary),
-                            onPressed: _createFolder,
-                          )),
-                      ...state.folders.map((f) {
-                        final count = state.folderItemCounts[f.id] ?? 0;
-                        final isSelected = state.selectedFolderIds.contains(f.id);
-                        return _FolderTile(
-                          folder: f,
-                          itemCount: count,
-                          isSelected: isSelected,
-                          isMultiSelect: state.isMultiSelect,
-                          onTap: () {
-                            if (state.isMultiSelect) {
-                              context.read<BrowserBloc>().add(ToggleItemSelection(f.id, isFolder: true));
-                            } else {
-                              context.read<BrowserBloc>().add(LoadDirectory(folderId: f.id));
-                            }
-                          },
-                          onLongPress: () {
-                            context.read<BrowserBloc>().add(ToggleItemSelection(f.id, isFolder: true));
-                          },
-                          onMore: () {
-                            if (state.isMultiSelect) {
-                              context.read<BrowserBloc>().add(ToggleItemSelection(f.id, isFolder: true));
-                            }
-                          },
-                        );
-                      }),
-                      const SizedBox(height: 24),
-                    ],
-                    _buildSectionHeader('Files',
-                        trailing: GestureDetector(
-                          onTap: () =>
-                              context.read<BrowserBloc>().add(SortOptionChanged(BrowserSortOption.name)),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text('Name',
-                                  style: TextStyle(
-                                      color: colors.textSecondary, fontSize: 13)),
-                              const SizedBox(width: 4),
-                              Icon(
-                                  state.sortAscending
-                                      ? Icons.arrow_upward_rounded
-                                      : Icons.arrow_downward_rounded,
-                                  size: 14,
-                                  color: colors.textSecondary),
-                            ],
+                    if (state.folders.isEmpty && state.files.isEmpty)
+                      _buildEmptyState(colors, state)
+                    else ...[
+                      if (state.folders.isNotEmpty) ...[
+                        _buildSectionHeader('Folders',
+                            trailing: IconButton(
+                              icon: Icon(Icons.add, size: 20, color: colors.textPrimary),
+                              onPressed: _createFolder,
+                            )),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: colors.bgSurface,
+                            borderRadius: BorderRadius.circular(24),
                           ),
-                        )),
-                    ...state.files.map((f) {
-                      final isSelected = state.selectedFileIds.contains(f.fileId);
-                      return _FileTile(
-                        file: f,
-                        isSelected: isSelected,
-                        isMultiSelect: state.isMultiSelect,
-                        onTap: () {
-                          if (state.isMultiSelect) {
-                            context.read<BrowserBloc>().add(ToggleItemSelection(f.fileId, isFolder: false));
-                          } else {
-                            _downloadAndView(f);
-                          }
-                        },
-                        onLongPress: () {
-                          context.read<BrowserBloc>().add(ToggleItemSelection(f.fileId, isFolder: false));
-                        },
-                        onMore: () => _showFileDetail(f),
-                      );
-                    }),
+                          child: Column(
+                            children: List.generate(state.folders.length, (fi) {
+                              final f = state.folders[fi];
+                              final count = state.folderItemCounts[f.id] ?? 0;
+                              final isSelected = state.selectedFolderIds.contains(f.id);
+                              return _FolderTile(
+                                folder: f,
+                                itemCount: count,
+                                isSelected: isSelected,
+                                isMultiSelect: state.isMultiSelect,
+                                isLast: fi == state.folders.length - 1,
+                                onTap: () {
+                                  if (state.isMultiSelect) {
+                                    context.read<BrowserBloc>().add(ToggleItemSelection(f.id, isFolder: true));
+                                  } else {
+                                    context.read<BrowserBloc>().add(LoadDirectory(folderId: f.id));
+                                  }
+                                },
+                                onLongPress: () {
+                                  context.read<BrowserBloc>().add(ToggleItemSelection(f.id, isFolder: true));
+                                },
+                                onMore: () {
+                                  if (state.isMultiSelect) {
+                                    context.read<BrowserBloc>().add(ToggleItemSelection(f.id, isFolder: true));
+                                  }
+                                },
+                              );
+                            }),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+                      _buildSectionHeader('Files',
+                          trailing: GestureDetector(
+                            onTap: () =>
+                                context.read<BrowserBloc>().add(SortOptionChanged(BrowserSortOption.name)),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('Name',
+                                    style: TextStyle(
+                                        color: colors.textSecondary, fontSize: 13)),
+                                const SizedBox(width: 4),
+                                Icon(
+                                    state.sortAscending
+                                        ? Icons.arrow_upward_rounded
+                                        : Icons.arrow_downward_rounded,
+                                    size: 14,
+                                    color: colors.textSecondary),
+                              ],
+                            ),
+                          )),
+                      if (state.files.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          child: Center(
+                            child: Text(
+                              'No files in this folder.',
+                              style: TextStyle(color: colors.textTertiary, fontSize: 13),
+                            ),
+                          ),
+                        )
+                      else
+                        Container(
+                          decoration: BoxDecoration(
+                            color: colors.bgSurface,
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          child: Column(
+                            children: List.generate(state.files.length, (fi) {
+                              final f = state.files[fi];
+                              final isSelected = state.selectedFileIds.contains(f.fileId);
+                              return _FileTile(
+                                file: f,
+                                isSelected: isSelected,
+                                isMultiSelect: state.isMultiSelect,
+                                isLast: fi == state.files.length - 1,
+                                onTap: () {
+                                  if (state.isMultiSelect) {
+                                    context.read<BrowserBloc>().add(ToggleItemSelection(f.fileId, isFolder: false));
+                                  } else {
+                                    _downloadAndView(f);
+                                  }
+                                },
+                                onLongPress: () {
+                                  context.read<BrowserBloc>().add(ToggleItemSelection(f.fileId, isFolder: false));
+                                },
+                                onMore: () => _showFileDetail(f),
+                              );
+                            }),
+                          ),
+                        ),
+                    ],
                     const SizedBox(height: 100),
                   ],
                 ),
@@ -553,6 +602,67 @@ class _BrowserScreenState extends State<BrowserScreen> {
               'Paste Here',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(AppColorsExtension colors, BrowserState state) {
+    final isSearch = state.searchQuery.isNotEmpty;
+    final isFilter = state.category != null;
+
+    IconData iconData = Icons.folder_open_rounded;
+    String title = 'This folder is empty';
+    String description = 'Upload files or create a subfolder to get started.';
+
+    if (isSearch) {
+      iconData = Icons.search_off_rounded;
+      title = 'No items found';
+      description = 'No files or folders matched "${state.searchQuery}".';
+    } else if (isFilter) {
+      iconData = Icons.filter_alt_off_rounded;
+      title = 'No ${state.category} files';
+      description = 'There are no files matching this category in this location.';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: colors.fileFolderBg,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              iconData,
+              size: 40,
+              color: colors.textTertiary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: colors.textPrimary,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            description,
+            style: TextStyle(
+              fontSize: 14,
+              color: colors.textSecondary,
+            ),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
@@ -659,6 +769,7 @@ class _FolderTile extends StatelessWidget {
   final int itemCount;
   final bool isSelected;
   final bool isMultiSelect;
+  final bool isLast;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final VoidCallback onMore;
@@ -671,74 +782,81 @@ class _FolderTile extends StatelessWidget {
     required this.onTap,
     required this.onLongPress,
     required this.onMore,
+    this.isLast = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
     final dateStr = DateFormat('dd MMM yyyy').format(folder.createdAt);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: GestureDetector(
-        onTap: onTap,
-        onLongPress: onLongPress,
-        child: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: isSelected ? colors.accentPrimary.withValues(alpha: 0.12) : colors.bgSurface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isSelected ? colors.accentPrimary : Colors.transparent,
-              width: 1.5,
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: onTap,
+          onLongPress: onLongPress,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: isSelected ? colors.accentPrimary.withValues(alpha: 0.12) : Colors.transparent,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isSelected ? colors.accentPrimary : Colors.transparent,
+                width: 1.5,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: colors.fileFolderBg,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(Icons.folder_rounded,
+                      color: colors.fileFolder, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(folder.name,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: colors.textPrimary,
+                              )),
+                      const SizedBox(height: 1),
+                      Text(
+                        '$itemCount items • $dateStr',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                if (isMultiSelect)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Icon(
+                      isSelected
+                          ? Icons.check_circle_rounded
+                          : Icons.radio_button_unchecked_rounded,
+                      color: isSelected ? colors.accentPrimary : colors.textTertiary,
+                      size: 22,
+                    ),
+                  )
+                else
+                  IconButton(
+                    icon: Icon(Icons.more_horiz_rounded, color: colors.textTertiary),
+                    onPressed: onMore,
+                  ),
+              ],
             ),
           ),
-          child: Row(
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: colors.fileFolderBg,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(Icons.folder_rounded,
-                    color: colors.fileFolder, size: 28),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(folder.name,
-                        style: Theme.of(context).textTheme.titleLarge),
-                    const SizedBox(height: 2),
-                    Text(
-                      '$itemCount items • $dateStr',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-              if (isMultiSelect)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: Icon(
-                    isSelected
-                        ? Icons.check_circle_rounded
-                        : Icons.radio_button_unchecked_rounded,
-                    color: isSelected ? colors.accentPrimary : colors.textTertiary,
-                    size: 22,
-                  ),
-                )
-              else
-                IconButton(
-                  icon: Icon(Icons.more_horiz_rounded, color: colors.textTertiary),
-                  onPressed: onMore,
-                ),
-            ],
-          ),
         ),
-      ),
+        if (!isLast)
+          Divider(indent: 10, endIndent: 10, color: colors.borderSubtle),
+      ],
     );
   }
 }
@@ -747,6 +865,7 @@ class _FileTile extends StatelessWidget {
   final FileRecord file;
   final bool isSelected;
   final bool isMultiSelect;
+  final bool isLast;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final VoidCallback onMore;
@@ -758,6 +877,7 @@ class _FileTile extends StatelessWidget {
     required this.onTap,
     required this.onLongPress,
     required this.onMore,
+    this.isLast = false,
   });
 
   @override
@@ -774,88 +894,94 @@ class _FileTile extends StatelessWidget {
         final progress = activeTask?.progress ?? 0.0;
         final percentText = '${(progress * 100).toInt()}%';
 
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: GestureDetector(
-            onTap: onTap,
-            onLongPress: onLongPress,
-            child: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: isSelected ? colors.accentPrimary.withValues(alpha: 0.12) : colors.bgSurface,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: isSelected ? colors.accentPrimary : Colors.transparent,
-                  width: 1.5,
+        return Column(
+          children: [
+            GestureDetector(
+              onTap: onTap,
+              onLongPress: onLongPress,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isSelected ? colors.accentPrimary.withValues(alpha: 0.12) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isSelected ? colors.accentPrimary : Colors.transparent,
+                    width: 1.5,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        _buildLeading(colors, isDownloading, progress, percentText),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                file.name,
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: colors.textPrimary,
+                                    ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 1),
+                              Text(
+                                isDownloading
+                                    ? 'Downloading... $percentText • ${(activeTask.speedKbps / 1024).toStringAsFixed(1)} MB/s'
+                                    : '${file.formattedSize} • $dateStr',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDownloading ? colors.accentPrimary : colors.textSecondary,
+                                  fontWeight: isDownloading ? FontWeight.w600 : FontWeight.normal,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (isMultiSelect)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: Icon(
+                              isSelected
+                                  ? Icons.check_circle_rounded
+                                  : Icons.radio_button_unchecked_rounded,
+                              color: isSelected ? colors.accentPrimary : colors.textTertiary,
+                              size: 22,
+                            ),
+                          )
+                        else
+                          IconButton(
+                            icon: Icon(Icons.more_horiz_rounded, color: colors.textTertiary),
+                            onPressed: onMore,
+                          ),
+                      ],
+                    ),
+                    if (isDownloading) ...[
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(2),
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          minHeight: 3,
+                          backgroundColor: colors.bgSurfaceInset,
+                          valueColor: AlwaysStoppedAnimation<Color>(colors.accentPrimary),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      _buildLeading(colors, isDownloading, progress, percentText),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              file.name,
-                              style: Theme.of(context).textTheme.titleLarge,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              isDownloading
-                                  ? 'Downloading... $percentText • ${(activeTask.speedKbps / 1024).toStringAsFixed(1)} MB/s'
-                                  : '${file.formattedSize} • $dateStr',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: isDownloading ? colors.accentPrimary : colors.textSecondary,
-                                fontWeight: isDownloading ? FontWeight.w600 : FontWeight.normal,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (isMultiSelect)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: Icon(
-                            isSelected
-                                ? Icons.check_circle_rounded
-                                : Icons.radio_button_unchecked_rounded,
-                            color: isSelected ? colors.accentPrimary : colors.textTertiary,
-                            size: 22,
-                          ),
-                        )
-                      else
-                        IconButton(
-                          icon: Icon(Icons.more_horiz_rounded, color: colors.textTertiary),
-                          onPressed: onMore,
-                        ),
-                    ],
-                  ),
-                  if (isDownloading) ...[
-                    const SizedBox(height: 8),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(2),
-                      child: LinearProgressIndicator(
-                        value: progress,
-                        minHeight: 3,
-                        backgroundColor: colors.bgSurfaceInset,
-                        valueColor: AlwaysStoppedAnimation<Color>(colors.accentPrimary),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
             ),
-          ),
+            if (!isLast)
+              Divider(indent: 10, endIndent: 10, color: colors.borderSubtle),
+          ],
         );
       },
     );
@@ -865,30 +991,30 @@ class _FileTile extends StatelessWidget {
     if (!isDownloading) {
       return ThumbnailWidget(
         file: file,
-        width: 52,
-        height: 52,
+        width: 44,
+        height: 44,
       );
     }
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(10),
       child: SizedBox(
-        width: 52,
-        height: 52,
+        width: 44,
+        height: 44,
         child: Stack(
           alignment: Alignment.center,
           children: [
             ThumbnailWidget(
               file: file,
-              width: 52,
-              height: 52,
+              width: 44,
+              height: 44,
             ),
             Container(
               color: colors.bgPrimary.withValues(alpha: 0.65),
             ),
             SizedBox(
-              width: 38,
-              height: 38,
+              width: 32,
+              height: 32,
               child: CircularProgressIndicator(
                 value: progress,
                 strokeWidth: 3,
@@ -900,7 +1026,7 @@ class _FileTile extends StatelessWidget {
               percentText,
               style: TextStyle(
                 color: colors.textPrimary,
-                fontSize: 10,
+                fontSize: 9,
                 fontWeight: FontWeight.bold,
               ),
             ),

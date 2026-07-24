@@ -239,7 +239,9 @@ class StorageRepository {
       id: const Uuid().v4(),
       actionType: 'copyFile',
       payload: {
-        'fileId': fileId,
+        'originalFileId': fileId,
+        'newFileId': newFileId,
+        'newName': newName,
         'targetFolderId': targetFolderId,
       },
       timestamp: DateTime.now(),

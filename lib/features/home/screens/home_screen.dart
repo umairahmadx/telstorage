@@ -47,6 +47,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showShareSheet(FileRecord file) {
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
     final existing = context.read<HomeCubit>().getShareJob(file.fileId);
 
     showModalBottomSheet(
@@ -70,13 +71,13 @@ class _HomeScreenState extends State<HomeScreen> {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                   content: const Text('Link copied to clipboard!'),
-                  backgroundColor: Theme.of(context).extension<AppColorsExtension>()?.success ?? Colors.green),
+                  backgroundColor: colors.success),
             );
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                   content: const Text('Sharing started. Check "Transfer" tab.'),
-                  backgroundColor: Theme.of(context).extension<AppColorsExtension>()?.success ?? Colors.green),
+                  backgroundColor: colors.success),
             );
           }
         },
@@ -85,12 +86,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _downloadFile(FileRecord file) async {
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
     await context.read<HomeCubit>().downloadFile(file);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-          content: Text('"${file.name}" added to downloads'),
-          backgroundColor: Theme.of(context).extension<AppColorsExtension>()?.success ?? Colors.green),
+        content: Text('"${file.name}" added to downloads'),
+        backgroundColor: colors.success,
+      ),
     );
   }
 
@@ -130,7 +133,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               IconButton(
-                icon: const Icon(Icons.file_download_outlined),
+                icon: const Icon(Icons.download_rounded),
                 onPressed: () => ServiceLocator.instance.navigation
                     .navigateTo(AppDestination.transferDownloads),
               ),
@@ -273,8 +276,8 @@ class _HomeScreenState extends State<HomeScreen> {
               _buildStatItem(colors, Icons.cloud_upload_outlined, 'Uploaded',
                   '$totalFiles Files'),
               _buildStatItem(
-                  colors, Icons.share_outlined, 'Shared', '$totalShares Links'),
-              _buildStatItem(colors, Icons.file_download_outlined, 'Downloads',
+                  colors, Icons.share_rounded, 'Shared', '$totalShares Links'),
+              _buildStatItem(colors, Icons.download_rounded, 'Downloads',
                   '$totalDownloads Files'),
             ],
           ),
@@ -343,80 +346,86 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    return Column(
-      children: files
-          .map((f) => _RecentFileTile(
-                file: f,
-                onMore: () => _showFileDetail(f),
-              ))
-          .toList(),
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.bgSurface,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        children: List.generate(files.length, (i) => _RecentFileTile(
+          file: files[i],
+          isLast: i == files.length - 1,
+          onMore: () => _showFileDetail(files[i]),
+        )),
+      ),
     );
   }
 }
 
 class _RecentFileTile extends StatelessWidget {
   final FileRecord file;
+  final bool isLast;
   final VoidCallback onMore;
-  const _RecentFileTile({required this.file, required this.onMore});
+  const _RecentFileTile({required this.file, required this.onMore, this.isLast = false});
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: colors.bgSurface,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          _buildLeading(colors),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  file.name,
-                  style: Theme.of(context).textTheme.titleLarge,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              _buildLeading(colors),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      file.name,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: colors.textPrimary,
+                          ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${file.formattedSize} • ${_formatDate(file.uploadedAt)}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  '${file.formattedSize} • ${_formatDate(file.uploadedAt)}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
+              ),
+              IconButton(
+                icon: Icon(Icons.more_horiz_rounded, color: colors.textSecondary),
+                onPressed: onMore,
+              ),
+            ],
           ),
-          IconButton(
-            icon: Icon(Icons.more_horiz_rounded, color: colors.textSecondary),
-            onPressed: onMore,
-          ),
-        ],
-      ),
+        ),
+        if (!isLast)
+          Divider(indent: 12, endIndent: 12, color: colors.borderSubtle),
+      ],
     );
   }
 
   Widget _buildLeading(AppColorsExtension colors) {
     final mime = file.mimeType;
-    if (mime.startsWith('image/')) {
+    if (file.thumbnailFileId != null || file.isImage || file.isVideo || file.isPdf) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: SizedBox(
-          width: 48,
-          height: 48,
+          width: 40,
+          height: 40,
           child: ThumbnailWidget(
             file: file,
-            width: 48,
-            height: 48,
-            fallback: Container(
-              color: colors.bgSurfaceInset,
-              child: Icon(Icons.image_rounded, color: colors.textPrimary.withAlpha(60)),
-            ),
+            width: 40,
+            height: 40,
           ),
         ),
       );
@@ -433,15 +442,15 @@ class _RecentFileTile extends StatelessWidget {
       label = 'PDF';
     } else if (file.name.endsWith('.fig')) {
       return Container(
-        width: 48,
-        height: 48,
+        width: 40,
+        height: 40,
         decoration: BoxDecoration(
           color: colors.bgSurfaceInset,
           borderRadius: BorderRadius.circular(8),
         ),
         alignment: Alignment.center,
         child:
-            Icon(Icons.palette_outlined, color: colors.filePalette, size: 24),
+            Icon(Icons.palette_outlined, color: colors.filePalette, size: 20),
       );
     } else {
       iconColor = colors.fileZip;
@@ -449,8 +458,8 @@ class _RecentFileTile extends StatelessWidget {
     }
 
     return Container(
-      width: 48,
-      height: 48,
+      width: 40,
+      height: 40,
       decoration: BoxDecoration(
         color: iconColor.withAlpha(40),
         borderRadius: BorderRadius.circular(8),
@@ -459,7 +468,7 @@ class _RecentFileTile extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
-            color: iconColor, fontSize: 10, fontWeight: FontWeight.bold),
+            color: iconColor, fontSize: 9, fontWeight: FontWeight.bold),
       ),
     );
   }

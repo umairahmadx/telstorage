@@ -46,7 +46,6 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -96,16 +95,12 @@ class _SplashScreenState extends State<SplashScreen>
                       height: 88,
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: isDark
-                              ? colors.primaryGradient
-                              : const [Colors.white24, Colors.white38],
+                          colors: colors.primaryGradient,
                         ),
                         borderRadius: BorderRadius.circular(24),
                         boxShadow: [
                           BoxShadow(
-                            color: isDark
-                                ? AppTheme.primary.withAlpha(80)
-                                : Colors.black.withAlpha(30),
+                            color: colors.glowColor,
                             blurRadius: 28,
                             offset: const Offset(0, 10),
                           ),
@@ -131,12 +126,12 @@ class _SplashScreenState extends State<SplashScreen>
                     const SizedBox(height: 28),
 
                     // App name
-                    const Text(
+                    Text(
                       'TelStorage',
                       style: TextStyle(
                         fontSize: 32,
                         fontWeight: FontWeight.w800,
-                        color: Colors.white,
+                        color: colors.textPrimary,
                         letterSpacing: -0.5,
                       ),
                     )
@@ -155,12 +150,12 @@ class _SplashScreenState extends State<SplashScreen>
                     const SizedBox(height: 8),
 
                     // Subtitle
-                    const Text(
+                    Text(
                       'Unlimited Cloud Storage',
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w400,
-                        color: Colors.white70,
+                        color: colors.textSecondary,
                         letterSpacing: 0.3,
                       ),
                     )
@@ -185,9 +180,7 @@ class _SplashScreenState extends State<SplashScreen>
                       child: CircularProgressIndicator(
                         strokeWidth: 2.5,
                         valueColor: AlwaysStoppedAnimation<Color>(
-                          isDark
-                              ? AppTheme.primary
-                              : Colors.white.withAlpha(200),
+                          colors.accentPrimary,
                         ),
                       ),
                     ).animate().fadeIn(

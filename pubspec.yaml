@@ -80,6 +80,9 @@ dependencies:
   # Advanced thumbnails
   thumbnailer: 3.3.0
 
+  # PDF Rendering
+  pdfx: ^2.6.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

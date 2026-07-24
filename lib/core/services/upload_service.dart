@@ -96,25 +96,23 @@ class UploadService {
       // ── Step 1.5: Generate and Upload Thumbnail ────────────────────────────
       String? thumbnailFileId;
       try {
-        if (mimeType.startsWith('image/')) {
-          internalOnProgress(0.08, 'Generating thumbnail…');
-          final thumbBytes =
-              await ThumbnailGenerator.generateImageThumbnail(bytes);
+        internalOnProgress(0.08, 'Generating thumbnail…');
+        final thumbResult = await ThumbnailGenerator.generate(
+          bytes: bytes,
+          filename: name,
+          mimeType: mimeType,
+        );
+
+        if (thumbResult != null) {
           internalOnProgress(0.10, 'Uploading thumbnail…');
-          final thumbResult = await _telegram.uploadBytesWithFileId(
-              thumbBytes, 'thumb_$fileId.jpg');
-          thumbnailFileId = thumbResult['file_id'] as String;
-        } else if (mimeType.startsWith('video/')) {
-          internalOnProgress(0.08, 'Generating video thumbnail…');
-          final thumbBytes =
-              await ThumbnailGenerator.generateVideoThumbnail(bytes, name);
-          internalOnProgress(0.10, 'Uploading thumbnail…');
-          final thumbResult = await _telegram.uploadBytesWithFileId(
-              thumbBytes, 'thumb_$fileId.jpg');
-          thumbnailFileId = thumbResult['file_id'] as String;
+          final uploadRes = await _telegram.uploadBytesWithFileId(
+            thumbResult.bytes,
+            'thumb_$fileId.${thumbResult.extension}',
+          );
+          thumbnailFileId = uploadRes['file_id'] as String;
         }
       } catch (e) {
-        AppLogger.e('Thumbnail generation failed for $name: $e',
+        AppLogger.e('Thumbnail upload step failed for $name: $e',
             tag: 'UploadService');
       }
 

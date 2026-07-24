@@ -232,8 +232,13 @@ class FileManagerService {
     AppLogger.i('File $fileId deleted from remote successfully', tag: 'FileManager');
   }
 
-  Future<void> copyFile(String fileId, String? targetFolderId) async {
-    final record = _hive.getFile(fileId);
+  Future<void> copyFile({
+    required String originalFileId,
+    required String newFileId,
+    required String newName,
+    required String? targetFolderId,
+  }) async {
+    final record = _hive.getFile(originalFileId);
     if (record == null) return;
 
     final fileMeta = await _fetchFileMeta(
@@ -241,23 +246,13 @@ class FileManagerService {
       record.metadataFileId,
     );
 
-    final nameParts = (fileMeta['name'] as String? ?? 'file').split('.');
-    String newName;
-    if (nameParts.length > 1 && fileMeta['name'].toString().contains('.')) {
-      final ext = nameParts.removeLast();
-      newName = '${nameParts.join('.')}_copy.$ext';
-    } else {
-      newName = '${fileMeta['name']}_copy';
-    }
-
-    final newFileId = const Uuid().v4();
     fileMeta['id'] = newFileId;
     fileMeta['name'] = newName;
     fileMeta['folder_id'] = targetFolderId;
     fileMeta['uploaded_at'] = DateTime.now().toIso8601String();
 
     final uploadResult = await _telegram.uploadBytesWithFileId(
-      Uint8List.fromList(utf8.encode(jsonEncode(jsonEncode(fileMeta) == '' ? {} : fileMeta))),
+      Uint8List.fromList(utf8.encode(jsonEncode(fileMeta))),
       '$newFileId.json',
     );
 
@@ -272,7 +267,7 @@ class FileManagerService {
       name: newName,
       sizeMb: record.sizeMb,
       mimeType: record.mimeType,
-      uploadedAt: DateTime.now(),
+      uploadedAt: record.uploadedAt,
       folderId: targetFolderId,
       chunkCount: record.chunkCount,
       sha256Hash: record.sha256Hash,

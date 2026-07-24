@@ -10,6 +10,8 @@ class FileDetailSheet extends StatelessWidget {
   final VoidCallback onShare;
   final VoidCallback onDownload;
   final VoidCallback onRename;
+  final VoidCallback? onMove;
+  final VoidCallback? onCopy;
   final VoidCallback onDelete;
 
   const FileDetailSheet({
@@ -18,6 +20,8 @@ class FileDetailSheet extends StatelessWidget {
     required this.onShare,
     required this.onDownload,
     required this.onRename,
+    this.onMove,
+    this.onCopy,
     required this.onDelete,
   });
 
@@ -75,31 +79,46 @@ class FileDetailSheet extends StatelessWidget {
           const SizedBox(height: 32),
 
           // Actions
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _ActionButton(
-                icon: Icons.share_rounded,
-                label: 'Share',
-                onTap: onShare,
-              ),
-              _ActionButton(
-                icon: Icons.download_rounded,
-                label: 'Download',
-                onTap: onDownload,
-              ),
-              _ActionButton(
-                icon: Icons.edit_rounded,
-                label: 'Rename',
-                onTap: onRename,
-              ),
-              _ActionButton(
-                icon: Icons.delete_outline_rounded,
-                label: 'Delete',
-                color: colors.error,
-                onTap: onDelete,
-              ),
-            ],
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _ActionButton(
+                  icon: Icons.share_rounded,
+                  label: 'Share',
+                  onTap: onShare,
+                ),
+                _ActionButton(
+                  icon: Icons.download_rounded,
+                  label: 'Download',
+                  onTap: onDownload,
+                ),
+                _ActionButton(
+                  icon: Icons.edit_rounded,
+                  label: 'Rename',
+                  onTap: onRename,
+                ),
+                if (onMove != null)
+                  _ActionButton(
+                    icon: Icons.content_cut_rounded,
+                    label: 'Cut',
+                    onTap: onMove!,
+                  ),
+                if (onCopy != null)
+                  _ActionButton(
+                    icon: Icons.copy_rounded,
+                    label: 'Copy',
+                    onTap: onCopy!,
+                  ),
+                _ActionButton(
+                  icon: Icons.delete_outline_rounded,
+                  label: 'Delete',
+                  color: colors.error,
+                  onTap: onDelete,
+                ),
+              ],
+            ),
           ),
 
           const SizedBox(height: 24),
@@ -118,49 +137,11 @@ class FileDetailSheet extends StatelessWidget {
   }
 
   Widget _buildIcon(AppColorsExtension colors) {
-    if (file.isImage) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: ThumbnailWidget(
-          file: file,
-          width: 64,
-          height: 64,
-          fallback: Container(
-            width: 64,
-            height: 64,
-            color: colors.bgSurfaceInset,
-            child: Icon(Icons.image_rounded, color: colors.textTertiary),
-          ),
-        ),
-      );
-    }
-
-    Color iconColor = colors.textPrimary;
-    if (file.isPdf) iconColor = colors.filePdf;
-    if (file.isVideo) iconColor = colors.fileVideo;
-    if (file.name.endsWith('.zip')) iconColor = colors.fileZip;
-    if (file.name.endsWith('.fig')) iconColor = colors.filePalette;
-
-    return Container(
+    return ThumbnailWidget(
+      file: file,
       width: 64,
       height: 64,
-      decoration: BoxDecoration(
-        color: colors.bgSurfaceInset,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Icon(
-        _getIconData(),
-        color: iconColor,
-        size: 32,
-      ),
     );
-  }
-
-  IconData _getIconData() {
-    if (file.isPdf) return Icons.picture_as_pdf_rounded;
-    if (file.isVideo) return Icons.play_circle_fill_rounded;
-    if (file.name.endsWith('.zip')) return Icons.folder_zip_rounded;
-    return Icons.insert_drive_file_rounded;
   }
 
   String _getFolderName() {

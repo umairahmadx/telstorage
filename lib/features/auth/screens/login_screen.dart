@@ -98,7 +98,7 @@ class _LoginScreenState extends State<LoginScreen>
         Positioned(
             top: -60,
             right: -40,
-            child: _glowCircle(220, Colors.white.withAlpha(12))),
+            child: _glowCircle(220, colors.textPrimary.withAlpha(12))),
         Positioned(
             top: 80,
             left: -60,
@@ -123,13 +123,13 @@ class _LoginScreenState extends State<LoginScreen>
                               .textTheme
                               .headlineLarge
                               ?.copyWith(
-                                  color: Colors.white,
+                                  color: colors.textPrimary,
                                   fontSize: 32,
                                   fontWeight: FontWeight.w800)),
                       const SizedBox(height: 6),
-                      const Text('Sign in to your cloud drive',
-                          style:
-                              TextStyle(color: Colors.white70, fontSize: 15)),
+                      Text('Sign in to your cloud drive',
+                          style: TextStyle(
+                              color: colors.textSecondary, fontSize: 15)),
                     ],
                   ),
                 ),
@@ -147,7 +147,7 @@ class _LoginScreenState extends State<LoginScreen>
                         const BorderRadius.vertical(top: Radius.circular(32)),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withAlpha(40),
+                        color: colors.textPrimary.withAlpha(20),
                         blurRadius: 40,
                         spreadRadius: 0,
                         offset: const Offset(0, -4),
@@ -161,7 +161,7 @@ class _LoginScreenState extends State<LoginScreen>
                       24,
                       MediaQuery.of(context).viewInsets.bottom + 24,
                     ),
-                    child: _buildForm(),
+                    child: _buildForm(colors),
                   ),
                 ),
               ),
@@ -173,7 +173,7 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   // ── Shared form ───────────────────────────────────────────────────────────
-  Widget _buildForm() {
+  Widget _buildForm(AppColorsExtension colors) {
     return Form(
       key: _formKey,
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -226,17 +226,17 @@ class _LoginScreenState extends State<LoginScreen>
             onPressed: _isLoading ? null : _login,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primary,
-              foregroundColor: Colors.white,
+              foregroundColor: colors.bgPrimary,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14)),
               elevation: 0,
             ),
             child: _isLoading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 22,
                     height: 22,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2.5, color: Colors.white))
+                        strokeWidth: 2.5, color: colors.bgPrimary))
                 : const Text('Sign in',
                     style:
                         TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),

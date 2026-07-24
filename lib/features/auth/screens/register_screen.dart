@@ -113,7 +113,7 @@ class _RegisterScreenState extends State<RegisterScreen>
         Positioned(
             top: -50,
             right: -40,
-            child: _glowCircle(200, Colors.white.withAlpha(10))),
+            child: _glowCircle(200, colors.textPrimary.withAlpha(10))),
 
         SafeArea(
           child: Column(children: [
@@ -123,8 +123,8 @@ class _RegisterScreenState extends State<RegisterScreen>
               child: Padding(
                 padding: const EdgeInsets.only(left: 8, top: 4),
                 child: IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                      color: Colors.white, size: 20),
+                  icon: Icon(Icons.arrow_back_rounded,
+                      color: colors.textPrimary, size: 20),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ),
@@ -137,17 +137,17 @@ class _RegisterScreenState extends State<RegisterScreen>
                 child: Row(children: [
                   _logoBox(size: 44, radius: 12, iconSize: 24),
                   const SizedBox(width: 12),
-                  const Column(
+                  Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('Create Account',
                             style: TextStyle(
-                                color: Colors.white,
+                                color: colors.textPrimary,
                                 fontSize: 22,
                                 fontWeight: FontWeight.w800)),
                         Text('Set up in under a minute',
                             style:
-                                TextStyle(color: Colors.white70, fontSize: 13)),
+                                TextStyle(color: colors.textSecondary, fontSize: 13)),
                       ]),
                 ]),
               ),
@@ -166,7 +166,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                           const BorderRadius.vertical(top: Radius.circular(32)),
                       boxShadow: [
                         BoxShadow(
-                            color: Colors.black.withAlpha(40),
+                            color: colors.textPrimary.withAlpha(20),
                             blurRadius: 40,
                             offset: const Offset(0, -4))
                       ],
@@ -192,6 +192,7 @@ class _RegisterScreenState extends State<RegisterScreen>
 
   // ── Form ──────────────────────────────────────────────────────────────────
   Widget _buildForm() {
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
     return Form(
       key: _formKey,
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -273,17 +274,17 @@ class _RegisterScreenState extends State<RegisterScreen>
             onPressed: _isLoading ? null : _register,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primary,
-              foregroundColor: Colors.white,
+              foregroundColor: colors.bgPrimary,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14)),
               elevation: 0,
             ),
             child: _isLoading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 22,
                     height: 22,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2.5, color: Colors.white))
+                        strokeWidth: 2.5, color: colors.bgPrimary))
                 : const Text('Create Account',
                     style:
                         TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
@@ -348,7 +349,7 @@ class _RegisterScreenState extends State<RegisterScreen>
           letterSpacing: 1.2));
 
   Widget _infoCard(String text) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -362,7 +363,7 @@ class _RegisterScreenState extends State<RegisterScreen>
         Expanded(
             child: Text(text,
                 style: TextStyle(
-                    color: isDark ? Colors.white70 : AppTheme.primary,
+                    color: colors.textSecondary,
                     fontSize: 12))),
       ]),
     );

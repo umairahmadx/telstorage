@@ -61,7 +61,6 @@ Future<void> main() async {
   try {
     Workmanager().initialize(
       callbackDispatcher,
-      isInDebugMode: false,
     );
   } catch (e) {
     debugPrint("Workmanager init warning: $e");

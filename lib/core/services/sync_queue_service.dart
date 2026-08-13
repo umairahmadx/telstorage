@@ -174,6 +174,9 @@ class SyncQueueService {
         return 'Copied file';
       case 'deleteFile':
         return 'Deleted file';
+      case 'addFileMeta':
+        final name = (payload['fileMeta'] is Map) ? (payload['fileMeta']['name'] ?? '') : '';
+        return 'Synced metadata for "$name"';
       default:
         return action.actionType;
     }
@@ -183,6 +186,13 @@ class SyncQueueService {
     final payload = action.payload;
 
     switch (action.actionType) {
+      case 'addFileMeta':
+        final fileMeta = Map<String, dynamic>.from(payload['fileMeta'] as Map);
+        final metaService = _fileManager.metadataService;
+        final appMeta = await metaService.fetch();
+        await metaService.addFile(appMeta, fileMeta);
+        break;
+
       case 'createFolder':
         final id = payload['id'] as String;
         final name = payload['name'] as String;
@@ -204,15 +214,17 @@ class SyncQueueService {
 
       case 'deleteFolder':
         final folderId = payload['folderId'] as String;
-        try {
-          await _fileManager.deleteFolder(folderId);
-        } catch (e) {
-          if (e is FolderNotEmptyException) {
-            AppLogger.w('SyncQueue: Folder $folderId was not empty on remote, skipping deletion', tag: 'SyncQueue');
-          } else {
-            rethrow;
-          }
-        }
+        final folderIds = (payload['folderIds'] as List? ?? const [])
+            .map((id) => id.toString())
+            .toList();
+        final snapshots = (payload['fileSnapshots'] as List? ?? const [])
+            .map((snapshot) => Map<String, dynamic>.from(snapshot as Map))
+            .toList();
+        await _fileManager.deleteFolder(
+          folderId,
+          folderIds: folderIds,
+          fileSnapshots: snapshots,
+        );
         break;
 
       case 'renameFile':
@@ -244,10 +256,10 @@ class SyncQueueService {
 
       case 'deleteFile':
         final fileId = payload['fileId'] as String;
-        final metadataMessageId = payload['metadataMessageId'] as int;
+        final metadataMessageId = payload['metadataMessageId'] as int?;
         final metadataFileId = payload['metadataFileId'] as String?;
-        final sizeMb = (payload['sizeMb'] as num).toDouble();
-        final mimeType = payload['mimeType'] as String;
+        final sizeMb = (payload['sizeMb'] as num?)?.toDouble() ?? 0.0;
+        final mimeType = (payload['mimeType'] as String?) ?? 'application/octet-stream';
         await _fileManager.deleteFileRemoteOnly(
           fileId: fileId,
           metadataMessageId: metadataMessageId,

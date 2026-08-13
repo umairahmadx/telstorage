@@ -19,6 +19,11 @@ import 'transfer_queue_service.dart';
 import 'lru_folder_cache_service.dart';
 import 'telegram_rate_limiter.dart';
 import '../../features/storage/data/repositories/storage_repository.dart';
+import 'upload_service_contract.dart';
+import 'download_service_contract.dart';
+import '../../features/storage/domain/repositories/storage_repository_contract.dart';
+import '../../features/storage/domain/usecases/download_file_usecase.dart';
+import '../../features/storage/domain/usecases/generate_web_share_usecase.dart';
 
 /// Single initialization point for all services.
 /// Call [ServiceLocator.instance.init()] after login.
@@ -47,6 +52,8 @@ class ServiceLocator {
   late StorageRepository _storageRepository;
   late ThumbnailRepository _thumbnailRepository;
   late WebShareQueueService _webShareQueue;
+  late DownloadFileUseCase _downloadFileUseCase;
+  late GenerateWebShareUseCase _generateWebShareUseCase;
 
   // These are always available as they don't depend on user credentials for creation
   final NavigationService _navigation = NavigationService.instance;
@@ -56,6 +63,10 @@ class ServiceLocator {
   HiveService get hive => _hive;
   MetadataService get metadata => _metadata;
   SyncService get syncService => _syncService;
+
+  UploadServiceContract get uploadServiceContract => _uploadService;
+  DownloadServiceContract get downloadServiceContract => _downloadService;
+  StorageRepositoryContract get storageRepositoryContract => _storageRepository;
   UploadService get uploadService => _uploadService;
   DownloadService get downloadService => _downloadService;
   DownloadQueueService get downloadQueue => _downloadQueue;
@@ -64,6 +75,8 @@ class ServiceLocator {
   StorageRepository get storageRepository => _storageRepository;
   ThumbnailRepository get thumbnailRepository => _thumbnailRepository;
   WebShareQueueService get webShareQueue => _webShareQueue;
+  DownloadFileUseCase get downloadFileUseCase => _downloadFileUseCase;
+  GenerateWebShareUseCase get generateWebShareUseCase => _generateWebShareUseCase;
   NavigationService get navigation => _navigation;
   TransferQueueService get transferQueue => _transferQueue;
 
@@ -99,7 +112,7 @@ class ServiceLocator {
       _hive = HiveService.instance;
 
       _metadata = MetadataService(_telegram);
-      _syncService = SyncService(_metadata, _telegram, _hive);
+      _syncService = SyncService(_metadata, _hive);
       _uploadService = UploadService(_telegram, _metadata, _hive);
       _downloadService = DownloadService(_telegram);
       _downloadQueue =
@@ -110,6 +123,8 @@ class ServiceLocator {
       _thumbnailRepository = ThumbnailRepository(_telegram);
       _webShareQueue =
           WebShareQueueService(_downloadService, AppConstants.webSharesBox);
+      _downloadFileUseCase = DownloadFileUseCase(_storageRepository);
+      _generateWebShareUseCase = GenerateWebShareUseCase(_storageRepository);
 
       await NotificationService.instance.init();
       await NotificationService.instance.requestPermissions();

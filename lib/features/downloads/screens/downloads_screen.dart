@@ -1,27 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:intl/intl.dart';
 import 'package:open_file/open_file.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/models/download_job.dart';
-import '../../../core/models/web_share_job.dart';
 import '../../../core/models/file_record.dart';
-import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/app_icons.dart';
-import '../../../core/services/service_locator.dart';
-import '../../../core/navigation/navigation_intent.dart';
-import '../../../shared/widgets/mobile_shell.dart';
-import '../../../shared/widgets/thumbnail_widget.dart';
-import '../../../shared/widgets/file_detail_sheet.dart';
-import '../../../shared/widgets/share_link_sheet.dart';
-import '../../../shared/widgets/app_common_widgets.dart';
-import '../../../shared/widgets/app_search_field.dart';
-import '../../../shared/widgets/app_segmented_control.dart';
-import '../../../shared/widgets/app_surface_card.dart';
-import '../../../core/services/transfer_queue_service.dart';
 import '../../../core/models/transfer_task.dart';
+import '../../../core/navigation/navigation_intent.dart';
+import '../../../core/services/service_locator.dart';
+import '../../../core/services/transfer_queue_service.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../shared/widgets/share_link_sheet.dart';
 import '../bloc/transfer_cubit.dart';
+import 'widgets/active_download_tile.dart';
+import 'widgets/completed_download_tile.dart';
+import 'widgets/downloads_empty_state.dart';
+import 'widgets/downloads_header.dart';
 
 class DownloadsScreen extends StatefulWidget {
   const DownloadsScreen({super.key});
@@ -74,27 +68,6 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     }
   }
 
-  void _showFileDetail(FileRecord file) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => FileDetailSheet(
-        file: file,
-        onShare: () {
-          Navigator.pop(ctx);
-          _showShareSheet(file);
-        },
-        onDownload: () {
-          Navigator.pop(ctx);
-          _downloadFile(file);
-        },
-        onRename: () => Navigator.pop(ctx),
-        onDelete: () => Navigator.pop(ctx),
-      ),
-    );
-  }
-
   void _showShareSheet(FileRecord file) {
     final existing = context.read<TransferCubit>().getShareJob(file.fileId);
 
@@ -105,9 +78,9 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       builder: (ctx) => ShareLinkSheet(
         file: file,
         shareUrl: existing?.shareUrl,
-        onCopyLink: (pwd, expiry) async {
+        onCopyLink: (pwd, expiry, vanitySlug) async {
           final cubit = context.read<TransferCubit>();
-          await cubit.enqueueShare(file, password: pwd, expiryDays: expiry);
+          await cubit.enqueueShare(file, password: pwd, expiryDays: expiry, vanitySlug: vanitySlug);
 
           if (!mounted || !ctx.mounted) return;
           Navigator.pop(ctx);
@@ -117,17 +90,12 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
             await Clipboard.setData(ClipboardData(text: job.shareUrl!));
             if (!mounted) return;
           } else {
-            setState(() => _activeTab = 2); // Switch to Shared tab
+            setState(() => _activeTab = 2);
           }
         },
       ),
     );
   }
-
-  Future<void> _downloadFile(FileRecord file) async {
-    await context.read<TransferCubit>().enqueueDownload(file);
-  }
-
 
   void _showShareOptionsDialog(DownloadJob job, FileRecord? file) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
@@ -249,21 +217,16 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
             onPressed: () => Navigator.pop(ctx, false),
             child: Text('Cancel', style: TextStyle(color: colors.textSecondary)),
           ),
-          ElevatedButton(
+          TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: colors.error,
-              elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: Text('Delete', style: TextStyle(color: colors.bgPrimary)),
+            child: Text('Delete', style: TextStyle(color: colors.error)),
           ),
         ],
       ),
     );
 
     if (confirmed == true && mounted) {
-      await context.read<TransferCubit>().deleteDownloadedFile(job.fileId);
+      context.read<TransferCubit>().deleteDownloadedFile(job.fileId);
     }
   }
 
@@ -271,771 +234,132 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
 
-    return BlocBuilder<TransferCubit, TransferState>(
-      builder: (context, state) {
-        if (state.isLoading && !state.isInitialized) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
-        }
-
-        return Scaffold(
-          backgroundColor: colors.bgPrimary,
-          appBar: AppBar(
-            leading: IconButton(
-              icon: const Icon(Icons.menu_rounded),
-              onPressed: () => MobileShell.of(context)?.openDrawer(),
-            ),
-            title: _isSearching
-                ? TextField(
-                    controller: _searchCtrl,
-                    autofocus: true,
-                    style: TextStyle(color: colors.textPrimary),
-                    decoration: InputDecoration(
-                        hintText: 'Search...',
-                        border: InputBorder.none,
-                        hintStyle: TextStyle(color: colors.textTertiary)),
-                  )
-                : const Text('Transfer'),
-            centerTitle: true,
-            actions: [
-              IconButton(
-                icon:
-                    Icon(_isSearching ? Icons.close_rounded : Icons.search_rounded),
-                onPressed: () => setState(() {
-                  if (_isSearching) _searchCtrl.clear();
-                  _isSearching = !_isSearching;
-                }),
-              ),
-            ],
-          ),
-          body: Column(
-            children: [
-              _buildActiveTransfers(state),
-              _buildSearchBar(),
-              _buildSegmentedControl(),
-              Expanded(
-                child: _buildTabContent(colors, state),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildActiveTransfers(TransferState state) {
-    final colors = Theme.of(context).extension<AppColorsExtension>()!;
-    final active = state.activeTasks.where((t) => t.isActive).toList();
-    
-    if (active.isEmpty) return const SizedBox.shrink();
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Active Transfers (${active.length})',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: colors.textPrimary,
-                  ),
-                ),
-                if (active.length > 1)
-                  Text(
-                    'Overall ${(active.fold(0.0, (s, t) => s + t.progress) / active.length * 100).toInt()}%',
-                    style: TextStyle(
-                        color: colors.textSecondary, fontSize: 12),
-                  ),
-              ],
-            ),
-          ),
-          SizedBox(
-            height: 100,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: active.length,
-              itemBuilder: (context, index) {
-                final task = active[index];
-                return _ActiveTransferCard(task: task);
-              },
-            ),
-          ),
-          Divider(
-              height: 24, indent: 20, endIndent: 20, color: colors.borderSubtle),
-        ],
+    return Scaffold(
+      appBar: DownloadsHeader(
+        activeTab: _activeTab,
+        isSearching: _isSearching,
+        searchCtrl: _searchCtrl,
+        onTabChanged: (val) {
+          setState(() => _activeTab = val);
+          ServiceLocator.instance.navigation.updateRememberedTransferTab(val);
+        },
+        onToggleSearch: () {
+          setState(() {
+            _isSearching = !_isSearching;
+            if (!_isSearching) {
+              _searchCtrl.clear();
+            }
+          });
+        },
+        onSearchQueryChanged: (query) {},
+        onClearCompleted: () {},
       ),
-    );
-  }
+      body: BlocBuilder<TransferCubit, TransferState>(
+        builder: (context, state) {
+          if (state.isLoading && !state.isInitialized) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-  Widget _buildSearchBar() {
-    return const AppSearchField(
-      hintText: 'Search shared files and links...',
-    );
-  }
+          final activeTasks = _activeTab == 0
+              ? state.activeTasks
+                  .where((t) => t.type == TransferType.download)
+                  .toList()
+              : (_activeTab == 1
+                  ? state.activeTasks
+                      .where((t) => t.type == TransferType.upload)
+                      .toList()
+                  : <TransferTask>[]);
 
-  Widget _buildSegmentedControl() {
-    return AppSegmentedControl<int>(
-      value: _activeTab,
-      segments: const [
-        AppSegment(value: 0, label: 'Downloads'),
-        AppSegment(value: 1, label: 'Uploads'),
-        AppSegment(value: 2, label: 'Shared'),
-      ],
-      onChanged: (i) {
-        setState(() => _activeTab = i);
-        ServiceLocator.instance.navigation.updateRememberedTransferTab(i);
-      },
-    );
-  }
+          final completedJobs =
+              state.downloadJobs.where((j) => j.isComplete).toList();
+          final webShares = state.shareJobs;
 
-  Widget _buildTabContent(AppColorsExtension colors, TransferState state) {
-    switch (_activeTab) {
-      case 0:
-        return _buildDownloadsTab(colors, state);
-      case 1:
-        return _buildUploadsTab(colors, state);
-      case 2:
-        return _buildSharedTab(colors, state);
-      default:
-        return const SizedBox();
-    }
-  }
+          final isEmpty = (_activeTab == 0 && activeTasks.isEmpty && completedJobs.isEmpty) ||
+              (_activeTab == 1 && activeTasks.isEmpty) ||
+              (_activeTab == 2 && webShares.isEmpty);
 
-  // ── DOWNLOADS TAB ─────────────────────────────────────────────────────────
+          if (isEmpty) {
+            return DownloadsEmptyState(activeTab: _activeTab);
+          }
 
-  Widget _buildDownloadsTab(AppColorsExtension colors, TransferState state) {
-    final jobs = state.downloadJobs;
-    return ListView(
-      controller: _scrollController,
-      padding: const EdgeInsets.all(20),
-      children: [
-        const AppSectionLabel('Downloads'),
-        const SizedBox(height: 12),
-        if (jobs.isEmpty)
-          const AppEmptyState(
-              message: 'No downloads yet', icon: Icons.download_rounded)
-        else
-          AppSurfaceCard(
-            radius: 24,
-            child: Column(
-              children: List.generate(jobs.length, (i) {
-                final job = jobs[i];
-                final file = context.read<TransferCubit>().getFile(job.fileId);
-                return _DownloadItemTile(
-                  job: job,
-                  isLast: i == jobs.length - 1,
-                  onShare: () => _showShareOptionsDialog(job, file),
-                  onDelete: () => _confirmDeleteLocalFile(job),
-                );
-              }),
-            ),
-          ),
-      ],
-    );
-  }
-
-  // ── UPLOADS TAB ───────────────────────────────────────────────────────────
-
-  Widget _buildUploadsTab(AppColorsExtension colors, TransferState state) {
-    final uploads = state.uploadJobs;
-
-    return ListView(
-      controller: _scrollController,
-      padding: const EdgeInsets.all(20),
-      children: [
-        _buildUploadZone(colors),
-        const SizedBox(height: 24),
-        const AppSectionLabel('Recent Uploads'),
-        const SizedBox(height: 12),
-        if (uploads.isEmpty)
-          const AppEmptyState(
-              message: 'No uploads yet', icon: Icons.cloud_upload_outlined)
-        else
-          AppSurfaceCard(
-            radius: 24,
-            child: Column(
-              children: List.generate(uploads.length, (i) {
-                final file = uploads[i];
-                return _UploadItemTile(
-                  name: file.name,
-                  size: file.formattedSize,
-                  progress: 1.0,
-                  status: 'Completed',
-                  iconColor: colors.fileVideo,
-                  isLast: i == uploads.length - 1,
-                  onMore: () => _showFileDetail(file),
-                );
-              }),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildUploadZone(AppColorsExtension colors) {
-    return GestureDetector(
-      onTap: () => MobileShell.of(context)?.switchTab(2), // Trigger add menu
-      child: Container(
-        height: 140,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: colors.borderSubtle, width: 1.5),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.cloud_upload_outlined,
-                color: colors.textSecondary, size: 32),
-            const SizedBox(height: 12),
-            Text(
-              'Drag and upload or browse files',
-              style: TextStyle(color: colors.textSecondary, fontSize: 14),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ── SHARED TAB ────────────────────────────────────────────────────────────
-
-  Widget _buildSharedTab(AppColorsExtension colors, TransferState state) {
-    final shares = state.shareJobs;
-    return ListView(
-      controller: _scrollController,
-      padding: const EdgeInsets.all(20),
-      children: [
-        const AppSectionLabel('Shared Files'),
-        const SizedBox(height: 12),
-        if (shares.isEmpty)
-          const AppEmptyState(
-              message: 'No web shares yet', icon: Icons.public_rounded)
-        else
-          AppSurfaceCard(
-            radius: 24,
-            child: Column(
-              children: List.generate(shares.length, (i) {
-                final share = shares[i];
-                return _SharedItemTile(
-                  share: share,
-                  isLast: i == shares.length - 1,
-                  onCopy: share.shareUrl != null
-                      ? () {
-                          Clipboard.setData(
-                              ClipboardData(text: share.shareUrl!));
-                        }
-                      : null,
-                  onShare: () {
-                    if (share.shareUrl != null) {
-                      SharePlus.instance.share(
-                        ShareParams(
-                          text: '${share.name}: ${share.shareUrl}',
-                        ),
-                      );
-                    } else {
-                      final file = context
-                          .read<TransferCubit>()
-                          .getFile(share.fileId);
-                      if (file != null) _showShareSheet(file);
-                    }
-                  },
-                  onDelete: () async {
-                    await context
-                        .read<TransferCubit>()
-                        .deleteShareJob(share.fileId);
-                  },
-                );
-              }),
-            ),
-          ),
-      ],
-    );
-  }
-
-}
-
-// ── TILE WIDGETS ─────────────────────────────────────────────────────────────
-
-class _DownloadItemTile extends StatelessWidget {
-  final DownloadJob job;
-  final bool isLast;
-  final VoidCallback? onShare;
-  final VoidCallback? onDelete;
-  const _DownloadItemTile(
-      {required this.job, this.isLast = false, this.onShare, this.onDelete});
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<AppColorsExtension>()!;
-    final isComplete = job.isComplete;
-    final statusText = isComplete
-        ? 'Completed'
-        : (job.isCancelled
-            ? 'Paused'
-            : '${(job.progress * 100).toInt()}% complete');
-
-    final file = context.read<TransferCubit>().getFile(job.fileId);
-
-    return GestureDetector(
-      onTap: isComplete && job.localPath != null
-          ? () => OpenFile.open(job.localPath)
-          : null,
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          return SingleChildScrollView(
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    if (file != null)
-                      ThumbnailWidget(file: file, width: 40, height: 40)
-                    else
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: colors.bgSurfaceInset,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(
-                            isComplete
-                                ? Icons.insert_drive_file_outlined
-                                : Icons.file_download_outlined,
-                            color: colors.textPrimary,
-                            size: 20),
-                      ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            job.name,
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  color: isComplete ? colors.accentPrimary : colors.textPrimary,
-                                ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${job.sizeMb.toStringAsFixed(1)} MB • $statusText',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
+                if (activeTasks.isNotEmpty) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                    child: Text(
+                      'ACTIVE TRANSFERS (${activeTasks.length})',
+                      style: TextStyle(
+                        color: colors.textSecondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.1,
                       ),
                     ),
-                    // Share icon
-                    IconButton(
-                      icon: Icon(AppIcons.share,
-                          color: colors.accentPrimary, size: 20),
-                      tooltip: 'Share',
-                      onPressed: onShare,
+                  ),
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: activeTasks.length,
+                    separatorBuilder: (_, __) =>
+                        Divider(height: 1, color: colors.borderSubtle),
+                    itemBuilder: (context, index) {
+                      final task = activeTasks[index];
+                      return ActiveDownloadTile(
+                        task: task,
+                        onPause: () => TransferQueueService.instance.pauseTask(task.id),
+                        onResume: () => TransferQueueService.instance.resumeTask(task.id),
+                        onCancel: () => TransferQueueService.instance.cancelTask(task.id),
+                      );
+                    },
+                  ),
+                  Divider(height: 24, thickness: 8, color: colors.bgSurfaceInset),
+                ],
+                if (_activeTab == 0 && completedJobs.isNotEmpty) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                    child: Text(
+                      'COMPLETED DOWNLOADS (${completedJobs.length})',
+                      style: TextStyle(
+                        color: colors.textSecondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.1,
+                      ),
                     ),
-                    // Delete icon
-                    IconButton(
-                      icon: Icon(AppIcons.delete,
-                          color: colors.error, size: 20),
-                      tooltip: 'Delete from phone',
-                      onPressed: onDelete,
-                    ),
-                  ],
-                ),
-                if (!isComplete) ...[
-                  const SizedBox(height: 16),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: LinearProgressIndicator(
-                      value: job.progress,
-                      minHeight: 4,
-                      backgroundColor: colors.bgSurfaceInset,
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(colors.accentPrimary),
-                    ),
+                  ),
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: completedJobs.length,
+                    separatorBuilder: (_, __) =>
+                        Divider(height: 1, color: colors.borderSubtle),
+                    itemBuilder: (context, index) {
+                      final job = completedJobs[index];
+                      final file = context.read<TransferCubit>().getFile(job.fileId);
+                      return CompletedDownloadTile(
+                        job: job,
+                        file: file,
+                        onTap: () {
+                          if (job.localPath != null) {
+                            OpenFile.open(job.localPath!);
+                          }
+                        },
+                        onShare: () => _showShareOptionsDialog(job, file),
+                        onDelete: () => _confirmDeleteLocalFile(job),
+                      );
+                    },
                   ),
                 ],
               ],
             ),
-          ),
-          if (!isLast)
-            Divider(indent: 16, endIndent: 16, color: colors.borderSubtle),
-        ],
+          );
+        },
       ),
-    );
-  }
-}
-
-class _UploadItemTile extends StatelessWidget {
-  final String name;
-  final String size;
-  final double progress;
-  final String status;
-  final Color iconColor;
-  final bool isLast;
-  final VoidCallback? onMore;
-
-  const _UploadItemTile({
-    required this.name,
-    required this.size,
-    required this.progress,
-    required this.status,
-    required this.iconColor,
-    this.isLast = false,
-    this.onMore,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<AppColorsExtension>()!;
-    final isComplete = progress >= 1.0;
-    
-    // Attempt to find the FileRecord to show a proper thumbnail
-    final file = context.read<TransferCubit>().state.uploadJobs
-        .where((f) => f.name == name).firstOrNull;
-
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  if (file != null)
-                    ThumbnailWidget(file: file, width: 40, height: 40)
-                  else
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: iconColor.withAlpha(40),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(Icons.description_rounded,
-                          color: iconColor, size: 20),
-                    ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          name,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: colors.textPrimary,
-                              ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '$size • $status',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.more_horiz_rounded,
-                        color: colors.textSecondary),
-                    onPressed: onMore,
-                  ),
-                ],
-              ),
-              if (!isComplete) ...[
-                const SizedBox(height: 16),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: LinearProgressIndicator(
-                    value: progress,
-                    minHeight: 4,
-                    backgroundColor: colors.bgSurfaceInset,
-                    valueColor:
-                        AlwaysStoppedAnimation<Color>(colors.accentPrimary),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-        if (!isLast)
-          Divider(indent: 16, endIndent: 16, color: colors.borderSubtle),
-      ],
-    );
-  }
-}
-
-class _SharedItemTile extends StatelessWidget {
-  final WebShareJob share;
-  final bool isLast;
-  final VoidCallback? onCopy;
-  final VoidCallback? onShare;
-  final VoidCallback? onDelete;
-  const _SharedItemTile(
-      {required this.share,
-      this.isLast = false,
-      this.onCopy,
-      this.onShare,
-      this.onDelete});
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<AppColorsExtension>()!;
-    final file = context.read<TransferCubit>().getFile(share.fileId);
-
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Row(
-            children: [
-              // Thumbnail
-              file != null
-                  ? ThumbnailWidget(file: file, width: 40, height: 40)
-                  : Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: colors.bgSurfaceInset,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(_getIcon(share.mimeType),
-                          color: _getColor(colors, share.mimeType), size: 20),
-                    ),
-              const SizedBox(width: 12),
-              // Text
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      share.name,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: colors.textPrimary,
-                          ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Shared • ${_formatDate(share.completedAt)}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-              // Copy link icon
-              if (share.isComplete && share.shareUrl != null)
-                IconButton(
-                  icon: Icon(AppIcons.copyLink,
-                      size: 18, color: colors.accentPrimary),
-                  tooltip: 'Copy link',
-                  onPressed: onCopy,
-                ),
-              // Share link icon
-              IconButton(
-                icon: Icon(AppIcons.share,
-                    size: 18, color: colors.accentPrimary),
-                tooltip: 'Share link',
-                onPressed: onShare,
-              ),
-              // Delete icon
-              IconButton(
-                icon: Icon(AppIcons.delete,
-                    size: 18, color: colors.error),
-                tooltip: 'Delete link',
-                onPressed: onDelete,
-              ),
-            ],
-          ),
-        ),
-        if (!isLast)
-          Divider(indent: 16, endIndent: 16, color: colors.borderSubtle),
-      ],
-    );
-  }
-
-  IconData _getIcon(String mime) {
-    if (mime.startsWith('image/')) return Icons.image_rounded;
-    if (mime.startsWith('video/')) return Icons.play_circle_fill_rounded;
-    if (mime == 'application/pdf') return Icons.picture_as_pdf_rounded;
-    return Icons.insert_drive_file_rounded;
-  }
-
-  Color _getColor(AppColorsExtension colors, String mime) {
-    if (mime == 'application/pdf') return colors.filePdf;
-    if (mime.startsWith('video/')) return colors.fileVideo;
-    return colors.textSecondary;
-  }
-
-  String _formatDate(DateTime? d) {
-    if (d == null) return '';
-    return DateFormat('dd MMM, yyyy').format(d);
-  }
-}
-
-class _ActiveTransferCard extends StatelessWidget {
-  final TransferTask task;
-
-  const _ActiveTransferCard({required this.task});
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<AppColorsExtension>()!;
-    final speedText = task.speedKbps > 1024
-        ? '${(task.speedKbps / 1024).toStringAsFixed(1)} MB/s'
-        : '${task.speedKbps.toStringAsFixed(0)} KB/s';
-
-    final isPaused = task.status == TransferStatus.paused;
-
-    return Container(
-      width: 280,
-      margin: const EdgeInsets.only(right: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: colors.bgSurface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: colors.borderSubtle),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                task.type == TransferType.upload
-                    ? Icons.cloud_upload_outlined
-                    : (task.type == TransferType.download
-                        ? Icons.download_rounded
-                        : Icons.share_rounded),
-                size: 16,
-                color: colors.accentPrimary,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  task.name,
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: colors.textPrimary),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 4),
-              _buildActionButtons(colors),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  task.currentStage ?? 'Processing...',
-                  style: TextStyle(
-                      fontSize: 11,
-                      color:
-                          isPaused ? colors.warning : colors.textSecondary),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Text(
-                '${(task.progress * 100).toInt()}%',
-                style: TextStyle(
-                    fontSize: 12,
-                    color: colors.accentPrimary,
-                    fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                isPaused ? 'Paused' : speedText,
-                style: TextStyle(fontSize: 10, color: colors.textTertiary),
-              ),
-              if (task.eta != null && !isPaused)
-                Text(
-                  '${task.eta} left',
-                  style: TextStyle(fontSize: 10, color: colors.textTertiary),
-                ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(2),
-            child: LinearProgressIndicator(
-              value: task.progress,
-              minHeight: 3,
-              backgroundColor: colors.bgSurfaceInset,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                  isPaused ? colors.warning : colors.accentPrimary),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionButtons(AppColorsExtension colors) {
-    final isPaused = task.status == TransferStatus.paused;
-    final queue = TransferQueueService.instance;
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        GestureDetector(
-          onTap: () =>
-              isPaused ? queue.resumeTask(task.id) : queue.pauseTask(task.id),
-          child: Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: colors.bgSurfaceInset,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
-              size: 14,
-              color: colors.textPrimary,
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        GestureDetector(
-          onTap: () => queue.cancelTask(task.id),
-          child: Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: colors.bgSurfaceInset,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.close_rounded,
-              size: 14,
-              color: colors.textSecondary,
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

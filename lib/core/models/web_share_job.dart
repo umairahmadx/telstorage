@@ -17,6 +17,7 @@ class WebShareJob {
   final String? password;
   final int? maxDownloads;
   final int? expiryDays;
+  final String? vanitySlug;
 
   WebShareJob({
     required this.fileId,
@@ -34,6 +35,7 @@ class WebShareJob {
     this.password,
     this.maxDownloads,
     this.expiryDays,
+    this.vanitySlug,
   });
 
   bool get isComplete => status == 'completed';
@@ -56,6 +58,7 @@ class WebShareJob {
     String? password,
     int? maxDownloads,
     int? expiryDays,
+    String? vanitySlug,
   }) {
     return WebShareJob(
       fileId: fileId,
@@ -73,6 +76,7 @@ class WebShareJob {
       password: password ?? this.password,
       maxDownloads: maxDownloads ?? this.maxDownloads,
       expiryDays: expiryDays ?? this.expiryDays,
+      vanitySlug: vanitySlug ?? this.vanitySlug,
     );
   }
 
@@ -94,6 +98,7 @@ class WebShareJob {
       if (password != null) 'password': password,
       if (maxDownloads != null) 'max_downloads': maxDownloads,
       if (expiryDays != null) 'expiry_days': expiryDays,
+      if (vanitySlug != null) 'vanity_slug': vanitySlug,
     };
   }
 
@@ -117,6 +122,7 @@ class WebShareJob {
       password: map['password'] as String?,
       maxDownloads: map['max_downloads'] as int?,
       expiryDays: map['expiry_days'] as int?,
+      vanitySlug: map['vanity_slug'] as String?,
     );
   }
 }

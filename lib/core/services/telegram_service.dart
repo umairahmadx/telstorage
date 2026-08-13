@@ -82,13 +82,7 @@ class TelegramService {
     }
   }
 
-  /// Upload a file (chunk or metadata json) → returns message_id only (legacy)
-  Future<int> uploadBytes(Uint8List bytes, String filename) async {
-    final result = await uploadBytesWithFileId(bytes, filename);
-    return result['message_id'] as int;
-  }
-
-  /// Download file bytes by file_id (preferred method)
+  /// Download file bytes by file_id
   Future<Uint8List> downloadByFileId(String fileId) async {
     await TelegramRateLimiter.instance.acquire();
     try {
@@ -132,27 +126,9 @@ class TelegramService {
     }
   }
 
-  /// Download file bytes by message_id (legacy - requires lookup)
-  Future<Uint8List> downloadBytes(int messageId) async {
-    try {
-      AppLogger.d('Starting download for message_id: $messageId',
-          tag: 'TelegramService');
-
-      // Step 1: Get file_id from the message
-      AppLogger.d('Fetching file_id from message...', tag: 'TelegramService');
-      final fileId = await getFileIdFromMessage(messageId);
-      AppLogger.d('Got file_id: $fileId', tag: 'TelegramService');
-
-      // Step 2: Download using file_id
-      return await downloadByFileId(fileId);
-    } catch (e) {
-      AppLogger.e('Download failed: $e', tag: 'TelegramService', error: e);
-      throw Exception('Failed to download file: $e');
-    }
-  }
-
   /// Delete a message (used for cleanup)
   Future<void> deleteMessage(int messageId) async {
+    if (messageId <= 0) return;
     await TelegramRateLimiter.instance.acquire();
     try {
       await _dio.post(

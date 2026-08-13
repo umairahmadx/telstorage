@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:telstorage/core/utils/thumbnail_generator.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test('ThumbnailResult holds bytes and extension', () {
     final result = ThumbnailResult(Uint8List.fromList([1, 2, 3]), 'jpg');
     expect(result.bytes.length, 3);

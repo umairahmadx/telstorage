@@ -5,18 +5,22 @@ import 'package:convert/convert.dart';
 import 'package:crypto/crypto.dart';
 import 'package:mime/mime.dart';
 import 'package:uuid/uuid.dart';
+import 'package:hive/hive.dart';
 import '../constants/app_constants.dart';
 import '../models/chunk_info.dart';
 import '../models/file_record.dart';
+import '../models/pending_action.dart';
 import '../utils/app_logger.dart';
 import '../utils/connectivity.dart';
 import '../utils/thumbnail_generator.dart';
 import 'hive_service.dart';
 import 'metadata_service.dart';
 import 'notification_service.dart';
+import 'service_locator.dart';
 import 'telegram_service.dart';
 import 'transfer_queue_service.dart';
 import '../models/transfer_task.dart';
+import '../events/domain_event_bus.dart';
 
 /// Handles file upload pipeline — non-blocking on Flutter web (single JS thread).
 ///
@@ -24,11 +28,13 @@ import '../models/transfer_task.dart';
 ///   • Files ≤ 19 MB  →  upload directly as original filename.
 ///   • Files > 19 MB  →  wrap in ZIP (STORE mode, no DEFLATE compression) →
 ///                        split into 19 MB parts → upload each as name.zip.001…
+import 'upload_service_contract.dart';
+
 ///
 /// SHA-256 is computed in 1 MB chunks with event-loop yields between each
 /// chunk so the UI never freezes.  ZIP uses STORE mode which is near-instant
 /// (no CPU compression needed since MP4/JPG/etc are already compressed).
-class UploadService {
+class UploadService implements UploadServiceContract {
   final TelegramService _telegram;
   final MetadataService _metadata;
   final HiveService _hive;
@@ -54,6 +60,7 @@ class UploadService {
     }
   }
 
+  @override
   Future<Map<String, dynamic>> uploadFile(
     Uint8List bytes,
     String name,
@@ -110,6 +117,65 @@ class UploadService {
         (pct) => internalOnProgress(
             0.03 + pct * 0.07, 'Verifying… ${(pct * 100).toInt()}%'),
       );
+
+      // ── Step 1.2: Check for SHA-256 Deduplication ──────────────────────────
+      final existingFile = _hive.allFiles.firstWhere(
+        (f) => f.sha256Hash == hash && (f.sizeMb - sizeMb).abs() < 0.01 && f.metadataFileId != null,
+        orElse: () => FileRecord(
+          fileId: '',
+          name: '',
+          folderId: null,
+          sizeMb: 0,
+          mimeType: '',
+          uploadedAt: DateTime.now(),
+          chunkCount: 0,
+          sha256Hash: '',
+          metadataMessageId: 0,
+          metadataFileId: null,
+        ),
+      );
+
+      if (existingFile.fileId.isNotEmpty && existingFile.metadataFileId != null) {
+        AppLogger.i('Duplicate file hash detected for $name — linking existing remote chunks instantly!',
+            tag: 'UploadService');
+        internalOnProgress(0.90, 'Instant deduplication copy…');
+
+        final fileMeta = <String, dynamic>{
+          'file_id': fileId,
+          'name': name,
+          'folder_id': folderId,
+          'sha256': hash,
+          'size_mb': sizeMb,
+          'mime_type': mimeType,
+          'chunk_count': existingFile.chunkCount,
+          'uploaded_at': DateTime.now().toIso8601String(),
+          'metadata_message_id': existingFile.metadataMessageId,
+          'metadata_file_id': existingFile.metadataFileId,
+          if (existingFile.thumbnailFileId != null) 'thumbnail_file_id': existingFile.thumbnailFileId,
+        };
+
+        final savedFile = FileRecord.fromMap(fileMeta);
+        await _hive.saveFile(savedFile);
+        DomainEventBus.instance.fire(FileUploadedEvent(savedFile));
+
+        if (!skipGlobalMetadataUpdate) {
+          try {
+            final appMeta = await _metadata.fetch();
+            await _metadata.addFile(appMeta, fileMeta);
+          } catch (_) {}
+        }
+
+        internalOnProgress(1.0, 'Upload complete (Instant Deduplication)!');
+        TransferQueueService.instance.updateTask(fileId, status: TransferStatus.completed);
+
+        await NotificationService.instance.showCompletionNotification(
+          title: 'Instant Upload Complete',
+          body: '$name linked instantly via deduplication.',
+          payload: 'transfer_upload',
+        );
+
+        return fileMeta;
+      }
 
       // ── Step 1.5: Generate and Upload Thumbnail ────────────────────────────
       String? thumbnailFileId;
@@ -230,11 +296,28 @@ class UploadService {
 
       // ── Step 4: Save to local Hive + batch or single metadata update ──────
       internalOnProgress(0.94, 'Updating storage index…');
-      await _hive.saveFile(FileRecord.fromMap(fileMeta));
+      final savedFile = FileRecord.fromMap(fileMeta);
+      await _hive.saveFile(savedFile);
+      DomainEventBus.instance.fire(FileUploadedEvent(savedFile));
 
       if (!skipGlobalMetadataUpdate) {
-        final appMeta = await _metadata.fetch();
-        await _metadata.addFile(appMeta, fileMeta);
+        try {
+          final appMeta = await _metadata.fetch();
+          await _metadata.addFile(appMeta, fileMeta);
+        } catch (e) {
+          AppLogger.w('Direct metadata index update failed ($e), enqueuing background sync action',
+              tag: 'UploadService');
+          final pending = PendingAction(
+            id: const Uuid().v4(),
+            actionType: 'addFileMeta',
+            payload: {'fileMeta': fileMeta},
+            timestamp: DateTime.now(),
+          );
+          if (Hive.isBoxOpen(AppConstants.pendingActionsBox)) {
+            await Hive.box<PendingAction>(AppConstants.pendingActionsBox).put(pending.id, pending);
+            ServiceLocator.instance.syncQueue.processQueue();
+          }
+        }
       }
 
       internalOnProgress(1.0, 'Upload complete!');

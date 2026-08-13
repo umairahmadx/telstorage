@@ -13,6 +13,7 @@ import '../utils/web_download.dart'
 import '../utils/native_save_helper.dart'
     if (dart.library.js_interop) '../utils/native_save_stub.dart';
 import 'telegram_service.dart';
+import 'download_service_contract.dart';
 
 export '../utils/native_save_helper.dart'
     if (dart.library.js_interop) '../utils/native_save_stub.dart'
@@ -41,13 +42,14 @@ class SaveResult {
 ///   4. SHA-256 verification in 1 MB chunks (non-blocking).
 ///   5. ZIP extraction if needed.
 ///   6. Save to platform Downloads / Files / browser bar.
-class DownloadService {
+class DownloadService implements DownloadServiceContract {
   final TelegramService _telegram;
 
   DownloadService(this._telegram);
 
   // ── Core download pipeline ─────────────────────────────────────────────────
 
+  @override
   Future<Uint8List> downloadFile(
     FileRecord record,
     Function(double progress, String status) onProgress,
@@ -57,12 +59,8 @@ class DownloadService {
       AppLogger.d('Downloading: ${record.name}', tag: 'DownloadService');
 
       // Step 1: Fetch per-file metadata JSON
-      final Uint8List metaBytes;
-      if (record.metadataFileId != null && record.metadataFileId!.isNotEmpty) {
-        metaBytes = await _telegram.downloadByFileId(record.metadataFileId!);
-      } else {
-        metaBytes = await _telegram.downloadBytes(record.metadataMessageId);
-      }
+      final Uint8List metaBytes =
+          await _telegram.downloadByFileId(record.metadataFileId!);
 
       // Step 2: Parse metadata
       final fileMeta =
@@ -76,10 +74,13 @@ class DownloadService {
       AppLogger.d('${chunks.length} part(s), is_zipped: $isZipped',
           tag: 'DownloadService');
 
-      // Step 3: Download all parts
+      // Step 3: Download all parts in parallel (max 3 concurrent downloads)
       final builder = BytesBuilder(copy: false);
-      for (var i = 0; i < chunks.length; i++) {
-        // Check for pause/cancel
+      final downloadedParts = List<Uint8List?>.filled(chunks.length, null);
+      int completedChunks = 0;
+      const int maxParallel = 3;
+
+      for (var i = 0; i < chunks.length; i += maxParallel) {
         while (TransferQueueService.instance.isPaused(record.fileId)) {
           await Future.delayed(const Duration(seconds: 1));
         }
@@ -87,21 +88,26 @@ class DownloadService {
           throw Exception('Download cancelled by user');
         }
 
-        final part = chunks[i];
-        final label = part.partName ?? 'part ${i + 1}';
-        final partPct = i / chunks.length;
+        final end = (i + maxParallel).clamp(0, chunks.length);
+        final batch = List.generate(end - i, (index) => i + index);
 
-        onProgress(
-          0.05 + partPct * 0.70,
-          'Downloading $label (${i + 1}/${chunks.length})…',
-        );
+        await Future.wait(batch.map((chunkIdx) async {
+          final part = chunks[chunkIdx];
+          final Uint8List partBytes =
+              await _telegram.downloadByFileId(part.fileId!);
+          downloadedParts[chunkIdx] = partBytes;
 
-        final Uint8List partBytes;
-        if (part.fileId != null && part.fileId!.isNotEmpty) {
-          partBytes = await _telegram.downloadByFileId(part.fileId!);
-        } else {
-          partBytes = await _telegram.downloadBytes(part.messageId);
-        }
+          completedChunks++;
+          final pct = completedChunks / chunks.length;
+          onProgress(
+            0.05 + pct * 0.70,
+            'Downloading parts ($completedChunks/${chunks.length})…',
+          );
+        }));
+      }
+
+      for (final partBytes in downloadedParts) {
+        if (partBytes == null) throw Exception('Missing downloaded chunk data');
         builder.add(partBytes);
       }
 
@@ -156,6 +162,7 @@ class DownloadService {
   /// • Android → public Downloads folder (/storage/emulated/0/Download/)
   /// • iOS    → Documents folder (iOS Files app) + share sheet
   /// • Desktop → Downloads folder, then open
+  @override
   Future<SaveResult> saveAndOpen(Uint8List bytes, String filename) async {
     if (kIsWeb) {
       triggerWebDownload(bytes, filename);
@@ -175,6 +182,7 @@ class DownloadService {
   }
 
   /// Legacy compatibility — delegates to [saveAndOpen].
+  @override
   Future<void> saveFile(Uint8List bytes, String filename) async {
     if (kIsWeb) {
       triggerWebDownload(bytes, filename);

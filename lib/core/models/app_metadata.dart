@@ -7,10 +7,8 @@ class AppMetadata {
   int totalFiles;
   int metadataMessageId; // Telegram message_id of this file (for deletion)
   List<Folder> folders;
-  List<FileRef> files; // legacy central file references (stripped after migration)
   List<FileRef> recentFiles; // top 20 recent files for Home screen
   Map<String, int> folderPartitionsMap; // folderId -> partition message_id
-  bool isPartitioned;
   Map<String, CategoryStat> categories;
   DateTime lastSynced;
 
@@ -21,21 +19,14 @@ class AppMetadata {
     required this.totalFiles,
     required this.metadataMessageId,
     required this.folders,
-    List<FileRef>? files,
     List<FileRef>? recentFiles,
     Map<String, int>? folderPartitionsMap,
-    this.isPartitioned = false,
     required this.categories,
     required this.lastSynced,
-  })  : files = files ?? [],
-        recentFiles = recentFiles ?? (files != null ? files.take(20).toList() : []),
+  })  : recentFiles = recentFiles ?? [],
         folderPartitionsMap = folderPartitionsMap ?? {};
 
   factory AppMetadata.fromJson(Map<String, dynamic> json) {
-    final fileList = (json['files'] as List?)
-            ?.map((f) => FileRef.fromJson(f as Map<String, dynamic>))
-            .toList() ??
-        [];
     final partitionsMap = (json['folder_partitions'] as Map<String, dynamic>?)?.map(
           (k, v) => MapEntry(k, (v as num).toInt()),
         ) ??
@@ -50,20 +41,30 @@ class AppMetadata {
               ?.map((f) => Folder.fromJson(f as Map<String, dynamic>))
               .toList() ??
           [],
-      files: fileList,
       recentFiles: (json['recent_files'] as List?)
               ?.map((f) => FileRef.fromJson(f as Map<String, dynamic>))
               .toList() ??
-          fileList.take(20).toList(),
+          [],
       folderPartitionsMap: partitionsMap,
-      isPartitioned: json['is_partitioned'] as bool? ?? partitionsMap.isNotEmpty,
-      categories: (json['categories'] as Map<String, dynamic>?)?.map(
-            (key, value) => MapEntry(
-              key,
-              CategoryStat.fromJson(value as Map<String, dynamic>),
-            ),
-          ) ??
-          {},
+      categories: () {
+        final defaults = {
+          'images': CategoryStat(count: 0, sizeMb: 0.0),
+          'videos': CategoryStat(count: 0, sizeMb: 0.0),
+          'documents': CategoryStat(count: 0, sizeMb: 0.0),
+          'audio': CategoryStat(count: 0, sizeMb: 0.0),
+          'archives': CategoryStat(count: 0, sizeMb: 0.0),
+          'others': CategoryStat(count: 0, sizeMb: 0.0),
+        };
+        final loaded = (json['categories'] as Map<String, dynamic>?)?.map(
+              (key, value) => MapEntry(
+                key,
+                CategoryStat.fromJson(value as Map<String, dynamic>),
+              ),
+            ) ??
+            {};
+        defaults.addAll(loaded);
+        return defaults;
+      }(),
       lastSynced: DateTime.parse(json['last_synced'] as String),
     );
   }
@@ -76,10 +77,8 @@ class AppMetadata {
       'total_files': totalFiles,
       'metadata_message_id': metadataMessageId,
       'folders': folders.map((f) => f.toJson()).toList(),
-      'files': files.map((f) => f.toJson()).toList(),
       'recent_files': recentFiles.take(20).map((f) => f.toJson()).toList(),
       'folder_partitions': folderPartitionsMap,
-      'is_partitioned': isPartitioned,
       'categories':
           categories.map((key, value) => MapEntry(key, value.toJson())),
       'last_synced': lastSynced.toIso8601String(),
@@ -87,19 +86,16 @@ class AppMetadata {
   }
 }
 
-/// Lightweight file reference stored in the global metadata.
-/// Allows rebuilding the local Hive cache from Telegram on first install
-/// or after clearing app data.
+/// Lightweight file reference stored in partition metadata.
 class FileRef {
-  final String fileId; // our internal UUID
-  final String metaFileId; // Telegram file_id of the per-file .json (permanent)
+  final String fileId; // internal UUID
+  final String metaFileId; // Telegram file_id of the per-file .json
   final String name;
   final String? folderId;
 
-  // New optional metadata fields for fast sync
   final double? sizeMb;
   final String? mimeType;
-  final String? uploadedAt; // ISO String
+  final String? uploadedAt;
   final int? chunkCount;
   final String? sha256;
   final int? metadataMessageId;
@@ -140,7 +136,7 @@ class FileRef {
       'file_id': fileId,
       'meta_file_id': metaFileId,
       'name': name,
-      if (folderId != null) 'folder_id': folderId,
+      'folder_id': folderId,
       if (sizeMb != null) 'size_mb': sizeMb,
       if (mimeType != null) 'mime_type': mimeType,
       if (uploadedAt != null) 'uploaded_at': uploadedAt,

@@ -1,26 +1,26 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_animate/flutter_animate.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:open_file/open_file.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:open_file/open_file.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../core/theme/app_theme.dart';
-import '../../core/theme/app_icons.dart';
-import '../../core/services/service_locator.dart';
-import '../../core/services/notification_service.dart';
-import '../../core/services/transfer_queue_service.dart';
 import '../../core/navigation/navigation_intent.dart';
-import '../../features/home/screens/home_screen.dart';
+import '../../core/services/notification_service.dart';
+import '../../core/services/service_locator.dart';
+import '../../core/services/transfer_queue_service.dart';
+import '../../core/theme/app_icons.dart';
+import '../../core/theme/app_theme.dart';
+import '../../features/browser/bloc/browser_bloc.dart';
 import '../../features/browser/screens/browser_screen.dart';
 import '../../features/downloads/screens/downloads_screen.dart';
+import '../../features/home/screens/home_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../../features/upload/bloc/upload_bloc.dart';
-import '../../features/browser/bloc/browser_bloc.dart';
-
 import 'app_drawer.dart';
+import 'mobile_shell/mobile_add_action_item.dart';
+import 'mobile_shell/mobile_bottom_nav.dart';
 
 class MobileShell extends StatefulWidget {
   final int initialIndex;
@@ -61,7 +61,6 @@ class MobileShellState extends State<MobileShell> {
       setState(() {
         _currentIndex = intent.shellIndex;
       });
-      // Do not clear the intent here, let the screen consume it if needed
     }
   }
 
@@ -158,7 +157,7 @@ class MobileShellState extends State<MobileShell> {
             const SizedBox(height: 24),
             Row(
               children: [
-                _AddActionItem(
+                AddActionItem(
                   icon: AppIcons.uploadFile,
                   label: 'Upload File',
                   color: AppTheme.primary,
@@ -168,7 +167,7 @@ class MobileShellState extends State<MobileShell> {
                   },
                 ),
                 if (_currentIndex == 1) // Only show in Files tab
-                  _AddActionItem(
+                  AddActionItem(
                     icon: AppIcons.newFolder,
                     label: 'New Folder',
                     color: AppTheme.warning,
@@ -278,183 +277,9 @@ class MobileShellState extends State<MobileShell> {
           SettingsScreen(),
         ],
       ),
-      bottomNavigationBar: _MobileNavBar(
+      bottomNavigationBar: MobileNavBar(
         currentIndex: _currentIndex,
         onTap: switchTab,
-      ),
-    );
-  }
-}
-
-class _AddActionItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _AddActionItem({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<AppColorsExtension>()!;
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Column(
-          children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: color.withAlpha(40),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Icon(icon, color: color, size: 28),
-            ),
-            const SizedBox(height: 12),
-            Text(label,
-                style: TextStyle(
-                    color: colors.textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MobileNavBar extends StatelessWidget {
-  final int currentIndex;
-  final ValueChanged<int> onTap;
-
-  const _MobileNavBar({
-    required this.currentIndex,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<AppColorsExtension>()!;
-
-    return Container(
-      height: 90,
-      decoration: BoxDecoration(
-        color: colors.bgPrimary,
-        border: Border(
-          top: BorderSide(color: colors.borderSubtle, width: 0.5),
-        ),
-      ),
-      child: Stack(
-        clipBehavior: Clip.none,
-        alignment: Alignment.topCenter,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _NavItem(
-                icon: AppIcons.navHome,
-                label: 'Home',
-                selected: currentIndex == 0,
-                onTap: () => onTap(0),
-              ),
-              _NavItem(
-                icon: AppIcons.navFiles,
-                label: 'Files',
-                selected: currentIndex == 1,
-                onTap: () => onTap(1),
-              ),
-              const SizedBox(width: 60), // Space for FAB
-              _NavItem(
-                icon: AppIcons.navTransfer,
-                label: 'Transfer',
-                selected: currentIndex == 3,
-                onTap: () => onTap(3),
-              ),
-              _NavItem(
-                icon: AppIcons.more,
-                label: 'More',
-                selected: currentIndex == 4,
-                onTap: () => onTap(4),
-              ),
-            ],
-          ),
-          Positioned(
-            top: -20,
-            child: GestureDetector(
-              onTap: () => onTap(2),
-              child: Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: colors.accentPrimary,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: colors.textPrimary.withAlpha(30),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Icon(
-                  AppIcons.add,
-                  color: colors.bgPrimary,
-                  size: 32,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    ).animate().fadeIn(duration: 300.ms, curve: Curves.easeOut);
-  }
-}
-
-class _NavItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _NavItem({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<AppColorsExtension>()!;
-    return Expanded(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              color: selected ? colors.accentPrimary : colors.textTertiary,
-              size: 26,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                color: selected ? colors.accentPrimary : colors.textTertiary,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

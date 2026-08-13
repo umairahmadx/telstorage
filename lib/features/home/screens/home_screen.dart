@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/models/file_record.dart';
+import '../../../core/navigation/navigation_intent.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/navigation/navigation_intent.dart';
-import '../../../shared/widgets/thumbnail_widget.dart';
-import '../../../shared/widgets/mobile_shell.dart';
 import '../../../shared/widgets/file_detail_sheet.dart';
+import '../../../shared/widgets/mobile_shell.dart';
 import '../../../shared/widgets/share_link_sheet.dart';
-import '../../../shared/widgets/app_surface_card.dart';
 import '../bloc/home_cubit.dart';
+import 'widgets/home_greeting_card.dart';
+import 'widgets/recent_files_section.dart';
+import 'widgets/storage_overview_card.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -57,9 +57,9 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (ctx) => ShareLinkSheet(
         file: file,
         shareUrl: existing?.shareUrl,
-        onCopyLink: (pwd, expiry) async {
+        onCopyLink: (pwd, expiry, vanitySlug) async {
           final cubit = context.read<HomeCubit>();
-          await cubit.shareFile(file, password: pwd, expiryDays: expiry);
+          await cubit.shareFile(file, password: pwd, expiryDays: expiry, vanitySlug: vanitySlug);
 
           if (!mounted || !ctx.mounted) return;
           Navigator.pop(ctx);
@@ -131,13 +131,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 16),
-                  _buildGreetingCard(colors, state),
+                  HomeGreetingCard(state: state),
                   const SizedBox(height: 24),
-                  _buildStorageOverview(colors, state),
+                  StorageOverviewCard(state: state),
                   const SizedBox(height: 32),
-                  _buildRecentFilesHeader(colors),
-                  const SizedBox(height: 16),
-                  _buildRecentFilesList(colors, state),
+                  RecentFilesSection(
+                    files: state.recentFiles,
+                    onMore: _showFileDetail,
+                  ),
                   const SizedBox(height: 40),
                 ],
               ),
@@ -146,323 +147,5 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       },
     );
-  }
-
-  Widget _buildGreetingCard(AppColorsExtension colors, HomeState state) {
-    final name = state.userName ?? 'User';
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: colors.bgSurface,
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      'Good morning, $name',
-                      style: Theme.of(context).textTheme.headlineMedium,
-                    ),
-                    const SizedBox(width: 8),
-                    const Text('👋', style: TextStyle(fontSize: 20)),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  state.isSyncing ? state.syncStatus : 'Your files are safe and synced.',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ],
-            ),
-          ),
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: colors.bgPrimary,
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              name.isNotEmpty ? name[0].toUpperCase() : 'U',
-              style: TextStyle(
-                color: colors.textPrimary,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
-            ),
-          ),
-        ],
-      ),
-    ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.1, end: 0);
-  }
-
-  Widget _buildStorageOverview(AppColorsExtension colors, HomeState state) {
-    final usedMb = state.storageUsedMb;
-    final limitMb = state.metadata?.storageLimitMb ?? 102400; // fallback to 100GB
-    final usedText = usedMb >= 1024
-        ? '${(usedMb / 1024).toStringAsFixed(1)} GB'
-        : '${usedMb.toStringAsFixed(0)} MB';
-
-    final totalFiles = state.totalFiles;
-    final totalShares = state.totalShares;
-    final totalDownloads = state.totalDownloads;
-
-    return AppSurfaceCard(
-      padding: const EdgeInsets.all(24),
-      radius: 28,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Storage Overview',
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          const SizedBox(height: 8),
-          RichText(
-            text: TextSpan(
-              style: Theme.of(context).textTheme.bodyMedium,
-              children: [
-                TextSpan(
-                  text: usedText,
-                  style: TextStyle(
-                      color: colors.textPrimary, fontWeight: FontWeight.bold),
-                ),
-                const TextSpan(text: ' of Unlimited used'),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: LinearProgressIndicator(
-              value: (usedMb / limitMb).clamp(0.0, 1.0),
-              minHeight: 6,
-              backgroundColor: colors.bgSurfaceInset,
-              valueColor: AlwaysStoppedAnimation<Color>(colors.accentPrimary),
-            ),
-          ),
-          const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildStatItem(colors, Icons.cloud_upload_outlined, 'Uploaded',
-                  '$totalFiles Files'),
-              _buildStatItem(
-                  colors, Icons.share_rounded, 'Shared', '$totalShares Links'),
-              _buildStatItem(colors, Icons.download_rounded, 'Downloads',
-                  '$totalDownloads Files'),
-            ],
-          ),
-        ],
-      ),
-    )
-        .animate()
-        .fadeIn(duration: 400.ms, delay: 100.ms)
-        .slideY(begin: 0.1, end: 0);
-  }
-
-  Widget _buildStatItem(
-      AppColorsExtension colors, IconData icon, String label, String value) {
-    return Container(
-      width: 95,
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      decoration: BoxDecoration(
-        color: colors.bgSurfaceInset,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: colors.textPrimary, size: 20),
-          const SizedBox(height: 8),
-          Text(label,
-              style:
-                  const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-          const SizedBox(height: 2),
-          Text(value,
-              style: TextStyle(color: colors.textSecondary, fontSize: 11)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRecentFilesHeader(AppColorsExtension colors) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          'Recent Files',
-          style: Theme.of(context).textTheme.headlineSmall,
-        ),
-        GestureDetector(
-          onTap: () => ServiceLocator.instance.navigation
-              .navigateTo(AppDestination.files),
-          child: Text(
-            'View all',
-            style: TextStyle(color: colors.textSecondary, fontSize: 14),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRecentFilesList(AppColorsExtension colors, HomeState state) {
-    final files = state.recentFiles;
-
-    if (files.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(40.0),
-          child: Text('No recent files',
-              style: TextStyle(color: colors.textTertiary)),
-        ),
-      );
-    }
-
-    return AppSurfaceCard(
-      radius: 24,
-      child: Column(
-        children: List.generate(files.length, (i) => _RecentFileTile(
-          file: files[i],
-          isLast: i == files.length - 1,
-          onMore: () => _showFileDetail(files[i]),
-        )),
-      ),
-    );
-  }
-}
-
-class _RecentFileTile extends StatelessWidget {
-  final FileRecord file;
-  final bool isLast;
-  final VoidCallback onMore;
-  const _RecentFileTile({required this.file, required this.onMore, this.isLast = false});
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<AppColorsExtension>()!;
-
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              _buildLeading(colors),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      file.name,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: colors.textPrimary,
-                          ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${file.formattedSize} • ${_formatDate(file.uploadedAt)}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                icon: Icon(Icons.more_horiz_rounded, color: colors.textSecondary),
-                onPressed: onMore,
-              ),
-            ],
-          ),
-        ),
-        if (!isLast)
-          Divider(indent: 12, endIndent: 12, color: colors.borderSubtle),
-      ],
-    );
-  }
-
-  Widget _buildLeading(AppColorsExtension colors) {
-    final mime = file.mimeType;
-    if (file.thumbnailFileId != null || file.isImage || file.isVideo || file.isPdf) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: SizedBox(
-          width: 40,
-          height: 40,
-          child: ThumbnailWidget(
-            file: file,
-            width: 40,
-            height: 40,
-          ),
-        ),
-      );
-    }
-
-    Color iconColor;
-    String label = '';
-
-    if (mime.startsWith('video/')) {
-      iconColor = colors.fileVideo;
-      label = 'VIDEO';
-    } else if (mime == 'application/pdf') {
-      iconColor = colors.filePdf;
-      label = 'PDF';
-    } else if (file.name.endsWith('.fig')) {
-      return Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: colors.bgSurfaceInset,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        alignment: Alignment.center,
-        child:
-            Icon(Icons.palette_outlined, color: colors.filePalette, size: 20),
-      );
-    } else {
-      iconColor = colors.fileZip;
-      label = 'ZIP';
-    }
-
-    return Container(
-      width: 40,
-      height: 40,
-      decoration: BoxDecoration(
-        color: iconColor.withAlpha(40),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        label,
-        style: TextStyle(
-            color: iconColor, fontSize: 9, fontWeight: FontWeight.bold),
-      ),
-    );
-  }
-
-  String _formatDate(DateTime d) {
-    final months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec'
-    ];
-    return '${d.day} ${months[d.month - 1]} ${d.year}';
   }
 }

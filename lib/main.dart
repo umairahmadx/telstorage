@@ -76,10 +76,10 @@ Future<void> main() async {
 
   // Initialize Hive local database
   await Hive.initFlutter();
-  Hive.registerAdapter(FileRecordAdapter());
-  Hive.registerAdapter(FolderRecordAdapter());
-  Hive.registerAdapter(DownloadJobAdapter());
-  Hive.registerAdapter(PendingActionAdapter());
+  if (!Hive.isAdapterRegistered(0)) Hive.registerAdapter(FileRecordAdapter());
+  if (!Hive.isAdapterRegistered(1)) Hive.registerAdapter(FolderRecordAdapter());
+  if (!Hive.isAdapterRegistered(2)) Hive.registerAdapter(DownloadJobAdapter());
+  if (!Hive.isAdapterRegistered(3)) Hive.registerAdapter(PendingActionAdapter());
   await Hive.openBox<FileRecord>(AppConstants.filesBox);
   await Hive.openBox<FolderRecord>(AppConstants.foldersBox);
   await Hive.openBox<DownloadJob>(AppConstants.downloadsBox);

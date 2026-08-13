@@ -8,7 +8,7 @@ import 'qr_dialog.dart';
 class ShareLinkSheet extends StatefulWidget {
   final FileRecord file;
   final String? shareUrl;
-  final Function(String? password, int expiryDays) onCopyLink;
+  final Function(String? password, int expiryDays, String? vanitySlug) onCopyLink;
 
   const ShareLinkSheet({
     super.key,
@@ -25,6 +25,14 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
   bool _setPassword = false;
   int _expiryDays = 7;
   final _passCtrl = TextEditingController();
+  final _slugCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _passCtrl.dispose();
+    _slugCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -169,13 +177,36 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
               ),
             ),
           ],
+          const SizedBox(height: 24),
+          Text('Custom Vanity Link (Optional)',
+              style: TextStyle(color: colors.textSecondary, fontSize: 14)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _slugCtrl,
+            style: TextStyle(color: colors.textPrimary),
+            decoration: InputDecoration(
+              prefixText: 'storage.to/v/',
+              prefixStyle: TextStyle(
+                  color: colors.accentPrimary, fontWeight: FontWeight.bold),
+              hintText: 'my-custom-alias',
+              hintStyle: TextStyle(color: colors.textTertiary),
+              filled: true,
+              fillColor: colors.bgSurface,
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none),
+            ),
+          ),
           const SizedBox(height: 32),
           Row(
             children: [
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed: () => widget.onCopyLink(
-                      _setPassword ? _passCtrl.text : null, _expiryDays),
+                    _setPassword ? _passCtrl.text : null,
+                    _expiryDays,
+                    _slugCtrl.text.trim().isNotEmpty ? _slugCtrl.text.trim() : null,
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: colors.accentPrimary,
                     foregroundColor: colors.bgPrimary,

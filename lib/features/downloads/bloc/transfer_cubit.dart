@@ -5,6 +5,7 @@ import '../../../core/models/web_share_job.dart';
 import '../../../core/models/file_record.dart';
 import '../../../core/models/transfer_task.dart';
 import '../../../core/services/service_locator.dart';
+import '../../storage/domain/usecases/generate_web_share_usecase.dart';
 
 // ── States ────────────────────────────────────────────────────────────────────
 
@@ -70,7 +71,11 @@ class TransferCubit extends Cubit<TransferState> {
     }
   }
 
+  bool _isSubscribed = false;
+
   void _initSubscriptions() {
+    if (_isSubscribed) return;
+    _isSubscribed = true;
     ServiceLocator.instance.transferQueue.tasksNotifier.addListener(_onTasksChanged);
     ServiceLocator.instance.downloadQueue.listenable.addListener(_onDownloadsChanged);
     ServiceLocator.instance.webShareQueue.listenable.addListener(_onSharesChanged);
@@ -111,20 +116,26 @@ class TransferCubit extends Cubit<TransferState> {
   }
 
   Future<void> enqueueDownload(FileRecord file) async {
-    try {
-      await ServiceLocator.instance.storageRepository.enqueueDownload(file);
-    } catch (e) {
-      emit(state.copyWith(errorMessage: e.toString()));
-    }
+    final result = await ServiceLocator.instance.downloadFileUseCase(file);
+    result.fold(
+      (_) {},
+      (failure) => emit(state.copyWith(errorMessage: failure.message)),
+    );
   }
 
-  Future<void> enqueueShare(FileRecord file, {String? password, int? expiryDays}) async {
-    try {
-      await ServiceLocator.instance.storageRepository.enqueueWebShare(file, 
-          password: password, expiryDays: expiryDays);
-    } catch (e) {
-      emit(state.copyWith(errorMessage: e.toString()));
-    }
+  Future<void> enqueueShare(FileRecord file, {String? password, int? expiryDays, String? vanitySlug}) async {
+    final result = await ServiceLocator.instance.generateWebShareUseCase(
+      GenerateWebShareParams(
+        file: file,
+        password: password,
+        expiryDays: expiryDays,
+        vanitySlug: vanitySlug,
+      ),
+    );
+    result.fold(
+      (_) {},
+      (failure) => emit(state.copyWith(errorMessage: failure.message)),
+    );
   }
 
   FileRecord? getFile(String fileId) {

@@ -23,6 +23,8 @@ class FileManagerService {
 
   FileManagerService(this._meta, this._telegram, this._hive);
 
+  MetadataService get metadataService => _meta;
+
   // ── Folder Operations ───────────────────────────────────────
 
   Future<void> createFolder(String name, {String? parentId, String? folderId}) async {
@@ -57,14 +59,6 @@ class FileManagerService {
     await _hive.moveFolder(folderId, parentId);
   }
 
-  bool _hasFilesInFolderTree(String folderId) {
-    if (_hive.filesInFolder(folderId).isNotEmpty) return true;
-    for (final sub in _hive.subfolders(folderId)) {
-      if (_hasFilesInFolderTree(sub.id)) return true;
-    }
-    return false;
-  }
-
   void _collectSubfolderIds(String folderId, Set<String> idsToDelete) {
     idsToDelete.add(folderId);
     for (final sub in _hive.subfolders(folderId)) {
@@ -72,11 +66,31 @@ class FileManagerService {
     }
   }
 
-  Future<void> deleteFolder(String folderId) async {
-    if (_hasFilesInFolderTree(folderId)) throw FolderNotEmptyException();
+  /// Deletes a folder tree and all of its files in one queued sync action.
+  /// File snapshots are supplied by the local-first repository because the
+  /// local cache is removed before the queued remote operation runs.
+  Future<void> deleteFolder(
+    String folderId, {
+    List<String> folderIds = const [],
+    List<Map<String, dynamic>> fileSnapshots = const [],
+  }) async {
+    for (final snapshot in fileSnapshots) {
+      await deleteFileRemoteOnly(
+        fileId: snapshot['fileId'] as String,
+        metadataMessageId: snapshot['metadataMessageId'] as int?,
+        metadataFileId: snapshot['metadataFileId'] as String?,
+        sizeMb: (snapshot['sizeMb'] as num?)?.toDouble() ?? 0,
+        mimeType: snapshot['mimeType'] as String? ?? 'application/octet-stream',
+        folderId: snapshot['folderId'] as String?,
+      );
+    }
 
-    final idsToDelete = <String>{};
-    _collectSubfolderIds(folderId, idsToDelete);
+    // The local cache has already been deleted by the optimistic repository,
+    // so use the folder ID snapshot from the queued action for nested folders.
+    final idsToDelete = folderIds.toSet();
+    if (idsToDelete.isEmpty) {
+      _collectSubfolderIds(folderId, idsToDelete);
+    }
 
     final meta = await _meta.fetch();
     meta.folders.removeWhere((f) => idsToDelete.contains(f.id));
@@ -89,20 +103,16 @@ class FileManagerService {
 
   // ── File Operations ─────────────────────────────────────────
 
-  /// Download file metadata JSON using permanent file_id (preferred) or
-  /// message_id (legacy fallback).
+  /// Download file metadata JSON using permanent file_id.
   Future<Map<String, dynamic>> _fetchFileMeta(
-    int messageId,
+    int? messageId,
     String? fileId,
   ) async {
-    Uint8List bytes;
     if (fileId != null && fileId.isNotEmpty) {
-      bytes = await _telegram.downloadByFileId(fileId);
-    } else {
-      // Legacy: only works for very recent messages
-      bytes = await _telegram.downloadBytes(messageId);
+      final bytes = await _telegram.downloadByFileId(fileId);
+      return jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
     }
-    return jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
+    throw StateError('Cannot fetch remote metadata: file has no remote metadataFileId.');
   }
 
   Future<void> renameFile(String fileId, String newName) async {
@@ -227,31 +237,37 @@ class FileManagerService {
 
   Future<void> deleteFileRemoteOnly({
     required String fileId,
-    required int metadataMessageId,
+    required int? metadataMessageId,
     required String? metadataFileId,
     required double sizeMb,
     required String mimeType,
     String? folderId,
   }) async {
-    Map<String, dynamic> fileMeta;
-    try {
-      fileMeta = await _fetchFileMeta(metadataMessageId, metadataFileId);
-    } catch (e) {
-      AppLogger.w(
-          'Could not fetch metadata for $fileId on sync deletion: $e',
-          tag: 'FileManager');
-      return;
-    }
-    final chunks = fileMeta['chunks'] as List? ?? [];
-    for (final chunk in chunks) {
+    if (metadataMessageId != null && metadataMessageId > 0) {
       try {
-        await _telegram.deleteMessage(chunk['message_id'] as int);
-      } catch (_) {}
+        final fileMeta = await _fetchFileMeta(metadataMessageId, metadataFileId);
+        final chunks = fileMeta['chunks'] as List? ?? [];
+        for (final chunk in chunks) {
+          try {
+            await _telegram.deleteMessage(chunk['message_id'] as int);
+          } catch (_) {}
+        }
+        await _telegram.deleteMessage(metadataMessageId);
+      } catch (e) {
+        AppLogger.w(
+            'Could not clean up remote Telegram messages for $fileId: $e',
+            tag: 'FileManager');
+      }
     }
-    await _telegram.deleteMessage(metadataMessageId);
-    final meta = await _meta.fetch();
-    await _meta.removeFile(meta, fileId, sizeMb, mimeType, folderId: folderId);
-    AppLogger.i('File $fileId deleted from remote successfully', tag: 'FileManager');
+
+    try {
+      final meta = await _meta.fetch();
+      await _meta.removeFile(meta, fileId, sizeMb, mimeType, folderId: folderId);
+      AppLogger.i('File $fileId deleted from remote metadata index successfully', tag: 'FileManager');
+    } catch (e) {
+      AppLogger.e('Failed to remove $fileId from global metadata: $e', tag: 'FileManager');
+      rethrow;
+    }
   }
 
   Future<void> copyFile({

@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/models/app_metadata.dart';
 import '../../../core/models/file_record.dart';
 import '../../../core/models/web_share_job.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/utils/app_logger.dart';
+import '../../../core/events/domain_event_bus.dart';
 import '../../storage/data/repositories/storage_repository.dart';
 
 // ── States ────────────────────────────────────────────────────────────────────
@@ -83,13 +85,42 @@ class HomeState {
 
 class HomeCubit extends Cubit<HomeState> {
   final StorageRepository _repository = ServiceLocator.instance.storageRepository;
+  StreamSubscription? _filesSubscription;
+  StreamSubscription? _foldersSubscription;
+  StreamSubscription? _domainEventSubscription;
   
-  HomeCubit() : super(HomeState());
+  HomeCubit() : super(HomeState()) {
+    _domainEventSubscription = DomainEventBus.instance.stream.listen((_) {
+      if (!isClosed) refreshData();
+    });
+  }
+
+  bool _isSubscribed = false;
+
+  void _initSubscriptions() {
+    if (_isSubscribed) return;
+    try {
+      _filesSubscription = ServiceLocator.instance.hive.filesListenable.value.watch().listen((_) {
+        if (!isClosed) {
+          refreshData();
+        }
+      });
+      _foldersSubscription = ServiceLocator.instance.hive.foldersListenable.value.watch().listen((_) {
+        if (!isClosed) {
+          refreshData();
+        }
+      });
+      _isSubscribed = true;
+    } catch (e) {
+      AppLogger.w('Could not initialize HomeCubit subscriptions: $e', tag: 'HomeCubit');
+    }
+  }
 
   Future<void> initialize() async {
     emit(state.copyWith(isLoading: true));
     try {
       await ServiceLocator.instance.init();
+      _initSubscriptions();
       await refreshData();
       
       // Auto-sync on start
@@ -173,9 +204,9 @@ class HomeCubit extends Cubit<HomeState> {
     }
   }
 
-  Future<void> shareFile(FileRecord file, {String? password, int? expiryDays}) async {
+  Future<void> shareFile(FileRecord file, {String? password, int? expiryDays, String? vanitySlug}) async {
     try {
-      await _repository.enqueueWebShare(file, password: password, expiryDays: expiryDays);
+      await _repository.enqueueWebShare(file, password: password, expiryDays: expiryDays, vanitySlug: vanitySlug);
     } catch (e) {
       emit(state.copyWith(errorMessage: 'Failed to start sharing: $e'));
     }
@@ -186,4 +217,12 @@ class HomeCubit extends Cubit<HomeState> {
   }
 
   void reset() => emit(HomeState());
+
+  @override
+  Future<void> close() {
+    _filesSubscription?.cancel();
+    _foldersSubscription?.cancel();
+    _domainEventSubscription?.cancel();
+    return super.close();
+  }
 }

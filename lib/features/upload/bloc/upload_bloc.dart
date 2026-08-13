@@ -52,7 +52,8 @@ class UploadCompleted extends UploadEvent {}
 
 class UploadFailed extends UploadEvent {
   final String message;
-  UploadFailed(this.message);
+  final String fileName;
+  UploadFailed(this.message, {required this.fileName});
 }
 
 class ResetUpload extends UploadEvent {}
@@ -247,7 +248,7 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
         emit(UploadWaitingForNetwork(task.name));
         _retryWhenOnline();
       } else {
-        add(UploadFailed(e.toString()));
+        add(UploadFailed(e.toString(), fileName: task.name));
       }
     }
   }
@@ -275,7 +276,7 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
   void _onUploadFailed(UploadFailed event, Emitter<UploadState> emit) {
     _completedCount++;
     _activeWorkers--;
-    emit(UploadSingleError(fileName: 'File', message: event.message));
+    emit(UploadSingleError(fileName: event.fileName, message: event.message));
     // Continue processing remaining queue
     add(_ProcessNextUpload());
   }

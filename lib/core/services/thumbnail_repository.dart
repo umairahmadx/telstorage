@@ -69,7 +69,7 @@ class ThumbnailRepository {
       final downloadFuture = () async {
         try {
           final bytes = await _telegram.downloadByFileId(file.thumbnailFileId!);
-          return ThumbnailHelper.cacheThumbnail(file.fileId, bytes);
+          return await ThumbnailHelper.cacheThumbnail(file.fileId, bytes);
         } catch (e) {
           AppLogger.e('Failed to download native thumbnail: $e',
               tag: 'ThumbnailRepository');

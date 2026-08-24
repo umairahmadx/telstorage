@@ -1,3 +1,7 @@
+/// File: service_locator.dart
+/// Description: Component and logic definition for service_locator.dart in TelStorage.
+library;
+
 import 'dart:async';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../constants/app_constants.dart';

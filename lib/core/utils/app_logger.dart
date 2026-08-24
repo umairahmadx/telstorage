@@ -1,3 +1,7 @@
+/// File: app_logger.dart
+/// Description: Component and logic definition for app_logger.dart in TelStorage.
+library;
+
 import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
 

@@ -1,3 +1,7 @@
+/// File: file_record.dart
+/// Description: Component and logic definition for file_record.dart in TelStorage.
+library;
+
 import 'package:hive/hive.dart';
 
 part 'file_record.g.dart';

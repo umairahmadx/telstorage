@@ -1,3 +1,7 @@
+/// File: telegram_rate_limiter.dart
+/// Description: Component and logic definition for telegram_rate_limiter.dart in TelStorage.
+library;
+
 import '../utils/app_logger.dart';
 
 /// Centralized token-bucket rate limiter for all Telegram API calls.

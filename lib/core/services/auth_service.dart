@@ -1,3 +1,7 @@
+/// File: auth_service.dart
+/// Description: Component and logic definition for auth_service.dart in TelStorage.
+library;
+
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../constants/app_constants.dart';

@@ -1,3 +1,7 @@
+/// File: thumbnail_helper_native.dart
+/// Description: Component and logic definition for thumbnail_helper_native.dart in TelStorage.
+library;
+
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/widgets.dart';

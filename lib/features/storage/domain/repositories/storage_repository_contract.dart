@@ -1,3 +1,7 @@
+/// File: storage_repository_contract.dart
+/// Description: Component and logic definition for storage_repository_contract.dart in TelStorage.
+library;
+
 import '../../../../core/errors/result.dart';
 import '../../../../core/models/file_record.dart';
 import '../../../../core/models/folder_record.dart';

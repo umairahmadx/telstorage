@@ -1,3 +1,7 @@
+/// File: download_file_usecase.dart
+/// Description: Component and logic definition for download_file_usecase.dart in TelStorage.
+library;
+
 import '../../../../core/errors/result.dart';
 import '../../../../core/models/file_record.dart';
 import '../repositories/storage_repository_contract.dart';

@@ -1,3 +1,7 @@
+/// File: sync_service.dart
+/// Description: Component and logic definition for sync_service.dart in TelStorage.
+library;
+
 import 'package:hive/hive.dart';
 import '../constants/app_constants.dart';
 import '../models/file_record.dart';

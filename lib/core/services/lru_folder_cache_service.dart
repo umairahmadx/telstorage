@@ -1,3 +1,7 @@
+/// File: lru_folder_cache_service.dart
+/// Description: Component and logic definition for lru_folder_cache_service.dart in TelStorage.
+library;
+
 import 'dart:collection';
 import '../models/folder_partition.dart';
 import '../utils/app_logger.dart';

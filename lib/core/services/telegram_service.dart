@@ -1,3 +1,7 @@
+/// File: telegram_service.dart
+/// Description: Component and logic definition for telegram_service.dart in TelStorage.
+library;
+
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;

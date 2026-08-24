@@ -1,3 +1,7 @@
+/// File: app_constants.dart
+/// Description: Component and logic definition for app_constants.dart in TelStorage.
+library;
+
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 /// Central place for all app-wide constants.

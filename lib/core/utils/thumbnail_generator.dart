@@ -1,3 +1,7 @@
+/// File: thumbnail_generator.dart
+/// Description: Component and logic definition for thumbnail_generator.dart in TelStorage.
+library;
+
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;

@@ -1,3 +1,7 @@
+/// File: mobile_bottom_nav.dart
+/// Description: Component and logic definition for mobile_bottom_nav.dart in TelStorage.
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/theme/app_icons.dart';

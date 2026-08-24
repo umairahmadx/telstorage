@@ -1,3 +1,7 @@
+/// File: upload_service.dart
+/// Description: Component and logic definition for upload_service.dart in TelStorage.
+library;
+
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:archive/archive.dart';

@@ -1,3 +1,7 @@
+/// File: theme_service.dart
+/// Description: Component and logic definition for theme_service.dart in TelStorage.
+library;
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

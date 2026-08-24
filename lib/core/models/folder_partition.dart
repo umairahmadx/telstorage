@@ -1,3 +1,7 @@
+/// File: folder_partition.dart
+/// Description: Component and logic definition for folder_partition.dart in TelStorage.
+library;
+
 import 'app_metadata.dart';
 
 /// Represents a single folder's metadata partition (stored in folder_<id>.json)

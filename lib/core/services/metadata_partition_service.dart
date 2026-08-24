@@ -1,3 +1,7 @@
+/// File: metadata_partition_service.dart
+/// Description: Component and logic definition for metadata_partition_service.dart in TelStorage.
+library;
+
 import 'dart:convert';
 import 'dart:typed_data';
 import '../models/app_metadata.dart';

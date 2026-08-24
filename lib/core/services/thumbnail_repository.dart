@@ -1,3 +1,7 @@
+/// File: thumbnail_repository.dart
+/// Description: Component and logic definition for thumbnail_repository.dart in TelStorage.
+library;
+
 import 'dart:collection';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;

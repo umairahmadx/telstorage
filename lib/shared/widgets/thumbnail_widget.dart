@@ -1,3 +1,7 @@
+/// File: thumbnail_widget.dart
+/// Description: Component and logic definition for thumbnail_widget.dart in TelStorage.
+library;
+
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';

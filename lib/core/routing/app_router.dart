@@ -1,63 +1,85 @@
+/// File: app_router.dart
+/// Description: Global application router handling route generation and smooth page transitions.
+library;
+
 import 'package:flutter/material.dart';
-import '../../features/auth/screens/login_screen.dart';
-import '../../features/auth/screens/splash_screen.dart';
-import '../../features/browser/screens/browser_screen.dart';
-import '../../features/downloads/screens/downloads_screen.dart';
-import '../../features/settings/screens/settings_screen.dart';
+import '../../features/auth/presentation/screens/login/login_screen.dart';
+import '../../features/auth/presentation/screens/splash/splash_screen.dart';
+import '../../features/browser/presentation/screens/browser/browser_screen.dart';
+import '../../features/downloads/presentation/screens/downloads/downloads_screen.dart';
+import '../../features/settings/presentation/screens/settings/settings_screen.dart';
 import '../../shared/widgets/mobile_shell.dart';
 import '../services/auth_service.dart';
 import '../services/service_locator.dart';
 
+/// Central route manager with route names and onGenerateRoute handler.
 class AppRouter {
+  /// Splash initial route path.
   static const String splash = '/';
+
+  /// Login route path.
   static const String login = '/login';
+
+  /// Register route path.
   static const String register = '/register';
+
+  /// Main shell home route path.
   static const String home = '/home';
+
+  /// File browser route path.
   static const String browser = '/browser';
+
+  /// Downloads & transfers route path.
   static const String downloads = '/downloads';
+
+  /// Settings control center route path.
   static const String settings = '/settings';
 
-  static Route<dynamic> onGenerateRoute(RouteSettings settings) {
-    switch (settings.name) {
+  /// Generates the requested route dynamically with transition effects.
+  static Route<dynamic> onGenerateRoute(RouteSettings routeSettings) {
+    switch (routeSettings.name) {
       case splash:
-        return _pageRoute(const SplashScreen(), settings);
+        return _pageRoute(const SplashScreen(), routeSettings);
 
       case login:
-        return _pageRoute(const LoginScreen(), settings);
+        return _pageRoute(const LoginScreen(), routeSettings);
 
       case home:
-        final initialTab = settings.arguments as int? ?? 0;
-        return _pageRoute(MobileShell(initialIndex: initialTab), settings);
+        final initialTab = routeSettings.arguments as int? ?? 0;
+        return _pageRoute(
+            MobileShell(initialIndex: initialTab), routeSettings);
 
       case browser:
         String? folderId;
         String? category;
-        if (settings.arguments is String) {
-          folderId = settings.arguments as String;
-        } else if (settings.arguments is Map<String, dynamic>) {
-          final args = settings.arguments as Map<String, dynamic>;
+        if (routeSettings.arguments is String) {
+          folderId = routeSettings.arguments as String;
+        } else if (routeSettings.arguments is Map<String, dynamic>) {
+          final args = routeSettings.arguments as Map<String, dynamic>;
           folderId = args['folderId'] as String?;
           category = args['category'] as String?;
         }
         return _pageRoute(
           BrowserScreen(currentFolderId: folderId, category: category),
-          settings,
+          routeSettings,
         );
 
       case downloads:
-        return _pageRoute(const DownloadsScreen(), settings);
+        return _pageRoute(const DownloadsScreen(), routeSettings);
 
       case AppRouter.settings:
-        return _pageRoute(const SettingsScreen(), settings);
+        return _pageRoute(const SettingsScreen(), routeSettings);
 
       default:
-        return _pageRoute(const FallbackRedirectorScreen(), settings);
+        return _pageRoute(
+            const FallbackRedirectorScreen(), routeSettings);
     }
   }
 
-  static Route<dynamic> _pageRoute(Widget child, RouteSettings settings) {
+  /// Builds a smooth sliding fade page route transition.
+  static Route<dynamic> _pageRoute(Widget child, RouteSettings routeSettings) {
     return PageRouteBuilder(
-      settings: settings,
+      settings: routeSettings,
       pageBuilder: (context, animation, secondaryAnimation) => child,
       transitionsBuilder: (context, animation, secondaryAnimation, child) {
         const begin = Offset(0.08, 0.0);
@@ -79,8 +101,9 @@ class AppRouter {
   }
 }
 
-/// Dynamic redirector screen for fallback routes.
+/// Dynamic redirector screen for fallback and unmatched routes.
 class FallbackRedirectorScreen extends StatefulWidget {
+  /// Constructs FallbackRedirectorScreen.
   const FallbackRedirectorScreen({super.key});
 
   @override
@@ -88,6 +111,7 @@ class FallbackRedirectorScreen extends StatefulWidget {
       _FallbackRedirectorScreenState();
 }
 
+/// State controller for FallbackRedirectorScreen.
 class _FallbackRedirectorScreenState extends State<FallbackRedirectorScreen> {
   @override
   void initState() {
@@ -95,6 +119,7 @@ class _FallbackRedirectorScreenState extends State<FallbackRedirectorScreen> {
     _redirect();
   }
 
+  /// Verifies active session and redirects.
   Future<void> _redirect() async {
     final isLoggedIn = await AuthService.instance.isLoggedIn();
     if (!mounted) return;

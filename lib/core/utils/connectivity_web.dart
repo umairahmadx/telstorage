@@ -1,3 +1,7 @@
+/// File: connectivity_web.dart
+/// Description: Component and logic definition for connectivity_web.dart in TelStorage.
+library;
+
 import 'package:web/web.dart' as web;
 
 /// Browser connectivity is advisory: the actual request still determines

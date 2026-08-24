@@ -1,3 +1,7 @@
+/// File: download_job.dart
+/// Description: Component and logic definition for download_job.dart in TelStorage.
+library;
+
 import 'package:hive/hive.dart';
 
 part 'download_job.g.dart';

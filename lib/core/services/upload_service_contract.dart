@@ -1,3 +1,7 @@
+/// File: upload_service_contract.dart
+/// Description: Component and logic definition for upload_service_contract.dart in TelStorage.
+library;
+
 import 'dart:typed_data';
 
 abstract class UploadServiceContract {

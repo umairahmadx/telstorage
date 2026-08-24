@@ -1,3 +1,7 @@
+/// File: web_download.dart
+/// Description: Component and logic definition for web_download.dart in TelStorage.
+library;
+
 // Web-only file download helper.
 // Uses an anchor element with the `download` attribute so the file goes
 // straight to the browser's download bar — no OS save dialog.

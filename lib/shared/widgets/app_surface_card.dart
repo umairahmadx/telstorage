@@ -1,3 +1,7 @@
+/// File: app_surface_card.dart
+/// Description: Component and logic definition for app_surface_card.dart in TelStorage.
+library;
+
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';

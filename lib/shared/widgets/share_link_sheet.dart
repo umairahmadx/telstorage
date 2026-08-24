@@ -1,3 +1,7 @@
+/// File: share_link_sheet.dart
+/// Description: Component and logic definition for share_link_sheet.dart in TelStorage.
+library;
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../core/models/file_record.dart';

@@ -1,13 +1,22 @@
-import 'package:flutter/material.dart';
-import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/app_icons.dart';
-import '../../../core/services/service_locator.dart';
-import '../../../core/navigation/navigation_intent.dart';
+/// File: app_drawer.dart
+/// Description: Sidebar navigation drawer for direct destination routing across views.
+library;
 
+import 'package:flutter/material.dart';
+import '../../core/navigation/navigation_intent.dart';
+import '../../core/services/service_locator.dart';
+import '../../core/theme/app_icons.dart';
+import '../../core/theme/app_theme.dart';
+
+/// Navigation drawer widget providing primary application destinations.
 class AppDrawer extends StatelessWidget {
+  /// Currently active tab index.
   final int currentIndex;
+
+  /// Callback when a tab item is clicked.
   final Function(int) onTabSelected;
 
+  /// Constructs AppDrawer.
   const AppDrawer({
     super.key,
     required this.currentIndex,
@@ -136,12 +145,21 @@ class AppDrawer extends StatelessWidget {
   }
 }
 
+/// Helper navigation item in the drawer list.
 class _DrawerItem extends StatelessWidget {
+  /// Icon for the drawer row.
   final IconData icon;
+
+  /// Text title for the drawer row.
   final String label;
+
+  /// Whether this row is currently selected.
   final bool isSelected;
+
+  /// Tap callback.
   final VoidCallback onTap;
 
+  /// Constructs _DrawerItem.
   const _DrawerItem({
     required this.icon,
     required this.label,

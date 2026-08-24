@@ -1,3 +1,7 @@
+/// File: domain_event_bus.dart
+/// Description: Component and logic definition for domain_event_bus.dart in TelStorage.
+library;
+
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/file_record.dart';

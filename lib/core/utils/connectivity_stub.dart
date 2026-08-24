@@ -1,3 +1,7 @@
+/// File: connectivity_stub.dart
+/// Description: Component and logic definition for connectivity_stub.dart in TelStorage.
+library;
+
 class Connectivity {
   static Future<bool> hasConnection() async => true;
 }

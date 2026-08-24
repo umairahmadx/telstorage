@@ -1,3 +1,7 @@
+/// File: qr_dialog.dart
+/// Description: Component and logic definition for qr_dialog.dart in TelStorage.
+library;
+
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../../core/theme/app_theme.dart';

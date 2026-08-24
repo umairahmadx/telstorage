@@ -1,3 +1,7 @@
+/// File: mobile_shell.dart
+/// Description: Bottom navigation shell container hosting persistent tab views (Home, Files, Upload, Downloads, Settings).
+library;
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,21 +16,25 @@ import '../../core/services/service_locator.dart';
 import '../../core/services/transfer_queue_service.dart';
 import '../../core/theme/app_icons.dart';
 import '../../core/theme/app_theme.dart';
-import '../../features/browser/bloc/browser_bloc.dart';
-import '../../features/browser/screens/browser_screen.dart';
-import '../../features/downloads/screens/downloads_screen.dart';
-import '../../features/home/screens/home_screen.dart';
-import '../../features/settings/screens/settings_screen.dart';
-import '../../features/upload/bloc/upload_bloc.dart';
+import '../../features/browser/presentation/screens/browser/browser_screen.dart';
+import '../../features/browser/presentation/screens/browser/viewmodel/browser_view_model.dart';
+import '../../features/downloads/presentation/screens/downloads/downloads_screen.dart';
+import '../../features/home/presentation/screens/home/home_screen.dart';
+import '../../features/settings/presentation/screens/settings/settings_screen.dart';
+import '../../features/upload/presentation/viewmodels/upload_view_model.dart';
 import 'app_drawer.dart';
 import 'mobile_shell/mobile_add_action_item.dart';
 import 'mobile_shell/mobile_bottom_nav.dart';
 
+/// Shell component providing unified navigation scaffold with drawer and bottom bar.
 class MobileShell extends StatefulWidget {
+  /// Initial tab index to open.
   final int initialIndex;
 
+  /// Constructs MobileShell.
   const MobileShell({super.key, this.initialIndex = 0});
 
+  /// Accessor to find MobileShellState in context tree.
   static MobileShellState? of(BuildContext context) {
     return context.findAncestorStateOfType<MobileShellState>();
   }
@@ -35,8 +43,12 @@ class MobileShell extends StatefulWidget {
   State<MobileShell> createState() => MobileShellState();
 }
 
+/// State controller for MobileShell managing active tab and deep-linked transfer notifications.
 class MobileShellState extends State<MobileShell> {
+  /// Currently active bottom tab index.
   late int _currentIndex;
+
+  /// Scaffold key for opening navigation drawer.
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
@@ -45,7 +57,8 @@ class MobileShellState extends State<MobileShell> {
     _currentIndex = widget.initialIndex;
     ServiceLocator.instance.navigation.intentNotifier
         .addListener(_onIntentChanged);
-    NotificationService.instance.onNotificationTap = handleNotificationResponse;
+    NotificationService.instance.onNotificationTap =
+        handleNotificationResponse;
   }
 
   @override
@@ -55,6 +68,7 @@ class MobileShellState extends State<MobileShell> {
     super.dispose();
   }
 
+  /// Synchronizes active tab with navigation intent changes.
   void _onIntentChanged() {
     final intent = ServiceLocator.instance.navigation.intentNotifier.value;
     if (intent != null) {
@@ -64,6 +78,7 @@ class MobileShellState extends State<MobileShell> {
     }
   }
 
+  /// Handles incoming push notification actions and payload taps.
   void handleNotificationResponse(NotificationResponse details) {
     final payload = details.payload;
     final actionId = details.actionId;
@@ -116,10 +131,12 @@ class MobileShellState extends State<MobileShell> {
     }
   }
 
+  /// Opens the side navigation drawer.
   void openDrawer() {
     _scaffoldKey.currentState?.openDrawer();
   }
 
+  /// Switches active tab.
   void switchTab(int index) {
     if (index == _currentIndex || index < 0 || index > 4) return;
     if (index == 2) {
@@ -130,8 +147,10 @@ class MobileShellState extends State<MobileShell> {
     setState(() => _currentIndex = index);
   }
 
+  /// Getter for current tab index.
   int get currentIndex => _currentIndex;
 
+  /// Shows floating add/upload modal action bottom sheet.
   void _showAddMenu() {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
     showModalBottomSheet(
@@ -141,7 +160,8 @@ class MobileShellState extends State<MobileShell> {
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           color: colors.bgSurface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(28)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -166,7 +186,7 @@ class MobileShellState extends State<MobileShell> {
                     _pickAndUpload();
                   },
                 ),
-                if (_currentIndex == 1) // Only show in Files tab
+                if (_currentIndex == 1)
                   AddActionItem(
                     icon: AppIcons.newFolder,
                     label: 'New Folder',
@@ -185,6 +205,7 @@ class MobileShellState extends State<MobileShell> {
     );
   }
 
+  /// Shows dialog for creating a new folder in browser view.
   Future<void> _showCreateFolderDialog() async {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
     final ctrl = TextEditingController();
@@ -192,10 +213,12 @@ class MobileShellState extends State<MobileShell> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: colors.bgSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
           'New Folder',
-          style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold),
+          style: TextStyle(
+              color: colors.textPrimary, fontWeight: FontWeight.bold),
         ),
         content: TextField(
           controller: ctrl,
@@ -215,14 +238,16 @@ class MobileShellState extends State<MobileShell> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel', style: TextStyle(color: colors.textSecondary)),
+            child:
+                Text('Cancel', style: TextStyle(color: colors.textSecondary)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
             style: ElevatedButton.styleFrom(
               backgroundColor: colors.accentPrimary,
               elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
             ),
             child: Text('Create', style: TextStyle(color: colors.bgPrimary)),
           ),
@@ -235,6 +260,7 @@ class MobileShellState extends State<MobileShell> {
     }
   }
 
+  /// Opens file picker and enqueues selected files for upload.
   Future<void> _pickAndUpload() async {
     final picked = await FilePicker.platform
         .pickFiles(withData: true, allowMultiple: true);

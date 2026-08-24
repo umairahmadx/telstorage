@@ -1,15 +1,21 @@
+/// File: app.dart
+/// Description: Root TelStorage application widget configuring MultiBlocProvider, themes, and MaterialApp routing.
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'core/routing/app_router.dart';
-import 'core/theme/app_theme.dart';
 import 'core/services/theme_service.dart';
-import 'features/auth/bloc/auth_bloc.dart';
-import 'features/upload/bloc/upload_bloc.dart';
-import 'features/home/bloc/home_cubit.dart';
-import 'features/downloads/bloc/transfer_cubit.dart';
-import 'features/browser/bloc/browser_bloc.dart';
+import 'core/theme/app_theme.dart';
+import 'features/auth/presentation/viewmodels/auth_view_model.dart';
+import 'features/browser/presentation/screens/browser/viewmodel/browser_view_model.dart';
+import 'features/downloads/presentation/screens/downloads/viewmodel/downloads_view_model.dart';
+import 'features/home/presentation/screens/home/viewmodel/home_view_model.dart';
+import 'features/upload/presentation/viewmodels/upload_view_model.dart';
 
+/// Root Application Widget configuring theme listeners and Bloc providers.
 class TelStorageApp extends StatelessWidget {
+  /// Constructs TelStorageApp.
   const TelStorageApp({super.key});
 
   @override

@@ -1,3 +1,7 @@
+/// File: file_detail_sheet.dart
+/// Description: Component and logic definition for file_detail_sheet.dart in TelStorage.
+library;
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/models/file_record.dart';

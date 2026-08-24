@@ -1,3 +1,7 @@
+/// File: storage_repository.dart
+/// Description: Component and logic definition for storage_repository.dart in TelStorage.
+library;
+
 import 'package:uuid/uuid.dart';
 import '../../../../core/errors/result.dart';
 import '../../../../core/events/domain_event_bus.dart';

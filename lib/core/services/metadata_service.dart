@@ -1,3 +1,7 @@
+/// File: metadata_service.dart
+/// Description: Component and logic definition for metadata_service.dart in TelStorage.
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';

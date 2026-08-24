@@ -1,3 +1,7 @@
+/// File: file_category_helper.dart
+/// Description: Component and logic definition for file_category_helper.dart in TelStorage.
+library;
+
 import 'package:path/path.dart' as p;
 
 /// Determines the TelStorage subfolder category name based on file extension.

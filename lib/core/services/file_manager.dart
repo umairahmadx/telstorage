@@ -1,3 +1,7 @@
+/// File: file_manager.dart
+/// Description: Component and logic definition for file_manager.dart in TelStorage.
+library;
+
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:uuid/uuid.dart';

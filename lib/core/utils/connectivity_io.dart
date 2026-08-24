@@ -1,3 +1,7 @@
+/// File: connectivity_io.dart
+/// Description: Component and logic definition for connectivity_io.dart in TelStorage.
+library;
+
 import 'dart:io';
 
 /// Lightweight connectivity check for native platforms.

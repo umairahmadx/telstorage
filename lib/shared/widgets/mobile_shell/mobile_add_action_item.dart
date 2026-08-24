@@ -1,3 +1,7 @@
+/// File: mobile_add_action_item.dart
+/// Description: Component and logic definition for mobile_add_action_item.dart in TelStorage.
+library;
+
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 

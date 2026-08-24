@@ -1,3 +1,7 @@
+/// File: result.dart
+/// Description: Component and logic definition for result.dart in TelStorage.
+library;
+
 import 'package:flutter/foundation.dart';
 
 /// Sealed class representing functional domain failures.

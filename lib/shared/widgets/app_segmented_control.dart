@@ -1,3 +1,7 @@
+/// File: app_segmented_control.dart
+/// Description: Component and logic definition for app_segmented_control.dart in TelStorage.
+library;
+
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';

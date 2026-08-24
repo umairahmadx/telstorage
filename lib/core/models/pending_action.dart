@@ -1,3 +1,7 @@
+/// File: pending_action.dart
+/// Description: Component and logic definition for pending_action.dart in TelStorage.
+library;
+
 import 'package:hive/hive.dart';
 
 part 'pending_action.g.dart';

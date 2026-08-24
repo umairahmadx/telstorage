@@ -1,3 +1,7 @@
+/// File: web_download_stub.dart
+/// Description: Component and logic definition for web_download_stub.dart in TelStorage.
+library;
+
 import 'dart:typed_data';
 
 // Native stub — this function is never called on native because

@@ -1,50 +1,112 @@
+/// File: app_theme.dart
+/// Description: Main theme configuration for TelStorage.
+/// Configures Material 3 Light and Dark ThemeData, Typography, and AppColorsExtension.
+library;
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'app_colors.dart';
 
 /// TelStorage Design System — Pure Dark & Clean Light UI.
 class AppTheme {
-  // ── Colors ──────────────────────────────────────────────────────────────
-  static const black = Color(0xFF000000);
-  static const white = Color(0xFFFFFFFF);
-  static const grey900 = Color(0xFF151515);
-  static const grey800 = Color(0xFF2A2A2A);
-  static const grey700 = Color(0xFF6E6E6E);
-  static const grey600 = Color(0xFF9A9A9A);
-  static const grey200 = Color(0xFFE4E4E4);
-  static const grey100 = Color(0xFFF2F2F2);
-  
-  static const navy900 = Color(0xFF0D0D1D);
-  static const navy800 = Color(0xFF1A1A1E);
-  static const navy700 = Color(0xFF10142D);
-  static const navy600 = Color(0xFF0D172D);
+  // ── Color Aliases (Mapped to centralized AppColors) ───────────────────────
 
-  static const primary = Color(0xFF4A6CF7);
-  static const primaryLight = Color(0xFF5B7FFF);
-  static const accent = Color(0xFFF2C94C);
-  static const success = Color(0xFF27AE60);
-  static const error = Color(0xFFFF3B30);
-  static const warning = Color(0xFFF2994A);
+  /// Pure black.
+  static const Color black = AppColors.black;
 
-  // ── File Type Colors ──────────────────────────────────────────────────────
-  static const filePdf = Color(0xFFFF3B30);
-  static const fileVideo = Color(0xFF5B7FFF);
-  static const fileZip = Color(0xFFFFC542);
-  static const fileText = Color(0xFF4A6CF7);
-  static const filePptx = Color(0xFFFF6A3D);
-  static const fileFolder = Color(0xFFF5A623);
-  static const filePalette = Colors.purple;
+  /// Pure white.
+  static const Color white = AppColors.white;
 
-  // ── Legacy Compatibility ──────────────────────────────────────────────────
-  static const danger = error;
-  static const surface = grey900;
-  static const borderSubtle = grey800;
+  /// Surface dark tone.
+  static const Color grey900 = AppColors.grey900;
 
-  // ── Text styles ─────────────────────────────────────────────────────────────
+  /// Elevated card border tone.
+  static const Color grey800 = AppColors.grey800;
+
+  /// Muted text tone.
+  static const Color grey700 = AppColors.grey700;
+
+  /// Secondary text tone.
+  static const Color grey600 = AppColors.grey600;
+
+  /// Surface inset tone.
+  static const Color grey200 = AppColors.grey200;
+
+  /// Surface container light tone.
+  static const Color grey100 = AppColors.grey100;
+
+  /// Navy container dark tone.
+  static const Color navy900 = AppColors.navy900;
+
+  /// Navy card surface tone.
+  static const Color navy800 = AppColors.navy800;
+
+  /// Navy soft tone.
+  static const Color navy700 = AppColors.navy700;
+
+  /// Navy subtle tone.
+  static const Color navy600 = AppColors.navy600;
+
+  /// Primary brand color.
+  static const Color primary = AppColors.primary;
+
+  /// Primary light brand color.
+  static const Color primaryLight = AppColors.primaryLight;
+
+  /// Accent golden color.
+  static const Color accent = AppColors.accent;
+
+  /// Success state color.
+  static const Color success = AppColors.success;
+
+  /// Error state color.
+  static const Color error = AppColors.error;
+
+  /// Warning state color.
+  static const Color warning = AppColors.warning;
+
+  // ── File Type Indicator Colors ──────────────────────────────────────────
+
+  /// PDF badge color.
+  static const Color filePdf = AppColors.filePdf;
+
+  /// Video badge color.
+  static const Color fileVideo = AppColors.fileVideo;
+
+  /// Zip archive badge color.
+  static const Color fileZip = AppColors.fileZip;
+
+  /// Text badge color.
+  static const Color fileText = AppColors.fileText;
+
+  /// Presentation badge color.
+  static const Color filePptx = AppColors.filePptx;
+
+  /// Folder badge color.
+  static const Color fileFolder = AppColors.fileFolder;
+
+  /// Image palette badge color.
+  static const Color filePalette = AppColors.filePalette;
+
+  // ── Legacy Compatibility Aliases ─────────────────────────────────────────
+
+  /// Danger alias for error.
+  static const Color danger = error;
+
+  /// Surface default dark tone.
+  static const Color surface = grey900;
+
+  /// Subtle border color.
+  static const Color borderSubtle = grey800;
+
+  // ── Text Styles Generator ────────────────────────────────────────────────
+
+  /// Builds a responsive text theme based on brightness.
   static TextTheme _textTheme(Brightness b) {
     final isDark = b == Brightness.dark;
     final primaryColor = isDark ? white : black;
-    final secondaryColor = isDark ? grey600 : const Color(0xFF6B6B6B);
-    
+    final secondaryColor = isDark ? grey600 : AppColors.textSecondaryLight;
+
     return GoogleFonts.interTextTheme().copyWith(
       displayLarge: GoogleFonts.inter(
           fontSize: 28, fontWeight: FontWeight.w700, color: primaryColor),
@@ -71,7 +133,9 @@ class AppTheme {
     );
   }
 
-  // ── Dark theme ──────────────────────────────────────────────────────────────
+  // ── Dark Theme Configuration ────────────────────────────────────────────
+
+  /// Generates the dark Material 3 theme configuration.
   static ThemeData dark() => ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,
@@ -127,13 +191,13 @@ class AppTheme {
             fileVideo: fileVideo,
             fileZip: fileZip,
             fileFolder: fileFolder,
-            fileFolderBg: Color(0xFFFDE9C9),
+            fileFolderBg: AppColors.fileFolderBgDark,
             filePalette: filePalette,
             fileVideoBg: navy700,
             fileTextBg: navy600,
             fileGenericBg: navy800,
-            filePdfBg: Color(0xFF2C0E0E),
-            glowColor: Color(0x33FFFFFF),
+            filePdfBg: AppColors.filePdfBgDark,
+            glowColor: AppColors.glowDark,
             heroGradient: [black, grey900],
             primaryGradient: [white, white],
             selectionColor: grey800,
@@ -145,7 +209,9 @@ class AppTheme {
         ],
       );
 
-  // ── Light theme ────────────────────────────────────────────────────────────
+  // ── Light Theme Configuration ───────────────────────────────────────────
+
+  /// Generates the light Material 3 theme configuration.
   static ThemeData light() => ThemeData(
         useMaterial3: true,
         brightness: Brightness.light,
@@ -154,7 +220,7 @@ class AppTheme {
           surface: grey100,
           primary: black,
           onPrimary: white,
-          secondary: Color(0xFF6B6B6B),
+          secondary: AppColors.textSecondaryLight,
           error: error,
         ),
         textTheme: _textTheme(Brightness.light),
@@ -178,7 +244,7 @@ class AppTheme {
           ),
         ),
         dividerTheme: const DividerThemeData(
-          color: Color(0xFFD9D9D9),
+          color: AppColors.grey300,
           thickness: 1,
           space: 0,
         ),
@@ -192,26 +258,26 @@ class AppTheme {
             bgPrimary: white,
             bgSurface: grey100,
             bgSurfaceInset: grey200,
-            borderSubtle: Color(0xFFD9D9D9),
+            borderSubtle: AppColors.grey300,
             textPrimary: black,
-            textSecondary: Color(0xFF6B6B6B),
-            textTertiary: Color(0xFF9E9E9E),
+            textSecondary: AppColors.textSecondaryLight,
+            textTertiary: AppColors.textTertiaryLight,
             accentPrimary: black,
             filePdf: filePdf,
             fileVideo: fileVideo,
             fileZip: fileZip,
             fileFolder: fileFolder,
-            fileFolderBg: Color(0xFFFFF4E5),
-            filePalette: Colors.purple,
-            fileVideoBg: Color(0xFFE8EFFF),
-            fileTextBg: Color(0xFFE5EBFF),
-            fileGenericBg: Color(0xFFF5F5F5),
-            filePdfBg: Color(0xFFFFEBEB),
-            glowColor: Color(0x1A000000),
+            fileFolderBg: AppColors.fileFolderBgLight,
+            filePalette: filePalette,
+            fileVideoBg: AppColors.fileVideoBgLight,
+            fileTextBg: AppColors.fileTextBgLight,
+            fileGenericBg: AppColors.grey50,
+            filePdfBg: AppColors.filePdfBgLight,
+            glowColor: AppColors.glowLight,
             heroGradient: [white, grey100],
             primaryGradient: [black, black],
-            selectionColor: Color(0xFFD9D9D9),
-            selectionColorAlt: Color(0xFFD9D9D9),
+            selectionColor: AppColors.grey300,
+            selectionColorAlt: AppColors.grey300,
             success: success,
             error: error,
             warning: warning,
@@ -220,34 +286,87 @@ class AppTheme {
       );
 }
 
+/// ThemeExtension that supplies design tokens dynamically per theme mode.
 class AppColorsExtension extends ThemeExtension<AppColorsExtension> {
+  /// Primary background color.
   final Color bgPrimary;
+
+  /// Surface card background color.
   final Color bgSurface;
+
+  /// Inset background container color.
   final Color bgSurfaceInset;
+
+  /// Subtle border divider color.
   final Color borderSubtle;
+
+  /// Primary high-contrast text color.
   final Color textPrimary;
+
+  /// Secondary subdued text color.
   final Color textSecondary;
+
+  /// Tertiary placeholder text color.
   final Color textTertiary;
+
+  /// Primary accent color.
   final Color accentPrimary;
+
+  /// PDF badge color.
   final Color filePdf;
+
+  /// Video badge color.
   final Color fileVideo;
+
+  /// Zip archive badge color.
   final Color fileZip;
+
+  /// Folder badge color.
   final Color fileFolder;
+
+  /// Folder icon container background tint.
   final Color fileFolderBg;
+
+  /// Palette image badge color.
   final Color filePalette;
+
+  /// Video icon container background tint.
   final Color fileVideoBg;
+
+  /// Text icon container background tint.
   final Color fileTextBg;
+
+  /// Generic file container background tint.
   final Color fileGenericBg;
+
+  /// PDF icon container background tint.
   final Color filePdfBg;
+
+  /// Glow / Shadow color overlay.
   final Color glowColor;
+
+  /// Hero background gradient colors.
   final List<Color> heroGradient;
+
+  /// Primary button gradient colors.
   final List<Color> primaryGradient;
+
+  /// Active selection background color.
   final Color selectionColor;
+
+  /// Alternate selection background color.
   final Color selectionColorAlt;
+
+  /// Success state color.
   final Color success;
+
+  /// Error state color.
   final Color error;
+
+  /// Warning state color.
   final Color warning;
 
+  /// Constructs an immutable AppColorsExtension token instance.
   const AppColorsExtension({
     required this.bgPrimary,
     required this.bgSurface,

@@ -1,3 +1,7 @@
+/// File: sync_queue_service.dart
+/// Description: Component and logic definition for sync_queue_service.dart in TelStorage.
+library;
+
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';

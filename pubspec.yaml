@@ -53,7 +53,7 @@ dependencies:
   path: ^1.9.0
 
   # Background task execution
-  workmanager: ^0.5.2
+  workmanager: ^0.10.7
 
   # Animations
   flutter_animate: ^4.5.0

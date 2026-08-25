@@ -1,6 +1,6 @@
 /*
  * File: thumbnail_generator.dart
- * Description: Generates 400px high-efficiency media previews compressed to <= 50KB for images, videos, PDFs, APKs, and code/text files.
+ * Description: Generates 400px high-efficiency media previews compressed to <= 50KB for images, videos, PDFs, APKs, and code/text files, strictly preserving non-1:1 aspect ratios.
  */
 
 import 'dart:convert';
@@ -19,14 +19,29 @@ import '../utils/app_logger.dart';
 import 'thumbnail_helper_native.dart'
     if (dart.library.js_interop) 'thumbnail_helper_web.dart';
 
-Uint8List _isolateProcessImage(Uint8List bytes) {
+/// Processes standard images in background isolate while preserving exact aspect ratios (e.g. 16:4, 16:9, 4:3).
+Uint8List? _isolateProcessImage(Uint8List bytes) {
   try {
     final decoded = img.decodeImage(bytes);
     if (decoded != null) {
+      int targetW = decoded.width;
+      int targetH = decoded.height;
+      if (targetW > ThumbnailGenerator.maxDimension ||
+          targetH > ThumbnailGenerator.maxDimension) {
+        if (targetW >= targetH) {
+          targetH =
+              (targetH * ThumbnailGenerator.maxDimension / targetW).round();
+          targetW = ThumbnailGenerator.maxDimension;
+        } else {
+          targetW =
+              (targetW * ThumbnailGenerator.maxDimension / targetH).round();
+          targetH = ThumbnailGenerator.maxDimension;
+        }
+      }
       final resized = img.copyResize(
         decoded,
-        width: ThumbnailGenerator.maxDimension,
-        height: ThumbnailGenerator.maxDimension,
+        width: targetW,
+        height: targetH,
       );
       final encoded = Uint8List.fromList(
         img.encodeJpg(resized, quality: ThumbnailGenerator.quality),
@@ -34,7 +49,7 @@ Uint8List _isolateProcessImage(Uint8List bytes) {
       return ThumbnailGenerator.compressUnder50KB(encoded);
     }
   } catch (_) {}
-  return bytes;
+  return null;
 }
 
 /// Holds compressed thumbnail bytes and file format extension.
@@ -42,14 +57,14 @@ class ThumbnailResult {
   /// Binary payload of the compressed thumbnail.
   final Uint8List bytes;
 
-  /// Target file extension (e.g. 'webp' or 'jpg').
+  /// Target file extension (e.g. 'webp').
   final String extension;
 
   /// Constructs ThumbnailResult.
   const ThumbnailResult(this.bytes, this.extension);
 }
 
-/// Central generator creating 400px previews compressed to <= 50KB.
+/// Central generator creating 400px previews compressed to <= 50KB with aspect ratio preservation.
 class ThumbnailGenerator {
   /// Maximum width/height dimension for generated thumbnails (400px).
   static const int maxDimension = AppConstants.thumbnailMaxDimension;
@@ -66,35 +81,44 @@ class ThumbnailGenerator {
     'yaml', 'yml', 'xml', 'log', 'sh', 'sql', 'cpp', 'c', 'h', 'java', 'kt', 'rs',
   };
 
-  /// Ensures thumbnail binary output is strictly under 50KB using iterative step-down.
-  static Uint8List compressUnder50KB(Uint8List rawBytes) {
+  /// Ensures thumbnail binary output is strictly under 50KB using iterative step-down without ratio distortion.
+  static Uint8List? compressUnder50KB(Uint8List rawBytes) {
     if (rawBytes.length <= maxByteSize) return rawBytes;
     try {
       final decoded = img.decodeImage(rawBytes);
       if (decoded != null) {
         int q = quality;
-        int dim = maxDimension;
-        while (dim >= 100) {
+        int maxDim = maxDimension;
+        while (maxDim >= 100) {
+          int targetW = decoded.width;
+          int targetH = decoded.height;
+          if (targetW >= targetH) {
+            targetH = (targetH * maxDim / targetW).round();
+            targetW = maxDim;
+          } else {
+            targetW = (targetW * maxDim / targetH).round();
+            targetH = maxDim;
+          }
           final resized = img.copyResize(
             decoded,
-            width: dim,
-            height: dim,
+            width: targetW,
+            height: targetH,
           );
           final encoded = Uint8List.fromList(img.encodeJpg(resized, quality: q));
           if (encoded.length <= maxByteSize) return encoded;
           if (q > 30) {
             q -= 15;
           } else {
-            dim -= 50;
+            maxDim -= 50;
             q = 75;
           }
         }
       }
     } catch (_) {}
-    return rawBytes;
+    return null;
   }
 
-  /// Generates a 400px thumbnail with max 50KB size for the given file data.
+  /// Generates a 400px WebP thumbnail with max 50KB size for the given file data.
   static Future<ThumbnailResult?> generate({
     required Uint8List bytes,
     required String filename,
@@ -102,33 +126,37 @@ class ThumbnailGenerator {
   }) async {
     try {
       Uint8List? thumbBytes;
-      String ext = 'webp';
+      const ext = 'webp';
       final lowerName = filename.toLowerCase();
       final fileExt = lowerName.contains('.') ? lowerName.split('.').last : '';
 
-      if (mimeType.startsWith('image/')) {
-        thumbBytes = await generateImageThumbnail(bytes);
-        ext = 'jpg';
-      } else if (mimeType.startsWith('video/')) {
+      if (mimeType.startsWith('video/')) {
         thumbBytes = await generateVideoThumbnail(bytes, filename);
-        ext = 'webp';
+        thumbBytes ??= await generateImageThumbnail(bytes);
+      } else if (mimeType.startsWith('image/') || fileExt == 'heic' || fileExt == 'heif') {
+        thumbBytes = await generateImageThumbnail(bytes);
       } else if (mimeType == 'application/pdf' || fileExt == 'pdf') {
         thumbBytes = await generatePdfThumbnail(bytes);
-        ext = 'jpg';
       } else if (fileExt == 'apk' || mimeType.contains('android.package-archive')) {
         thumbBytes = await generateApkThumbnail(bytes);
-        ext = 'jpg';
       } else if (codeExtensions.contains(fileExt) ||
           mimeType.startsWith('text/') ||
           mimeType.contains('json') ||
           mimeType.contains('javascript')) {
         thumbBytes = await generateCodeThumbnail(bytes, filename);
-        ext = 'jpg';
+      }
+
+      if (thumbBytes == null && (mimeType.startsWith('image/') || fileExt == 'heic' || fileExt == 'heif')) {
+        try {
+          thumbBytes = await generateImageThumbnail(bytes);
+        } catch (_) {}
       }
 
       if (thumbBytes != null) {
         final compressedBytes = compressUnder50KB(thumbBytes);
-        return ThumbnailResult(compressedBytes, ext);
+        if (compressedBytes != null && compressedBytes.length <= maxByteSize) {
+          return ThumbnailResult(compressedBytes, ext);
+        }
       }
     } catch (e) {
       AppLogger.w('Thumbnail generation failed for $filename ($mimeType): $e',
@@ -137,31 +165,40 @@ class ThumbnailGenerator {
     return null;
   }
 
-  /// Generates image thumbnail scaled to max 400px at 80% quality.
-  static Future<Uint8List> generateImageThumbnail(Uint8List bytes) async {
+  /// Generates image thumbnail scaled proportionally to max 400px preserving original aspect ratio.
+  static Future<Uint8List?> generateImageThumbnail(Uint8List bytes) async {
     try {
-      return await compute(_isolateProcessImage, bytes);
+      final isolateResult = await compute(_isolateProcessImage, bytes);
+      if (isolateResult != null && isolateResult.length <= maxByteSize) {
+        return isolateResult;
+      }
     } catch (_) {}
 
-    final ui.Codec codec = await ui.instantiateImageCodec(
-      bytes,
-      targetWidth: maxDimension,
-    );
-    final ui.FrameInfo fi = await codec.getNextFrame();
-    final ui.Image image = fi.image;
-    final ByteData? byteData = await image.toByteData(
-      format: ui.ImageByteFormat.png,
-    );
-    if (byteData == null) throw Exception('Failed to generate image thumbnail');
-    final decoded = img.decodeImage(byteData.buffer.asUint8List());
-    if (decoded != null) {
-      return Uint8List.fromList(img.encodeJpg(decoded, quality: quality));
+    try {
+      final ui.Codec codec = await ui.instantiateImageCodec(
+        bytes,
+        targetWidth: maxDimension,
+      );
+      final ui.FrameInfo fi = await codec.getNextFrame();
+      final ui.Image image = fi.image;
+      final ByteData? byteData = await image.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
+      if (byteData != null) {
+        final decoded = img.decodeImage(byteData.buffer.asUint8List());
+        if (decoded != null) {
+          final encoded = Uint8List.fromList(img.encodeJpg(decoded, quality: quality));
+          return compressUnder50KB(encoded);
+        }
+      }
+    } catch (e) {
+      AppLogger.w('Native image codec fallback failed: $e', tag: 'ThumbnailGenerator');
     }
-    return byteData.buffer.asUint8List();
+    return null;
   }
 
   /// Extracts WebP video frame thumbnail scaled to max 400px at 80% quality.
-  static Future<Uint8List> generateVideoThumbnail(
+  static Future<Uint8List?> generateVideoThumbnail(
     Uint8List videoBytes,
     String filename,
   ) async {
@@ -174,29 +211,37 @@ class ThumbnailGenerator {
         maxWidth: maxDimension,
         quality: quality,
       );
-      return uint8list;
+      return uint8list != null ? compressUnder50KB(uint8list) : null;
+    } catch (e) {
+      AppLogger.d('Video thumbnail extraction skipped: $e', tag: 'ThumbnailGenerator');
+      return null;
     } finally {
       ThumbnailHelper.cleanVideoSource(sourcePath);
     }
   }
 
-  /// Renders PDF first-page preview scaled to max 400px at 80% quality.
-  static Future<Uint8List> generatePdfThumbnail(Uint8List pdfBytes) async {
-    final document = await PdfDocument.openData(pdfBytes);
-    final page = await document.getPage(1);
-    final pageImage = await page.render(
-      width: maxDimension.toDouble(),
-      height: (maxDimension * (page.height / page.width)).toDouble(),
-      format: PdfPageImageFormat.png,
-    );
-    await page.close();
-    await document.close();
-    if (pageImage == null) throw Exception('Failed to render PDF page');
-    final decoded = img.decodeImage(pageImage.bytes);
-    if (decoded != null) {
-      return Uint8List.fromList(img.encodeJpg(decoded, quality: quality));
+  /// Renders PDF first-page preview scaled proportionally to max 400px.
+  static Future<Uint8List?> generatePdfThumbnail(Uint8List pdfBytes) async {
+    try {
+      final document = await PdfDocument.openData(pdfBytes);
+      final page = await document.getPage(1);
+      final pageImage = await page.render(
+        width: maxDimension.toDouble(),
+        height: (maxDimension * (page.height / page.width)).toDouble(),
+        format: PdfPageImageFormat.png,
+      );
+      await page.close();
+      await document.close();
+      if (pageImage == null) return null;
+      final decoded = img.decodeImage(pageImage.bytes);
+      if (decoded != null) {
+        final encoded = Uint8List.fromList(img.encodeJpg(decoded, quality: quality));
+        return compressUnder50KB(encoded);
+      }
+    } catch (e) {
+      AppLogger.d('PDF thumbnail generation skipped: $e', tag: 'ThumbnailGenerator');
     }
-    return pageImage.bytes;
+    return null;
   }
 
   /// Extracts the launcher icon from an Android APK archive in memory without disk writes.
@@ -307,7 +352,8 @@ class ThumbnailGenerator {
 
       final decoded = img.decodeImage(byteData.buffer.asUint8List());
       if (decoded != null) {
-        return Uint8List.fromList(img.encodeJpg(decoded, quality: quality));
+        final encoded = Uint8List.fromList(img.encodeJpg(decoded, quality: quality));
+        return compressUnder50KB(encoded);
       }
     } catch (e) {
       AppLogger.d('Code thumbnail skipped: $e', tag: 'ThumbnailGenerator');

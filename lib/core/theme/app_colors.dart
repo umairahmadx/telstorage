@@ -107,7 +107,7 @@ abstract final class AppColors {
   // ── File Badge Background Tints ──────────────────────────────────────────
 
   /// Folder icon container background tint (Dark Mode).
-  static const Color fileFolderBgDark = Color(0xFFFDE9C9);
+  static const Color fileFolderBgDark = Color(0xFF2B2012);
 
   /// Folder icon container background tint (Light Mode).
   static const Color fileFolderBgLight = Color(0xFFFFF4E5);

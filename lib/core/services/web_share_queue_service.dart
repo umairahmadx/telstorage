@@ -43,6 +43,24 @@ class WebShareQueueService {
       ..sort((a, b) => b.addedAt.compareTo(a.addedAt));
   }
 
+  /// Returns an existing completed and non-expired web share job for the given file, if one exists.
+  WebShareJob? getActiveShare(String fileId) {
+    final raw = _box.get(fileId);
+    if (raw == null) return null;
+    final job = WebShareJob.fromMap(Map<dynamic, dynamic>.from(raw));
+    if (!job.isComplete || job.shareUrl == null || job.shareUrl!.isEmpty) {
+      return null;
+    }
+
+    if (job.expiryDays != null && job.completedAt != null) {
+      final expiryDate = job.completedAt!.add(Duration(days: job.expiryDays!));
+      if (DateTime.now().isAfter(expiryDate)) {
+        return null;
+      }
+    }
+    return job;
+  }
+
   /// Enqueue a file to be shared publicly on storage.to
   Future<void> enqueueShare(FileRecord file,
       {String? password, int? maxDownloads, int? expiryDays, String? vanitySlug}) async {

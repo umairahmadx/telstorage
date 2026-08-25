@@ -116,12 +116,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return BlocBuilder<HomeCubit, HomeState>(
       builder: (context, state) {
-        if (state.isLoading && state.userName == null) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-
         return Scaffold(
           appBar: AppBar(
             leading: IconButton(

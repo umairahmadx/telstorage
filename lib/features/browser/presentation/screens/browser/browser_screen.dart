@@ -5,16 +5,19 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:telstorage/core/services/service_locator.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
 import 'package:telstorage/shared/widgets/app_search_field.dart';
 import 'package:telstorage/shared/widgets/bars/app_batch_action_bar.dart';
 import 'package:telstorage/shared/widgets/feedback/app_empty_state.dart';
-import 'package:telstorage/shared/widgets/tiles/app_file_grid_tile.dart';
+import 'package:telstorage/shared/widgets/mobile_shell.dart';
 import 'package:telstorage/shared/widgets/tiles/app_file_tile.dart';
 import 'package:telstorage/shared/widgets/tiles/app_folder_tile.dart';
 import 'package:telstorage/shared/widgets/typography/app_section_label.dart';
 import 'viewmodel/browser_view_model.dart';
 import 'widgets/browser_dialogs.dart';
+import 'widgets/browser_floating_clipboard_bar.dart';
+import 'widgets/browser_grid_content.dart';
 
 /// Screen component rendering file directory navigation and management.
 class BrowserScreen extends StatefulWidget {
@@ -68,6 +71,17 @@ class _BrowserScreenState extends State<BrowserScreen> {
         final canGoUp = state.currentFolderId != null ||
             (state.category != null && widget.category == null);
 
+        String? currentFolderName;
+        if (state.currentFolderId != null) {
+          try {
+            if (ServiceLocator.instance.isInitialized) {
+              currentFolderName = ServiceLocator.instance.storageRepository
+                  .getFolder(state.currentFolderId!)
+                  ?.name;
+            }
+          } catch (_) {}
+        }
+
         return PopScope(
           canPop: !canGoUp && !Navigator.canPop(context),
           onPopInvokedWithResult: (didPop, result) {
@@ -80,129 +94,116 @@ class _BrowserScreenState extends State<BrowserScreen> {
           },
           child: Scaffold(
             backgroundColor: colors.bgPrimary,
-          appBar: AppBar(
-            backgroundColor: colors.bgPrimary,
-            elevation: 0,
-            leading: Navigator.canPop(context)
-                ? IconButton(
-                    icon: Icon(Icons.arrow_back_rounded,
-                        color: colors.textPrimary),
-                    onPressed: () => Navigator.pop(context),
-                  )
-                : (state.currentFolderId != null
-                    ? IconButton(
-                        icon: Icon(Icons.arrow_back_rounded,
-                            color: colors.textPrimary),
-                        onPressed: () => context
-                            .read<BrowserBloc>()
-                            .add(NavigateUp()),
-                      )
-                    : null),
-            title: Text(
-              widget.category != null
-                  ? '${widget.category![0].toUpperCase()}${widget.category!.substring(1)}'
-                  : 'Files',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-            actions: [
-              IconButton(
-                icon: Icon(
-                    state.isGridView
-                        ? Icons.view_list_rounded
-                        : Icons.grid_view_rounded,
-                    color: colors.textPrimary),
-                tooltip: state.isGridView ? 'List View' : 'Grid View',
-                onPressed: () =>
-                    context.read<BrowserBloc>().add(ToggleViewMode()),
+            appBar: AppBar(
+              backgroundColor: colors.bgPrimary,
+              elevation: 0,
+              leading: canGoUp
+                  ? IconButton(
+                      icon: Icon(Icons.arrow_back_rounded,
+                          color: colors.textPrimary),
+                      onPressed: () =>
+                          context.read<BrowserBloc>().add(NavigateUp()),
+                    )
+                  : IconButton(
+                      icon: const Icon(Icons.menu_rounded),
+                      onPressed: () => MobileShell.of(context)?.openDrawer(),
+                    ),
+              title: Text(
+                widget.category != null
+                    ? '${widget.category![0].toUpperCase()}${widget.category!.substring(1)}'
+                    : (currentFolderName ?? 'Files'),
+                style: Theme.of(context).textTheme.headlineMedium,
               ),
-              IconButton(
-                icon: Icon(Icons.sort_rounded, color: colors.textPrimary),
-                tooltip: 'Sort & Filter',
-                onPressed: () => BrowserDialogs.showSortSheet(context, state),
-              ),
-            ],
-          ),
-          body: Column(
-            children: [
-              // Search field
-              AppSearchField(
-                controller: _searchCtrl,
-                hintText: 'Search files and folders...',
-                onChanged: (q) =>
-                    context.read<BrowserBloc>().add(SearchQueryChanged(q)),
-              ),
-
-              // Category Pills
-              if (widget.category == null) _buildCategoryFilter(state, colors),
-
-              // Clipboard Banner
-              if (state.hasClipboard) _buildClipboardBanner(state, colors),
-
-              // Main content area
-              Expanded(
-                child: state.isLoading && !state.isInitialized
-                    ? const Center(child: CircularProgressIndicator())
-                    : _buildContent(state),
-              ),
-              if (state.isMultiSelect)
-                AppBatchActionBar(
-                  selectedCount: state.selectedFolderIds.length +
-                      state.selectedFileIds.length,
-                  onClearSelection: () =>
-                      context.read<BrowserBloc>().add(ClearSelection()),
-                  onDelete: () =>
-                      context.read<BrowserBloc>().add(BatchDelete()),
-                  onMove: () => context.read<BrowserBloc>().add(SetClipboard(
-                        mode: ClipboardMode.move,
-                        fileIds: state.selectedFileIds,
-                        folderIds: state.selectedFolderIds,
-                        sourceFolderId: state.currentFolderId,
-                      )),
-                  onCopy: () => context.read<BrowserBloc>().add(SetClipboard(
-                        mode: ClipboardMode.copy,
-                        fileIds: state.selectedFileIds,
-                        folderIds: state.selectedFolderIds,
-                        sourceFolderId: state.currentFolderId,
-                      )),
+              actions: [
+                IconButton(
+                  icon: Icon(
+                      state.isGridView
+                          ? Icons.view_list_rounded
+                          : Icons.grid_view_rounded,
+                      color: colors.textPrimary),
+                  tooltip: state.isGridView ? 'List View' : 'Grid View',
+                  onPressed: () =>
+                      context.read<BrowserBloc>().add(ToggleViewMode()),
                 ),
+                IconButton(
+                  icon: Icon(Icons.sort_rounded, color: colors.textPrimary),
+                  tooltip: 'Sort & Filter',
+                  onPressed: () => BrowserDialogs.showSortSheet(context, state),
+                ),
+              ],
+            ),
+            body: Stack(
+              children: [
+                Column(
+                  children: [
+                    // Search field
+                    AppSearchField(
+                      controller: _searchCtrl,
+                      hintText: 'Search files and folders...',
+                      onChanged: (q) => context
+                          .read<BrowserBloc>()
+                          .add(SearchQueryChanged(q)),
+                    ),
+
+                    // Category Pills (only displayed at root directory)
+                    if (widget.category == null &&
+                        state.currentFolderId == null)
+                      _buildCategoryFilter(state, colors),
+
+                    // Main content area
+                    Expanded(
+                      child: state.isLoading && !state.isInitialized
+                          ? const Center(child: CircularProgressIndicator())
+                          : _buildContent(state),
+                    ),
+
+                    // Batch selection action bar
+                    if (state.isMultiSelect)
+                      AppBatchActionBar(
+                        selectedCount: state.selectedFolderIds.length +
+                            state.selectedFileIds.length,
+                        onClearSelection: () =>
+                            context.read<BrowserBloc>().add(ClearSelection()),
+                        onDelete: () =>
+                            context.read<BrowserBloc>().add(BatchDelete()),
+                        onMove: () =>
+                            context.read<BrowserBloc>().add(SetClipboard(
+                                  mode: ClipboardMode.move,
+                                  fileIds: state.selectedFileIds,
+                                  folderIds: state.selectedFolderIds,
+                                  sourceFolderId: state.currentFolderId,
+                                )),
+                        onCopy: () =>
+                            context.read<BrowserBloc>().add(SetClipboard(
+                                  mode: ClipboardMode.copy,
+                                  fileIds: state.selectedFileIds,
+                                  folderIds: state.selectedFolderIds,
+                                  sourceFolderId: state.currentFolderId,
+                                )),
+                      ),
+                  ],
+                ),
+
+                // Floating non-shifting clipboard overlay bar
+                if (state.hasClipboard)
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    bottom: state.isMultiSelect ? 76 : 16,
+                    child: BrowserFloatingClipboardBar(
+                      state: state,
+                      onCancel: () =>
+                          context.read<BrowserBloc>().add(ClearClipboard()),
+                      onPaste: () => context
+                          .read<BrowserBloc>()
+                          .add(PasteClipboard(state.currentFolderId)),
+                    ),
+                  ),
               ],
             ),
           ),
         );
       },
-    );
-  }
-
-  /// Builds clipboard indicator banner.
-  Widget _buildClipboardBanner(
-      BrowserState state, AppColorsExtension colors) {
-    final count =
-        state.clipboardFileIds.length + state.clipboardFolderIds.length;
-    final isMove = state.clipboardMode == ClipboardMode.move;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: colors.bgSurfaceInset,
-      child: Row(
-        children: [
-          Icon(isMove ? Icons.drive_file_move_outlined : Icons.copy_rounded,
-              size: 18),
-          const SizedBox(width: 8),
-          Text('$count items to ${isMove ? "move" : "copy"}'),
-          const Spacer(),
-          TextButton(
-            onPressed: () =>
-                context.read<BrowserBloc>().add(ClearClipboard()),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => context
-                .read<BrowserBloc>()
-                .add(PasteClipboard(state.currentFolderId)),
-            child: const Text('Paste Here'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -237,9 +238,9 @@ class _BrowserScreenState extends State<BrowserScreen> {
                   ));
             },
             backgroundColor: colors.bgSurface,
-            selectedColor: colors.accentPrimary.withValues(alpha: 0.2),
+            selectedColor: colors.accentPrimary.withValues(alpha: 0.15),
             labelStyle: TextStyle(
-              color: isSelected ? colors.accentPrimary : colors.textSecondary,
+              color: isSelected ? colors.textPrimary : colors.textSecondary,
               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
               fontSize: 12,
             ),
@@ -263,58 +264,41 @@ class _BrowserScreenState extends State<BrowserScreen> {
     }
 
     if (state.isGridView) {
-      return GridView.builder(
-        padding: const EdgeInsets.all(16),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: 0.95,
-        ),
-        itemCount: state.files.length,
-        itemBuilder: (ctx, i) {
-          final file = state.files[i];
-          final isSelected = state.selectedFileIds.contains(file.fileId);
-          return AppFileGridTile(
-            file: file,
-            isSelected: isSelected,
-            isSelectionMode: state.isMultiSelect,
-            onTap: () {
-              if (state.isMultiSelect) {
-                context.read<BrowserBloc>().add(
-                    ToggleItemSelection(file.fileId, isFolder: false));
-              } else {
-                BrowserDialogs.showFileDetail(context, file);
-              }
-            },
-            onLongPress: () {
-              if (!state.isMultiSelect) {
-                context.read<BrowserBloc>().add(
-                    ToggleItemSelection(file.fileId, isFolder: false));
-              }
-            },
-            onActionTap: () => BrowserDialogs.showFileDetail(context, file),
-          );
-        },
+      return BrowserGridContent(
+        state: state,
+        onToggleSelection: (id, {required isFolder}) => context
+            .read<BrowserBloc>()
+            .add(ToggleItemSelection(id, isFolder: isFolder)),
+        onOpenFolder: (folderId) =>
+            context.read<BrowserBloc>().add(LoadDirectory(folderId: folderId)),
       );
     }
 
+    final isCutFolder = (String id) =>
+        state.clipboardMode == ClipboardMode.move &&
+        state.clipboardFolderIds.contains(id);
+    final isCutFile = (String id) =>
+        state.clipboardMode == ClipboardMode.move &&
+        state.clipboardFileIds.contains(id);
+
     return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
       children: [
         if (state.folders.isNotEmpty) ...[
           const AppSectionLabel(label: 'Folders'),
           ...state.folders.map((folder) {
             final isSelected = state.selectedFolderIds.contains(folder.id);
-            return AppFolderTile(
+            final isCut = isCutFolder(folder.id);
+            final tile = AppFolderTile(
               folder: folder,
-              itemCount: 0,
+              itemCount: state.folderItemCounts[folder.id] ?? 0,
               isSelected: isSelected,
               isSelectionMode: state.isMultiSelect,
               onTap: () {
                 if (state.isMultiSelect) {
-                  context.read<BrowserBloc>().add(
-                      ToggleItemSelection(folder.id, isFolder: true));
+                  context
+                      .read<BrowserBloc>()
+                      .add(ToggleItemSelection(folder.id, isFolder: true));
                 } else {
                   context
                       .read<BrowserBloc>()
@@ -323,12 +307,18 @@ class _BrowserScreenState extends State<BrowserScreen> {
               },
               onLongPress: () {
                 if (!state.isMultiSelect) {
-                  context.read<BrowserBloc>().add(
-                      ToggleItemSelection(folder.id, isFolder: true));
+                  context
+                      .read<BrowserBloc>()
+                      .add(ToggleItemSelection(folder.id, isFolder: true));
                 }
               },
-              onActionTap: () => BrowserDialogs.showFolderDetail(context, folder),
+              onActionTap: () =>
+                  BrowserDialogs.showFolderDetail(context, folder),
             );
+            if (isCut) {
+              return Opacity(opacity: 0.45, child: tile);
+            }
+            return tile;
           }),
           const SizedBox(height: 12),
         ],
@@ -336,26 +326,33 @@ class _BrowserScreenState extends State<BrowserScreen> {
           const AppSectionLabel(label: 'Files'),
           ...state.files.map((file) {
             final isSelected = state.selectedFileIds.contains(file.fileId);
-            return AppFileTile(
+            final isCut = isCutFile(file.fileId);
+            final tile = AppFileTile(
               file: file,
               isSelected: isSelected,
               isSelectionMode: state.isMultiSelect,
               onTap: () {
                 if (state.isMultiSelect) {
-                  context.read<BrowserBloc>().add(
-                      ToggleItemSelection(file.fileId, isFolder: false));
+                  context
+                      .read<BrowserBloc>()
+                      .add(ToggleItemSelection(file.fileId, isFolder: false));
                 } else {
                   BrowserDialogs.showFileDetail(context, file);
                 }
               },
               onLongPress: () {
                 if (!state.isMultiSelect) {
-                  context.read<BrowserBloc>().add(
-                      ToggleItemSelection(file.fileId, isFolder: false));
+                  context
+                      .read<BrowserBloc>()
+                      .add(ToggleItemSelection(file.fileId, isFolder: false));
                 }
               },
               onActionTap: () => BrowserDialogs.showFileDetail(context, file),
             );
+            if (isCut) {
+              return Opacity(opacity: 0.45, child: tile);
+            }
+            return tile;
           }),
         ],
       ],

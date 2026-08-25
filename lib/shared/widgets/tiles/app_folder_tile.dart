@@ -22,6 +22,9 @@ class AppFolderTile extends StatelessWidget {
   /// Whether multi-selection mode is active.
   final bool isSelectionMode;
 
+  /// Optional custom directional border radius.
+  final BorderRadiusGeometry? borderRadius;
+
   /// Primary tap callback.
   final VoidCallback? onTap;
 
@@ -38,6 +41,7 @@ class AppFolderTile extends StatelessWidget {
     this.itemCount = 0,
     this.isSelected = false,
     this.isSelectionMode = false,
+    this.borderRadius,
     this.onTap,
     this.onLongPress,
     this.onActionTap,
@@ -53,9 +57,13 @@ class AppFolderTile extends StatelessWidget {
         onTap: onTap,
         onLongPress: onLongPress,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        radius: 18,
-        color: isSelected ? colors.accentPrimary.withValues(alpha: 0.08) : colors.bgSurface,
-        borderColor: isSelected ? colors.accentPrimary.withValues(alpha: 0.4) : colors.borderSubtle,
+        borderRadius: borderRadius ?? BorderRadius.circular(12),
+        color: isSelected
+            ? colors.accentPrimary.withValues(alpha: 0.08)
+            : colors.bgSurface,
+        borderColor: isSelected
+            ? colors.accentPrimary.withValues(alpha: 0.4)
+            : colors.borderSubtle,
         child: Row(
           children: [
             if (isSelectionMode)
@@ -65,10 +73,13 @@ class AppFolderTile extends StatelessWidget {
                   width: 22,
                   height: 22,
                   decoration: BoxDecoration(
-                    color: isSelected ? colors.accentPrimary : Colors.transparent,
+                    color:
+                        isSelected ? colors.accentPrimary : Colors.transparent,
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: isSelected ? colors.accentPrimary : colors.textTertiary,
+                      color: isSelected
+                          ? colors.accentPrimary
+                          : colors.textTertiary,
                       width: 2,
                     ),
                   ),
@@ -85,7 +96,8 @@ class AppFolderTile extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               alignment: Alignment.center,
-              child: Icon(Icons.folder_rounded, color: colors.fileFolder, size: 24),
+              child: Icon(Icons.folder_rounded,
+                  color: colors.fileFolder, size: 24),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -115,7 +127,8 @@ class AppFolderTile extends StatelessWidget {
             ),
             if (onActionTap != null)
               IconButton(
-                icon: Icon(Icons.more_vert_rounded, color: colors.textSecondary, size: 20),
+                icon: Icon(Icons.more_vert_rounded,
+                    color: colors.textSecondary, size: 20),
                 onPressed: onActionTap,
               ),
           ],

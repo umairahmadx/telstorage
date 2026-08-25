@@ -1,6 +1,6 @@
 /*
  * File: settings_tools_card.dart
- * Description: Widget listing tool shortcuts including Sync Center, Web Shares, and About page.
+ * Description: Widget listing tool shortcuts including Sync Center, Web Shares, and About page with precise directional ripple shapes.
  */
 
 import 'package:flutter/material.dart';
@@ -21,6 +21,7 @@ class SettingsToolsCard extends StatelessWidget {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
 
     return AppSurfaceCard(
+      borderRadius: BorderRadius.circular(16),
       borderColor: colors.borderSubtle,
       child: Column(
         children: [
@@ -29,6 +30,7 @@ class SettingsToolsCard extends StatelessWidget {
             icon: AppIcons.syncing,
             title: 'Sync Center & Logs',
             subtitle: 'Real-time sync queue and activity logs',
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
             onTap: () {
               Navigator.of(context, rootNavigator: true).push(
                 MaterialPageRoute(builder: (_) => const SyncScreen()),
@@ -41,6 +43,7 @@ class SettingsToolsCard extends StatelessWidget {
             icon: AppIcons.share,
             title: 'Public Web Shares',
             subtitle: 'Manage active storage.to shared links',
+            borderRadius: BorderRadius.zero,
             onTap: () {
               MobileShell.of(context)?.switchTab(1);
             },
@@ -51,6 +54,8 @@ class SettingsToolsCard extends StatelessWidget {
             icon: AppIcons.info,
             title: 'About TelStorage',
             subtitle: 'v1.0.0 — Telegram-powered Cloud Storage',
+            borderRadius:
+                const BorderRadius.vertical(bottom: Radius.circular(16)),
             onTap: () {
               Navigator.of(context, rootNavigator: true).push(
                 MaterialPageRoute(builder: (_) => const AboutScreen()),
@@ -62,18 +67,17 @@ class SettingsToolsCard extends StatelessWidget {
     );
   }
 
-  /// Builds individual tool navigation row.
+  /// Builds individual tool navigation row with directional border radius.
   Widget _buildToolTile(
     AppColorsExtension colors, {
     required IconData icon,
     required String title,
     required String subtitle,
+    required BorderRadius borderRadius,
     required VoidCallback onTap,
   }) {
     return ListTile(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: borderRadius),
       onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
       leading: Container(

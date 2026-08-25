@@ -66,5 +66,45 @@ void main() {
       await tester.tap(find.text('Settings Action'));
       expect(tapped, isTrue);
     });
+
+    testWidgets('AppSurfaceCard supports top-only directional border radius', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark(),
+          home: Scaffold(
+            body: AppSurfaceCard(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              onTap: () {},
+              child: const Text('Top Only Curved Item'),
+            ),
+          ),
+        ),
+      );
+
+      final materialFinder = find.byWidgetPredicate(
+        (w) => w is Material && w.borderRadius == const BorderRadius.vertical(top: Radius.circular(16)),
+      );
+      expect(materialFinder, findsOneWidget);
+    });
+
+    testWidgets('AppSurfaceCard supports zero border radius for flat middle items', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark(),
+          home: Scaffold(
+            body: AppSurfaceCard(
+              borderRadius: BorderRadius.zero,
+              onTap: () {},
+              child: const Text('Flat Middle Item'),
+            ),
+          ),
+        ),
+      );
+
+      final materialFinder = find.byWidgetPredicate(
+        (w) => w is Material && w.borderRadius == BorderRadius.zero,
+      );
+      expect(materialFinder, findsOneWidget);
+    });
   });
 }

@@ -32,7 +32,7 @@ class StorageOverviewCard extends StatelessWidget {
 
     return AppSurfaceCard(
       padding: const EdgeInsets.all(24),
-      radius: 28,
+      borderRadius: BorderRadius.circular(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

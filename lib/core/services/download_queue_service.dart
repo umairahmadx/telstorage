@@ -1,6 +1,6 @@
 /*
  * File: download_queue_service.dart
- * Description: Component and logic definition for download_queue_service.dart in TelStorage.
+ * Description: Manages concurrent downloads (max 3), queue lifecycle, pause/resume, and Hive state persistence across app restarts.
  */
 
 import 'dart:async';
@@ -28,8 +28,9 @@ class DownloadQueueService {
 
   Box<DownloadJob> get _box => Hive.box<DownloadJob>(_boxName);
 
-  // Active downloads tracking for cancellation
+  // Active downloads tracking for cancellation and pause
   final Map<String, bool> _activeCancellationTokens = {};
+  final Map<String, bool> _activePauseTokens = {};
 
   // Track currently downloading futures to manage concurrency limit (max 3)
   final Set<String> _runningFileIds = {};
@@ -41,7 +42,10 @@ class DownloadQueueService {
       _box.values.toList()..sort((a, b) => b.addedAt.compareTo(a.addedAt));
 
   List<DownloadJob> get activeJobs => _box.values
-      .where((j) => j.status == 'queued' || j.status == 'downloading')
+      .where((j) =>
+          j.status == 'queued' ||
+          j.status == 'downloading' ||
+          j.status == 'paused')
       .toList();
 
   List<DownloadJob> get completedJobs =>
@@ -61,6 +65,11 @@ class DownloadQueueService {
   bool _isCancelled(String fileId) =>
       isCancelled(fileId) || TransferQueueService.instance.isCancelled(fileId);
 
+  /// Check if a download is paused
+  bool isPaused(String fileId) =>
+      _activePauseTokens[fileId] == true ||
+      TransferQueueService.instance.isPaused(fileId);
+
   /// Add a new download job or resume an existing failed/cancelled one
   Future<void> enqueueDownload(FileRecord file) async {
     final existingJob = _box.get(file.fileId);
@@ -71,18 +80,15 @@ class DownloadQueueService {
             tag: 'DownloadQueue');
         return;
       }
-      // If already queued or downloading, do nothing
       if (existingJob.status == 'queued' ||
           existingJob.status == 'downloading') {
         return;
       }
-      // Resume/retry failed or cancelled job
       existingJob.status = 'queued';
       existingJob.progress = 0.0;
       existingJob.error = null;
       await existingJob.save();
     } else {
-      // Create new job
       final job = DownloadJob(
         fileId: file.fileId,
         name: file.name,
@@ -95,7 +101,6 @@ class DownloadQueueService {
       await _box.put(file.fileId, job);
     }
 
-    // Add to unified transfer queue
     TransferQueueService.instance.addTask(TransferTask(
       id: file.fileId,
       name: file.name,
@@ -107,6 +112,44 @@ class DownloadQueueService {
     ));
 
     _activeCancellationTokens[file.fileId] = false;
+    _activePauseTokens[file.fileId] = false;
+    _processQueue();
+  }
+
+  /// Pause an ongoing or queued download.
+  Future<void> pauseDownload(String fileId) async {
+    final job = _box.get(fileId);
+    if (job == null) return;
+
+    job.status = 'paused';
+    await job.save();
+    _activePauseTokens[fileId] = true;
+    _runningFileIds.remove(fileId);
+
+    TransferQueueService.instance.updateTask(
+      fileId,
+      status: TransferStatus.paused,
+      currentStage: 'Paused',
+    );
+    _processQueue();
+  }
+
+  /// Resumes a paused or failed download.
+  Future<void> resumeDownload(String fileId) async {
+    final job = _box.get(fileId);
+    if (job == null || job.status == 'completed') return;
+
+    job.status = 'queued';
+    job.error = null;
+    await job.save();
+    _activePauseTokens[fileId] = false;
+    _activeCancellationTokens[fileId] = false;
+
+    TransferQueueService.instance.updateTask(
+      fileId,
+      status: TransferStatus.pending,
+      currentStage: 'Waiting in queue…',
+    );
     _processQueue();
   }
 
@@ -115,7 +158,7 @@ class DownloadQueueService {
     final job = _box.get(fileId);
     if (job == null) return;
 
-    if (job.status == 'queued') {
+    if (job.status == 'queued' || job.status == 'paused') {
       job.status = 'cancelled';
       await job.save();
     } else if (job.status == 'downloading') {
@@ -164,10 +207,14 @@ class DownloadQueueService {
   /// beginning using its persisted metadata.
   Future<void> resumePendingDownloads() async {
     for (final job in _box.values) {
-      if (job.status == 'queued' || job.status == 'downloading') {
+      if (job.status == 'downloading') {
         job.status = 'queued';
         await job.save();
         _activeCancellationTokens[job.fileId] = false;
+        _activePauseTokens[job.fileId] = false;
+      } else if (job.status == 'queued') {
+        _activeCancellationTokens[job.fileId] = false;
+        _activePauseTokens[job.fileId] = false;
       }
     }
     _processQueue();
@@ -255,6 +302,9 @@ class DownloadQueueService {
         if (_isCancelled(fileId)) {
           throw Exception('Cancelled');
         }
+        if (isPaused(fileId)) {
+          throw Exception('Paused');
+        }
         job.progress = progress;
         await job.save();
 
@@ -264,6 +314,9 @@ class DownloadQueueService {
 
       if (_isCancelled(fileId)) {
         throw Exception('Cancelled');
+      }
+      if (isPaused(fileId)) {
+        throw Exception('Paused');
       }
 
       job.progress = 0.95;
@@ -310,6 +363,10 @@ class DownloadQueueService {
         job.status = 'cancelled';
         TransferQueueService.instance
             .updateTask(fileId, status: TransferStatus.cancelled);
+      } else if (isPaused(fileId) || e.toString().contains('Paused')) {
+        job.status = 'paused';
+        TransferQueueService.instance
+            .updateTask(fileId, status: TransferStatus.paused, currentStage: 'Paused');
       } else {
         job.status = 'failed';
         job.error = e.toString();
@@ -325,6 +382,7 @@ class DownloadQueueService {
     } finally {
       _runningFileIds.remove(fileId);
       _activeCancellationTokens.remove(fileId);
+      _activePauseTokens.remove(fileId);
       _processQueue();
     }
   }

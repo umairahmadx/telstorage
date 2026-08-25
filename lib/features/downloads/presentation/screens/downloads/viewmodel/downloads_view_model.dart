@@ -116,7 +116,7 @@ class TransferCubit extends Cubit<TransferState> {
   void _onTasksChanged() {
     if (!isClosed) {
       emit(state.copyWith(
-          activeTasks: ServiceLocator.instance.transferQueue.tasks));
+          activeTasks: ServiceLocator.instance.transferQueue.activeTasks));
     }
   }
 
@@ -146,7 +146,7 @@ class TransferCubit extends Cubit<TransferState> {
   /// Refreshes all transfer state properties from their respective services.
   void _refreshAll() {
     emit(state.copyWith(
-      activeTasks: ServiceLocator.instance.transferQueue.tasks,
+      activeTasks: ServiceLocator.instance.transferQueue.activeTasks,
       downloadJobs: ServiceLocator.instance.downloadQueue.allJobs,
       shareJobs: ServiceLocator.instance.webShareQueue.allShares,
       uploadJobs: ServiceLocator.instance.hive.allFiles,

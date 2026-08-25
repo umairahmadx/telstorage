@@ -126,7 +126,8 @@ class StorageRepository implements StorageRepositoryContract {
 
   @override
   int getFilesInFolderCount(String folderId) {
-    return _hive.filesInFolder(folderId).length;
+    return _hive.filesInFolder(folderId).length +
+        _hive.subfolders(folderId).length;
   }
 
   // ── Read Operations (Offline-First) ───────────────────────────────────

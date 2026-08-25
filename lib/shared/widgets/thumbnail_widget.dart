@@ -185,7 +185,29 @@ class _ThumbnailWidgetState extends State<ThumbnailWidget> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
 
-    // For files with uploaded thumbnails
+    // 1. Instant Synchronous LRU Memory Hit (0ms latency, zero flicker)
+    if (widget.file.thumbnailFileId != null) {
+      Uint8List? memoryBytes;
+      try {
+        memoryBytes = ServiceLocator.instance.thumbnailRepository
+            .getMemoryCachedBytes(widget.file.fileId);
+      } catch (_) {}
+
+      if (memoryBytes != null) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.memory(
+            memoryBytes,
+            width: widget.width,
+            height: widget.height,
+            fit: widget.fit,
+            errorBuilder: (_, __, ___) => _buildThumbnailerFallback(colors),
+          ),
+        );
+      }
+    }
+
+    // 2. For files with uploaded thumbnails (Async path)
     if (widget.file.thumbnailFileId != null) {
       return FutureBuilder<dynamic>(
         future: _thumbnailFuture,

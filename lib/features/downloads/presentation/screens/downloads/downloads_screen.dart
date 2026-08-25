@@ -156,6 +156,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
 
           // Active transfers
           final activeTransfers = state.activeTasks.where((t) {
+            if (!t.isActive) return false;
             if (_activeTab == 0 && t.type != TransferType.download) {
               return false;
             }

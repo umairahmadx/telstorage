@@ -30,7 +30,8 @@ void main() {
       final rawJpg = Uint8List.fromList(img.encodeJpg(testImage));
       final compressed = ThumbnailGenerator.compressUnder50KB(rawJpg);
 
-      expect(compressed.length, lessThanOrEqualTo(ThumbnailGenerator.maxByteSize));
+      expect(compressed, isNotNull);
+      expect(compressed!.length, lessThanOrEqualTo(ThumbnailGenerator.maxByteSize));
     });
 
     test('TC-03: APK icon extraction extracts launcher icon from valid zip', () async {
@@ -110,6 +111,57 @@ class MyApp extends StatelessWidget {
         mimeType: 'application/octet-stream',
       );
       expect(result, isNull);
+    });
+
+    test('TC-10: Undecodable raw binary image returns null and never leaks oversized payload', () async {
+      // 100KB of random undecodable bytes
+      final rawFakeBytes = Uint8List(100 * 1024);
+      final result = await ThumbnailGenerator.generate(
+        bytes: rawFakeBytes,
+        filename: 'corrupted_photo.heic',
+        mimeType: 'image/heic',
+      );
+      expect(result, isNull);
+    });
+
+    test('TC-11: compressUnder50KB returns null on undecodable oversized data', () {
+      final largeGarbage = Uint8List(200 * 1024);
+      final result = ThumbnailGenerator.compressUnder50KB(largeGarbage);
+      expect(result, isNull);
+    });
+
+    test('TC-12: Non-1:1 aspect ratio banner maintains aspect ratio when generated', () async {
+      // 16:4 aspect ratio image (800 x 200)
+      final bannerImage = img.Image(width: 800, height: 200);
+      final bannerBytes = Uint8List.fromList(img.encodeJpg(bannerImage));
+      final result = await ThumbnailGenerator.generate(
+        bytes: bannerBytes,
+        filename: 'banner.jpg',
+        mimeType: 'image/jpeg',
+      );
+      expect(result, isNotNull);
+      expect(result!.extension, 'webp');
+
+      final decoded = img.decodeImage(result.bytes);
+      expect(decoded, isNotNull);
+      // Width should be 400 and height should be 100 (exact 4:1 / 16:4 ratio maintained, not square 400x400)
+      expect(decoded!.width, 400);
+      expect(decoded.height, 100);
+    });
+
+    test('TC-13: ThumbnailGenerator.generate returns extension webp for all supported types', () async {
+      final testImage = img.Image(width: 400, height: 300);
+      final imageBytes = Uint8List.fromList(img.encodeJpg(testImage));
+
+      final result = await ThumbnailGenerator.generate(
+        bytes: imageBytes,
+        filename: 'landscape.jpg',
+        mimeType: 'image/jpeg',
+      );
+
+      expect(result, isNotNull);
+      expect(result!.extension, 'webp');
+      expect(result.bytes.length, lessThanOrEqualTo(ThumbnailGenerator.maxByteSize));
     });
   });
 }

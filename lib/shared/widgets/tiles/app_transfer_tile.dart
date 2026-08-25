@@ -13,6 +13,9 @@ class AppTransferTile extends StatelessWidget {
   /// Associated transfer task.
   final TransferTask task;
 
+  /// Optional custom directional border radius.
+  final BorderRadiusGeometry? borderRadius;
+
   /// Callback when pause action is pressed.
   final VoidCallback onPause;
 
@@ -26,6 +29,7 @@ class AppTransferTile extends StatelessWidget {
   const AppTransferTile({
     super.key,
     required this.task,
+    this.borderRadius,
     required this.onPause,
     required this.onResume,
     required this.onCancel,
@@ -39,7 +43,7 @@ class AppTransferTile extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: AppSurfaceCard(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        radius: 18,
+        borderRadius: borderRadius ?? BorderRadius.circular(12),
         borderColor: colors.borderSubtle,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -101,7 +105,8 @@ class AppTransferTile extends StatelessWidget {
                     onPressed: onResume,
                   ),
                 IconButton(
-                  icon: Icon(Icons.cancel_outlined, color: colors.error, size: 22),
+                  icon:
+                      Icon(Icons.cancel_outlined, color: colors.error, size: 22),
                   onPressed: onCancel,
                 ),
               ],

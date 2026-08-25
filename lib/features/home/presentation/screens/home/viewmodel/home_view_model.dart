@@ -170,9 +170,10 @@ class HomeCubit extends Cubit<HomeState> {
 
   /// Initializes home state and starts auto-sync.
   Future<void> initialize() async {
-    emit(state.copyWith(isLoading: true));
     try {
-      await ServiceLocator.instance.init();
+      if (!ServiceLocator.instance.isInitialized) {
+        await ServiceLocator.instance.init();
+      }
       _initSubscriptions();
       await refreshData();
       sync();

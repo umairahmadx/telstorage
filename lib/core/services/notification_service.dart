@@ -25,7 +25,7 @@ class NotificationService {
   @visibleForTesting
   static void setMockInitialized(bool value) {
     instance._initialized = value;
-    instance._initAttempted = value;
+    instance._initAttempted = true;
   }
 
   /// Initialize notification settings for Android and iOS.
@@ -65,8 +65,8 @@ class NotificationService {
       AppLogger.i('NotificationService initialized successfully',
           tag: 'NotificationService');
     } catch (e) {
-      AppLogger.e('Failed to initialize NotificationService: $e',
-          tag: 'NotificationService', error: e);
+      AppLogger.w('Failed to initialize NotificationService: $e',
+          tag: 'NotificationService');
     }
   }
 
@@ -263,7 +263,8 @@ class NotificationService {
     String? payload,
     List<AndroidNotificationAction>? actions,
   }) async {
-    if (!_initialized) await init();
+    if (!_initialized && !_initAttempted) await init();
+    if (!_initialized) return;
 
     final details = NotificationDetails(
       android: AndroidNotificationDetails(

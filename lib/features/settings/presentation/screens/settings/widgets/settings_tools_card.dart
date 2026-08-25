@@ -53,7 +53,7 @@ class SettingsToolsCard extends StatelessWidget {
             colors,
             icon: AppIcons.info,
             title: 'About TelStorage',
-            subtitle: 'v1.0.0 — Telegram-powered Cloud Storage',
+            subtitle: 'v1.2.0 — Telegram-powered Cloud Storage',
             borderRadius:
                 const BorderRadius.vertical(bottom: Radius.circular(16)),
             onTap: () {

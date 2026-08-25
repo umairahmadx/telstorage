@@ -14,7 +14,7 @@ void main() {
   late TransferQueueService transferQueue;
 
   setUp(() {
-    NotificationService.setMockInitialized(true);
+    NotificationService.setMockInitialized(false);
     transferQueue = TransferQueueService.instance;
     transferQueue.clear();
   });

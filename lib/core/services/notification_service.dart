@@ -3,6 +3,7 @@
  * Description: Component and logic definition for notification_service.dart in TelStorage.
  */
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../models/transfer_task.dart';
 import '../utils/app_logger.dart';
@@ -18,10 +19,19 @@ class NotificationService {
   void Function(NotificationResponse)? onNotificationTap;
 
   bool _initialized = false;
+  bool _initAttempted = false;
+
+  /// Allows tests or custom harnesses to mock initialization state and bypass platform channels.
+  @visibleForTesting
+  static void setMockInitialized(bool value) {
+    instance._initialized = value;
+    instance._initAttempted = value;
+  }
 
   /// Initialize notification settings for Android and iOS.
   Future<void> init() async {
-    if (_initialized) return;
+    if (_initialized || _initAttempted) return;
+    _initAttempted = true;
 
     AppLogger.i('Initializing NotificationService...',
         tag: 'NotificationService');
@@ -96,9 +106,10 @@ class NotificationService {
     required String body,
     String? payload,
   }) async {
-    if (!_initialized) {
+    if (!_initialized && !_initAttempted) {
       await init();
     }
+    if (!_initialized) return;
 
     const androidDetails = AndroidNotificationDetails(
       'telstorage_transfers',
@@ -153,7 +164,7 @@ class NotificationService {
   Future<void> updateTransferNotification(
       List<TransferTask> activeTasks) async {
     try {
-      if (!_initialized) await init();
+      if (!_initialized && !_initAttempted) await init();
       if (!_initialized) return;
       if (activeTasks.isEmpty) {
         await _notificationsPlugin.cancel(id: 999);

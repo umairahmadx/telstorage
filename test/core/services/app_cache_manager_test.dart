@@ -3,6 +3,8 @@
  * Description: Unit tests validating AppCacheManager partition stats, limit configuration, and LRU eviction logic.
  */
 
+import 'dart:io';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:telstorage/core/services/app_cache_manager.dart';
@@ -12,6 +14,11 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      (MethodCall methodCall) async => Directory.systemTemp.path,
+    );
   });
 
   group('AppCacheManager Unit Tests', () {

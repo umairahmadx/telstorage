@@ -192,7 +192,7 @@ class ThumbnailGenerator {
         }
       }
     } catch (e) {
-      AppLogger.w('Native image codec fallback failed: $e', tag: 'ThumbnailGenerator');
+      AppLogger.d('Native image codec fallback failed: $e', tag: 'ThumbnailGenerator');
     }
     return null;
   }
@@ -211,7 +211,7 @@ class ThumbnailGenerator {
         maxWidth: maxDimension,
         quality: quality,
       );
-      return uint8list != null ? compressUnder50KB(uint8list) : null;
+      return compressUnder50KB(uint8list);
     } catch (e) {
       AppLogger.d('Video thumbnail extraction skipped: $e', tag: 'ThumbnailGenerator');
       return null;

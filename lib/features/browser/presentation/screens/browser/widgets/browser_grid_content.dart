@@ -31,10 +31,10 @@ class BrowserGridContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isCutFolder = (String id) =>
+    bool isCutFolder(String id) =>
         state.clipboardMode == ClipboardMode.move &&
         state.clipboardFolderIds.contains(id);
-    final isCutFile = (String id) =>
+    bool isCutFile(String id) =>
         state.clipboardMode == ClipboardMode.move &&
         state.clipboardFileIds.contains(id);
 

@@ -1,6 +1,7 @@
-/// File: mobile_shell.dart
-/// Description: Bottom navigation shell container hosting persistent tab views (Home, Files, Upload, Downloads, Settings).
-library;
+/*
+ * File: mobile_shell.dart
+ * Description: Bottom navigation shell container hosting persistent tab views (Home, Files, Upload, Downloads, Settings).
+ */
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';

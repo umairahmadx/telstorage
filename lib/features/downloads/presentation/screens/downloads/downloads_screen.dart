@@ -1,23 +1,25 @@
-/// File: downloads_screen.dart
-/// Description: Transfers screen displaying active downloads, uploads, and shared links.
-library;
+/*
+ * File: downloads_screen.dart
+ * Description: Transfers screen displaying active downloads, uploads, and shared links using centralized shared widgets.
+ */
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:open_file/open_file.dart';
 import 'package:share_plus/share_plus.dart';
-import '../../../../../core/models/file_record.dart';
-import '../../../../../core/models/transfer_task.dart';
-import '../../../../../core/navigation/navigation_intent.dart';
-import '../../../../../core/services/service_locator.dart';
-import '../../../../../core/services/transfer_queue_service.dart';
-import '../../../../../core/theme/app_theme.dart';
-import '../../../../../shared/widgets/share_link_sheet.dart';
+import 'package:telstorage/core/models/file_record.dart';
+import 'package:telstorage/core/models/transfer_task.dart';
+import 'package:telstorage/core/navigation/navigation_intent.dart';
+import 'package:telstorage/core/services/service_locator.dart';
+import 'package:telstorage/core/services/transfer_queue_service.dart';
+import 'package:telstorage/core/theme/app_theme.dart';
+import 'package:telstorage/shared/widgets/dialogs/app_dialogs.dart';
+import 'package:telstorage/shared/widgets/feedback/app_empty_state.dart';
+import 'package:telstorage/shared/widgets/share_link_sheet.dart';
+import 'package:telstorage/shared/widgets/tiles/app_file_tile.dart';
+import 'package:telstorage/shared/widgets/tiles/app_transfer_tile.dart';
+import 'package:telstorage/shared/widgets/typography/app_section_label.dart';
 import 'viewmodel/downloads_view_model.dart';
-import 'widgets/active_download_tile.dart';
-import 'widgets/completed_download_tile.dart';
-import 'widgets/downloads_empty_state.dart';
 import 'widgets/downloads_header.dart';
 
 /// Screen component rendering active and completed transfer operations.
@@ -104,18 +106,13 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
         file: file,
         shareUrl: existing?.shareUrl,
         onCopyLink: (pwd, expiryDays, vanitySlug) async {
-          final cubit = context.read<TransferCubit>();
-          await cubit.enqueueShare(file,
-              password: pwd, expiryDays: expiryDays, vanitySlug: vanitySlug);
-
-          if (!mounted || !ctx.mounted) return;
-          Navigator.pop(ctx);
-
-          final job = cubit.getShareJob(file.fileId);
-          if (job != null && job.isComplete && job.shareUrl != null) {
-            await Clipboard.setData(ClipboardData(text: job.shareUrl!));
-            if (!mounted) return;
-          }
+          context.read<TransferCubit>().enqueueShare(
+                file,
+                password: pwd,
+                expiryDays: expiryDays,
+                vanitySlug: vanitySlug,
+              );
+          if (ctx.mounted) Navigator.pop(ctx);
         },
       ),
     );
@@ -126,36 +123,36 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
 
     return Scaffold(
+      backgroundColor: colors.bgPrimary,
       appBar: DownloadsHeader(
         activeTab: _activeTab,
         isSearching: _isSearching,
         searchCtrl: _searchCtrl,
-        onTabChanged: (index) => setState(() => _activeTab = index),
+        onTabChanged: (i) => setState(() => _activeTab = i),
         onToggleSearch: () {
           setState(() {
             _isSearching = !_isSearching;
             if (!_isSearching) _searchCtrl.clear();
           });
         },
-        onSearchQueryChanged: (_) => setState(() {}),
-        onClearCompleted: () {
-          final state = context.read<TransferCubit>().state;
-          for (final job in state.downloadJobs) {
-            if (job.isComplete) {
-              context
-                  .read<TransferCubit>()
-                  .deleteDownloadedFile(job.fileId);
-            }
+        onSearchQueryChanged: (val) => setState(() {}),
+        onClearCompleted: () async {
+          final cubit = context.read<TransferCubit>();
+          final ok = await AppDialogs.showConfirm(
+            context,
+            title: 'Clear Transfer History',
+            message: 'Are you sure you want to clear completed transfer records?',
+            confirmText: 'Clear',
+            isDestructive: true,
+          );
+          if (ok == true && mounted) {
+            cubit.clearCompletedDownloads();
           }
         },
       ),
       body: BlocBuilder<TransferCubit, TransferState>(
         builder: (context, state) {
-          if (state.isLoading && !state.isInitialized) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final query = _searchCtrl.text.toLowerCase();
+          final query = _searchCtrl.text.toLowerCase().trim();
 
           // Active transfers
           final activeTransfers = state.activeTasks.where((t) {
@@ -165,7 +162,9 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
             if (_activeTab == 1 && t.type != TransferType.upload) {
               return false;
             }
-            if (query.isNotEmpty && !t.name.toLowerCase().contains(query)) {
+            if (_activeTab == 2) return false;
+            if (query.isNotEmpty &&
+                !t.name.toLowerCase().contains(query)) {
               return false;
             }
             return true;
@@ -173,8 +172,8 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
 
           // Completed downloads
           final completedDownloads = state.downloadJobs.where((j) {
-            if (!j.isComplete) return false;
-            if (query.isNotEmpty && !j.name.toLowerCase().contains(query)) {
+            if (query.isNotEmpty &&
+                !j.name.toLowerCase().contains(query)) {
               return false;
             }
             return true;
@@ -182,7 +181,8 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
 
           // Completed uploads
           final uploadFiles = state.uploadJobs.where((f) {
-            if (query.isNotEmpty && !f.name.toLowerCase().contains(query)) {
+            if (query.isNotEmpty &&
+                !f.name.toLowerCase().contains(query)) {
               return false;
             }
             return true;
@@ -192,7 +192,8 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
           final sharedLinks = state.shareJobs.where((s) {
             final f = context.read<TransferCubit>().getFile(s.fileId);
             final name = f?.name ?? 'Shared File';
-            if (query.isNotEmpty && !name.toLowerCase().contains(query)) {
+            if (query.isNotEmpty &&
+                !name.toLowerCase().contains(query)) {
               return false;
             }
             return true;
@@ -204,26 +205,36 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
               (_activeTab == 2 && sharedLinks.isNotEmpty);
 
           if (!hasItems) {
-            return DownloadsEmptyState(activeTab: _activeTab);
+            return AppEmptyState(
+              icon: _activeTab == 0
+                  ? Icons.cloud_download_outlined
+                  : (_activeTab == 1
+                      ? Icons.cloud_upload_outlined
+                      : Icons.share_outlined),
+              title: _activeTab == 0
+                  ? 'No Downloads'
+                  : (_activeTab == 1
+                      ? 'No Uploads'
+                      : 'No Shared Links'),
+              subtitle: _activeTab == 0
+                  ? 'Downloaded files will appear here.'
+                  : (_activeTab == 1
+                      ? 'Uploaded files will appear here.'
+                      : 'Files shared via web link will appear here.'),
+            );
           }
 
           return ListView(
             controller: _scrollController,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             children: [
               if (activeTransfers.isNotEmpty) ...[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                  child: Text(
-                    'ACTIVE (${activeTransfers.length})',
-                    style: TextStyle(
-                      color: colors.textSecondary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                AppSectionLabel(
+                  label: 'Active (${activeTransfers.length})',
+                  padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
                 ),
                 ...activeTransfers.map(
-                  (task) => ActiveDownloadTile(
+                  (task) => AppTransferTile(
                     task: task,
                     onPause: () =>
                         TransferQueueService.instance.pauseTask(task.id),
@@ -233,110 +244,109 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                         TransferQueueService.instance.cancelTask(task.id),
                   ),
                 ),
-                const Divider(),
+                const SizedBox(height: 12),
               ],
               if (_activeTab == 0 && completedDownloads.isNotEmpty) ...[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                  child: Text(
-                    'COMPLETED DOWNLOADS (${completedDownloads.length})',
-                    style: TextStyle(
-                      color: colors.textSecondary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                AppSectionLabel(
+                  label: 'Completed Downloads (${completedDownloads.length})',
+                  padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
                 ),
-                ...completedDownloads.map(
-                  (job) => CompletedDownloadTile(
-                    job: job,
-                    file:
-                        context.read<TransferCubit>().getFile(job.fileId),
+                ...completedDownloads.map((job) {
+                  final file = context
+                      .read<TransferCubit>()
+                      .getFile(job.fileId);
+                  final record = file ??
+                      FileRecord(
+                        fileId: job.fileId,
+                        metadataMessageId: 0,
+                        metadataFileId: '',
+                        name: job.name,
+                        sizeMb: job.sizeMb,
+                        mimeType: job.mimeType,
+                        uploadedAt: job.completedAt ?? DateTime.now(),
+                        chunkCount: 1,
+                        sha256Hash: '',
+                      );
+
+                  return AppFileTile(
+                    file: record,
+                    subtitleText: job.localPath,
                     onTap: () => _openFile(job.localPath),
-                    onShare: () {
-                      final file = context
-                          .read<TransferCubit>()
-                          .getFile(job.fileId);
-                      if (file != null) _showShareSheet(file);
-                    },
-                    onDelete: () => context
-                        .read<TransferCubit>()
-                        .deleteDownloadedFile(job.fileId),
-                  ),
-                ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.share_outlined,
+                              color: colors.textSecondary, size: 20),
+                          onPressed: () {
+                            if (file != null) _showShareSheet(file);
+                          },
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.delete_outline_rounded,
+                              color: colors.error, size: 20),
+                          onPressed: () => context
+                              .read<TransferCubit>()
+                              .deleteDownloadedFile(job.fileId),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
               ],
               if (_activeTab == 1 && uploadFiles.isNotEmpty) ...[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                  child: Text(
-                    'UPLOADED FILES (${uploadFiles.length})',
-                    style: TextStyle(
-                      color: colors.textSecondary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                AppSectionLabel(
+                  label: 'Uploaded Files (${uploadFiles.length})',
+                  padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
                 ),
                 ...uploadFiles.map(
-                  (file) => ListTile(
-                    leading: const Icon(Icons.cloud_done_rounded),
-                    title: Text(file.name),
-                    subtitle: Text(
-                        '${file.formattedSize} • ${file.uploadedAt.toLocal().toString().split('.')[0]}'),
+                  (file) => AppFileTile(
+                    file: file,
+                    onTap: () => _showShareSheet(file),
                     trailing: IconButton(
-                      icon: const Icon(Icons.share_outlined),
+                      icon: Icon(Icons.share_outlined,
+                          color: colors.textSecondary, size: 20),
                       onPressed: () => _showShareSheet(file),
                     ),
                   ),
                 ),
               ],
               if (_activeTab == 2 && sharedLinks.isNotEmpty) ...[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                  child: Text(
-                    'SHARED LINKS (${sharedLinks.length})',
-                    style: TextStyle(
-                      color: colors.textSecondary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                AppSectionLabel(
+                  label: 'Shared Links (${sharedLinks.length})',
+                  padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
                 ),
-                ...sharedLinks.map((share) {
-                  final file =
-                      context.read<TransferCubit>().getFile(share.fileId);
+                ...sharedLinks.map((job) {
+                  final file = context
+                      .read<TransferCubit>()
+                      .getFile(job.fileId);
                   final name = file?.name ?? 'Shared File';
+                  final url = job.shareUrl ?? '';
+
                   return ListTile(
-                    leading: const Icon(Icons.link_rounded),
-                    title: Text(name),
-                    subtitle: Text(share.shareUrl ?? 'Generating...'),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (share.shareUrl != null)
-                          IconButton(
-                            icon: const Icon(Icons.copy_rounded),
-                            onPressed: () {
-                              Clipboard.setData(
-                                  ClipboardData(text: share.shareUrl!));
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                    content: Text('Link copied to clipboard')),
-                              );
-                            },
-                          ),
-                        if (share.shareUrl != null)
-                          IconButton(
-                            icon: const Icon(Icons.share_outlined),
-                            onPressed: () => _shareUrl(share.shareUrl!),
-                          ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline_rounded),
-                          onPressed: () => context
-                              .read<TransferCubit>()
-                              .deleteShareJob(share.fileId),
-                        ),
-                      ],
+                    leading: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: colors.accentPrimary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(Icons.link_rounded,
+                          color: colors.accentPrimary, size: 22),
+                    ),
+                    title: Text(name,
+                        style: TextStyle(
+                            color: colors.textPrimary,
+                            fontWeight: FontWeight.w600)),
+                    subtitle: Text(url,
+                        style: TextStyle(
+                            color: colors.textSecondary, fontSize: 12),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                    trailing: IconButton(
+                      icon: Icon(Icons.copy_rounded,
+                          color: colors.accentPrimary, size: 20),
+                      onPressed: () => _shareUrl(url),
                     ),
                   );
                 }),

@@ -1,6 +1,7 @@
-/// File: service_locator_test.dart
-/// Description: Unit test validating ServiceLocator singleton registration and access.
-library;
+/*
+ * File: service_locator_test.dart
+ * Description: Unit test validating ServiceLocator singleton registration and access.
+ */
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:telstorage/core/services/service_locator.dart';
@@ -18,6 +19,7 @@ void main() {
       final locator = ServiceLocator.instance;
       expect(locator.navigation, isNotNull);
       expect(locator.transferQueue, isNotNull);
+      expect(locator.cacheManager, isNotNull);
       expect(locator.isInitialized, isFalse);
     });
   });

@@ -1,6 +1,7 @@
-/// File: home_view_model.dart
-/// Description: Home screen ViewModel (Cubit) managing storage metrics, recent files, and sync status.
-library;
+/*
+ * File: home_view_model.dart
+ * Description: Home screen ViewModel (Cubit) managing storage metrics, recent files, and sync status.
+ */
 
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -270,6 +271,26 @@ class HomeCubit extends Cubit<HomeState> {
   /// Retrieves an existing web share job by file ID.
   WebShareJob? getShareJob(String fileId) {
     return _repository.getWebShareJob(fileId);
+  }
+
+  /// Renames a file by ID.
+  Future<void> renameFile(String fileId, String newName) async {
+    try {
+      await _repository.renameFile(fileId, newName);
+      await refreshData();
+    } catch (e) {
+      emit(state.copyWith(errorMessage: 'Failed to rename file: $e'));
+    }
+  }
+
+  /// Deletes a file by ID.
+  Future<void> deleteFile(String fileId) async {
+    try {
+      await _repository.deleteFile(fileId);
+      await refreshData();
+    } catch (e) {
+      emit(state.copyWith(errorMessage: 'Failed to delete file: $e'));
+    }
   }
 
   /// Resets state to default.

@@ -1,11 +1,14 @@
-/// File: settings_profile_card.dart
-/// Description: Profile header card displaying user initials, email, and connection status.
-library;
+/*
+ * File: settings_profile_card.dart
+ * Description: Profile header card displaying user avatar, email, and connection status using centralized shared widgets.
+ */
 
 import 'package:flutter/material.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
 import 'package:telstorage/features/home/presentation/screens/home/viewmodel/home_view_model.dart';
 import 'package:telstorage/shared/widgets/app_surface_card.dart';
+import 'package:telstorage/shared/widgets/badges/app_status_badge.dart';
+import 'package:telstorage/shared/widgets/user/app_user_avatar.dart';
 
 /// Card component showing authenticated user profile details.
 class SettingsProfileCard extends StatelessWidget {
@@ -20,33 +23,18 @@ class SettingsProfileCard extends StatelessWidget {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
     final name = state.userName ?? 'User';
     final email = state.userEmail ?? '';
-    final initial = name.isNotEmpty ? name[0].toUpperCase() : 'U';
 
     return AppSurfaceCard(
       padding: const EdgeInsets.all(18),
       borderColor: colors.borderSubtle,
       child: Row(
         children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: colors.bgSurfaceInset,
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: colors.accentPrimary.withValues(alpha: 0.3),
-                width: 2,
-              ),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              initial,
-              style: TextStyle(
-                color: colors.textPrimary,
-                fontWeight: FontWeight.bold,
-                fontSize: 22,
-              ),
-            ),
+          AppUserAvatar(
+            name: name,
+            size: 56,
+            borderWidth: 2,
+            showStatusDot: true,
+            isOnline: true,
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -57,8 +45,8 @@ class SettingsProfileCard extends StatelessWidget {
                   name,
                   style: TextStyle(
                     color: colors.textPrimary,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
                   ),
                 ),
                 if (email.isNotEmpty) ...[
@@ -71,22 +59,10 @@ class SettingsProfileCard extends StatelessWidget {
                     ),
                   ),
                 ],
-                const SizedBox(height: 6),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: colors.success.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    'Connected to Telegram Cloud',
-                    style: TextStyle(
-                      color: colors.success,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                const SizedBox(height: 8),
+                const AppStatusBadge(
+                  icon: Icons.check_circle_rounded,
+                  label: 'Connected to Telegram',
                 ),
               ],
             ),

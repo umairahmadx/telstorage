@@ -12,7 +12,7 @@ Welcome to the TelStorage project rules repository. These rules govern code arch
 
 2. [**Coding & Documentation Standards**](file:///c:/Users/umair-dell/StudioProjects/telstorage/.agents/rules/coding_standards_rules.md)
    - Strict 500-line file limit (test-enforced).
-   - Top-level doc comments with `library;` directive (`/// ... \n library;`).
+   - Top-level multiline doc comments (`/* ... */`).
    - Class, method, and variable documentation standards.
 
 3. [**Centralized Colors & Theming**](file:///c:/Users/umair-dell/StudioProjects/telstorage/.agents/rules/theme_colors_rules.md)
@@ -27,3 +27,8 @@ Welcome to the TelStorage project rules repository. These rules govern code arch
    - `Result<T>` pattern for all asynchronous operations.
    - Graceful fallback UI on offline/error states.
    - Resilient background queues with retry/backoff.
+
+6. [**Interactive Ripple & Curved Ink Effects**](file:///c:/Users/umair-dell/StudioProjects/telstorage/.agents/rules/interactive_ripple_rules.md)
+   - Foreground surface ink ripples with `Clip.antiAlias`.
+   - Matching `borderRadius` and `CircleBorder` on curved and circular buttons/cards.
+   - Proper shaping for widgets with built-in ripples (`ListTile`, `ElevatedButton`, `FilledButton`, `IconButton`).

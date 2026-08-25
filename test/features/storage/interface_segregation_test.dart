@@ -1,6 +1,7 @@
-/// File: interface_segregation_test.dart
-/// Description: Interface segregation tests verifying use cases depend on minimal interface contracts.
-library;
+/*
+ * File: interface_segregation_test.dart
+ * Description: Interface segregation tests verifying use cases depend on minimal interface contracts.
+ */
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:telstorage/core/errors/result.dart';

@@ -1,6 +1,7 @@
-/// File: file_reader_stub.dart
-/// Description: Component and logic definition for file_reader_stub.dart in TelStorage.
-library;
+/*
+ * File: file_reader_stub.dart
+ * Description: Component and logic definition for file_reader_stub.dart in TelStorage.
+ */
 
 // Web stub — FilePicker always returns bytes on web, so this is never called.
 import 'dart:typed_data';

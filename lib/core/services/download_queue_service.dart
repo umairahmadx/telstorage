@@ -1,6 +1,7 @@
-/// File: download_queue_service.dart
-/// Description: Component and logic definition for download_queue_service.dart in TelStorage.
-library;
+/*
+ * File: download_queue_service.dart
+ * Description: Component and logic definition for download_queue_service.dart in TelStorage.
+ */
 
 import 'dart:async';
 import 'package:flutter/foundation.dart';
@@ -45,6 +46,14 @@ class DownloadQueueService {
 
   List<DownloadJob> get completedJobs =>
       _box.values.where((j) => j.status == 'completed').toList();
+
+  /// Clears all completed download job records.
+  Future<void> clearCompleted() async {
+    final completed = completedJobs;
+    for (final job in completed) {
+      await _box.delete(job.fileId);
+    }
+  }
 
   /// Check if a download is cancelled
   bool isCancelled(String fileId) => _activeCancellationTokens[fileId] == true;

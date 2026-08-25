@@ -1,6 +1,7 @@
-/// File: sync_queue_service.dart
-/// Description: Component and logic definition for sync_queue_service.dart in TelStorage.
-library;
+/*
+ * File: sync_queue_service.dart
+ * Description: Component and logic definition for sync_queue_service.dart in TelStorage.
+ */
 
 import 'dart:async';
 import 'package:flutter/foundation.dart';
@@ -162,23 +163,23 @@ class SyncQueueService {
   String _getActionDescription(PendingAction action) {
     final payload = action.payload;
     switch (action.actionType) {
-      case 'createFolder':
+      case AppConstants.actionCreateFolder:
         return 'Created folder "${payload['name']}"';
-      case 'renameFolder':
+      case AppConstants.actionRenameFolder:
         return 'Renamed folder to "${payload['name']}"';
-      case 'moveFolder':
+      case AppConstants.actionMoveFolder:
         return 'Moved folder';
-      case 'deleteFolder':
+      case AppConstants.actionDeleteFolder:
         return 'Deleted folder';
-      case 'renameFile':
+      case AppConstants.actionRenameFile:
         return 'Renamed file to "${payload['name']}"';
-      case 'moveFile':
+      case AppConstants.actionMoveFile:
         return 'Moved file';
-      case 'copyFile':
+      case AppConstants.actionCopyFile:
         return 'Copied file';
-      case 'deleteFile':
+      case AppConstants.actionDeleteFile:
         return 'Deleted file';
-      case 'addFileMeta':
+      case AppConstants.actionAddFileMeta:
         final name = (payload['fileMeta'] is Map) ? (payload['fileMeta']['name'] ?? '') : '';
         return 'Synced metadata for "$name"';
       default:
@@ -190,33 +191,33 @@ class SyncQueueService {
     final payload = action.payload;
 
     switch (action.actionType) {
-      case 'addFileMeta':
+      case AppConstants.actionAddFileMeta:
         final fileMeta = Map<String, dynamic>.from(payload['fileMeta'] as Map);
         final metaService = _fileManager.metadataService;
         final appMeta = await metaService.fetch();
         await metaService.addFile(appMeta, fileMeta);
         break;
 
-      case 'createFolder':
+      case AppConstants.actionCreateFolder:
         final id = payload['id'] as String;
         final name = payload['name'] as String;
         final parentId = payload['parentId'] as String?;
         await _fileManager.createFolder(name, parentId: parentId, folderId: id);
         break;
 
-      case 'renameFolder':
+      case AppConstants.actionRenameFolder:
         final folderId = payload['folderId'] as String;
         final name = payload['name'] as String;
         await _fileManager.renameFolder(folderId, name);
         break;
 
-      case 'moveFolder':
+      case AppConstants.actionMoveFolder:
         final folderId = payload['folderId'] as String;
         final parentId = payload['parentId'] as String?;
         await _fileManager.moveFolder(folderId, parentId);
         break;
 
-      case 'deleteFolder':
+      case AppConstants.actionDeleteFolder:
         final folderId = payload['folderId'] as String;
         final folderIds = (payload['folderIds'] as List? ?? const [])
             .map((id) => id.toString())
@@ -231,19 +232,19 @@ class SyncQueueService {
         );
         break;
 
-      case 'renameFile':
+      case AppConstants.actionRenameFile:
         final fileId = payload['fileId'] as String;
         final name = payload['name'] as String;
         await _fileManager.renameFile(fileId, name);
         break;
 
-      case 'moveFile':
+      case AppConstants.actionMoveFile:
         final fileId = payload['fileId'] as String;
         final folderId = payload['folderId'] as String?;
         await _fileManager.moveFile(fileId, folderId);
         break;
 
-      case 'copyFile':
+      case AppConstants.actionCopyFile:
         final originalFileId = (payload['originalFileId'] ?? payload['fileId']) as String;
         final newFileId = payload['newFileId'] as String?;
         final newName = payload['newName'] as String?;
@@ -258,7 +259,7 @@ class SyncQueueService {
         }
         break;
 
-      case 'deleteFile':
+      case AppConstants.actionDeleteFile:
         final fileId = payload['fileId'] as String;
         final metadataMessageId = payload['metadataMessageId'] as int?;
         final metadataFileId = payload['metadataFileId'] as String?;

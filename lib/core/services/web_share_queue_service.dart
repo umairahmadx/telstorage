@@ -1,6 +1,7 @@
-/// File: web_share_queue_service.dart
-/// Description: Component and logic definition for web_share_queue_service.dart in TelStorage.
-library;
+/*
+ * File: web_share_queue_service.dart
+ * Description: Component and logic definition for web_share_queue_service.dart in TelStorage.
+ */
 
 import 'dart:async';
 import 'package:flutter/foundation.dart';

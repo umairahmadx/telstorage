@@ -1,6 +1,7 @@
-/// File: transfer_task.dart
-/// Description: Component and logic definition for transfer_task.dart in TelStorage.
-library;
+/*
+ * File: transfer_task.dart
+ * Description: Component and logic definition for transfer_task.dart in TelStorage.
+ */
 
 enum TransferType { upload, download, share }
 

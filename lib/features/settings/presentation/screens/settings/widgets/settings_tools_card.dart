@@ -1,6 +1,7 @@
-/// File: settings_tools_card.dart
-/// Description: Widget listing tool shortcuts including Sync Center, Web Shares, and About page.
-library;
+/*
+ * File: settings_tools_card.dart
+ * Description: Widget listing tool shortcuts including Sync Center, Web Shares, and About page.
+ */
 
 import 'package:flutter/material.dart';
 import 'package:telstorage/core/theme/app_icons.dart';
@@ -70,6 +71,9 @@ class SettingsToolsCard extends StatelessWidget {
     required VoidCallback onTap,
   }) {
     return ListTile(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
       onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
       leading: Container(

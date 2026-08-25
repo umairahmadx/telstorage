@@ -1,6 +1,7 @@
-/// File: upload_view_model.dart
-/// Description: Upload ViewModel (Bloc) managing queue orchestration, parallel chunked uploads, and network retries.
-library;
+/*
+ * File: upload_view_model.dart
+ * Description: Upload ViewModel (Bloc) managing queue orchestration, parallel chunked uploads, and network retries.
+ */
 
 import 'dart:typed_data';
 import 'package:flutter_bloc/flutter_bloc.dart';

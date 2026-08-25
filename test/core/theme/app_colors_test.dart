@@ -1,6 +1,7 @@
-/// File: app_colors_test.dart
-/// Description: Unit tests for AppColors palette and AppTheme extension token mapping.
-library;
+/*
+ * File: app_colors_test.dart
+ * Description: Unit tests for AppColors palette and AppTheme extension token mapping.
+ */
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

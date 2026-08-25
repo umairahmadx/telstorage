@@ -1,6 +1,7 @@
-/// File: app_icons.dart
-/// Description: Component and logic definition for app_icons.dart in TelStorage.
-library;
+/*
+ * File: app_icons.dart
+ * Description: Component and logic definition for app_icons.dart in TelStorage.
+ */
 
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';

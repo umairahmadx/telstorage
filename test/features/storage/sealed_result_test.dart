@@ -1,6 +1,7 @@
-/// File: sealed_result_test.dart
-/// Description: Unit tests for Result sealed hierarchy pattern matching and states.
-library;
+/*
+ * File: sealed_result_test.dart
+ * Description: Unit tests for Result sealed hierarchy pattern matching and states.
+ */
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:telstorage/core/errors/result.dart';

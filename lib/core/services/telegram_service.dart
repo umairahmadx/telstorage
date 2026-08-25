@@ -1,6 +1,7 @@
-/// File: telegram_service.dart
-/// Description: Component and logic definition for telegram_service.dart in TelStorage.
-library;
+/*
+ * File: telegram_service.dart
+ * Description: Component and logic definition for telegram_service.dart in TelStorage.
+ */
 
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
@@ -235,6 +236,26 @@ class TelegramService {
       return pinnedMsg['message_id'] as int;
     } catch (e) {
       throw Exception('Failed to get pinned message: $e');
+    }
+  }
+
+  /// Unpin all messages in the channel to prevent accumulation of old pins.
+  Future<void> unpinAllMessages() async {
+    await TelegramRateLimiter.instance.acquire();
+    try {
+      final response = await _dio.post(
+        '$_base/unpinAllChatMessages',
+        data: {
+          'chat_id': _channelId,
+        },
+      );
+
+      if (response.data['ok'] != true) {
+        AppLogger.w('unpinAllMessages warning: ${response.data['description']}',
+            tag: 'TelegramService');
+      }
+    } catch (e) {
+      AppLogger.w('unpinAllMessages warning: $e', tag: 'TelegramService');
     }
   }
 

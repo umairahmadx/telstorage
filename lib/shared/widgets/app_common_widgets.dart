@@ -1,6 +1,7 @@
-/// File: app_common_widgets.dart
-/// Description: Component and logic definition for app_common_widgets.dart in TelStorage.
-library;
+/*
+ * File: app_common_widgets.dart
+ * Description: Component and logic definition for app_common_widgets.dart in TelStorage.
+ */
 
 import 'package:flutter/material.dart';
 

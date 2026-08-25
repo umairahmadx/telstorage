@@ -1,6 +1,7 @@
-/// File: hive_service.dart
-/// Description: Component and logic definition for hive_service.dart in TelStorage.
-library;
+/*
+ * File: hive_service.dart
+ * Description: Component and logic definition for hive_service.dart in TelStorage.
+ */
 
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';

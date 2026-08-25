@@ -1,6 +1,7 @@
-/// File: home_screen.dart
-/// Description: Home dashboard view displaying storage statistics, greeting, and recent files.
-library;
+/*
+ * File: home_screen.dart
+ * Description: Home dashboard view displaying storage statistics, greeting, and recent files.
+ */
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,7 +10,7 @@ import '../../../../../core/models/file_record.dart';
 import '../../../../../core/navigation/navigation_intent.dart';
 import '../../../../../core/services/service_locator.dart';
 import '../../../../../core/theme/app_theme.dart';
-import '../../../../../shared/widgets/file_detail_sheet.dart';
+import '../../../../../shared/widgets/dialogs/app_dialogs.dart';
 import '../../../../../shared/widgets/mobile_shell.dart';
 import '../../../../../shared/widgets/share_link_sheet.dart';
 import 'viewmodel/home_view_model.dart';
@@ -34,25 +35,44 @@ class _HomeScreenState extends State<HomeScreen> {
     context.read<HomeCubit>().initialize();
   }
 
-  /// Displays file detail actions modal bottom sheet.
+  /// Displays file detail actions modal bottom sheet with full action parity.
   void _showFileDetail(FileRecord file) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => FileDetailSheet(
-        file: file,
-        onShare: () {
-          Navigator.pop(ctx);
-          _showShareSheet(file);
-        },
-        onDownload: () {
-          Navigator.pop(ctx);
-          _downloadFile(file);
-        },
-        onRename: () => Navigator.pop(ctx),
-        onDelete: () => Navigator.pop(ctx),
-      ),
+    AppDialogs.showFileDetail(
+      context,
+      file: file,
+      onShare: () {
+        Navigator.pop(context);
+        _showShareSheet(file);
+      },
+      onDownload: () {
+        Navigator.pop(context);
+        _downloadFile(file);
+      },
+      onRename: () async {
+        Navigator.pop(context);
+        final newName = await AppDialogs.showInput(
+          context,
+          title: 'Rename File',
+          initialValue: file.name,
+          confirmText: 'Rename',
+        );
+        if (newName != null && newName.trim().isNotEmpty && mounted) {
+          context.read<HomeCubit>().renameFile(file.fileId, newName.trim());
+        }
+      },
+      onDelete: () async {
+        Navigator.pop(context);
+        final confirm = await AppDialogs.showConfirm(
+          context,
+          title: 'Delete File',
+          message: 'Are you sure you want to delete "${file.name}"? This action cannot be undone.',
+          confirmText: 'Delete',
+          isDestructive: true,
+        );
+        if (confirm == true && mounted) {
+          context.read<HomeCubit>().deleteFile(file.fileId);
+        }
+      },
     );
   }
 

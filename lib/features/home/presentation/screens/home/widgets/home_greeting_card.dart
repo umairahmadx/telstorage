@@ -1,11 +1,13 @@
-/// File: home_greeting_card.dart
-/// Description: Widget displaying user greeting banner and real-time sync indicator.
-library;
+/*
+ * File: home_greeting_card.dart
+ * Description: Widget displaying user greeting banner and real-time sync indicator using centralized AppUserAvatar.
+ */
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../../../../../../core/theme/app_theme.dart';
-import '../viewmodel/home_view_model.dart';
+import 'package:telstorage/core/theme/app_theme.dart';
+import 'package:telstorage/features/home/presentation/screens/home/viewmodel/home_view_model.dart';
+import 'package:telstorage/shared/widgets/user/app_user_avatar.dart';
 
 /// Card component showing welcoming header with user initials and status.
 class HomeGreetingCard extends StatelessWidget {
@@ -52,22 +54,11 @@ class HomeGreetingCard extends StatelessWidget {
               ],
             ),
           ),
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: colors.bgPrimary,
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              name.isNotEmpty ? name[0].toUpperCase() : 'U',
-              style: TextStyle(
-                color: colors.textPrimary,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
-            ),
+          AppUserAvatar(
+            name: name,
+            size: 48,
+            showStatusDot: true,
+            isOnline: !state.isSyncing,
           ),
         ],
       ),

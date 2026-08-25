@@ -1,6 +1,7 @@
-/// File: telegram_rate_limiter.dart
-/// Description: Component and logic definition for telegram_rate_limiter.dart in TelStorage.
-library;
+/*
+ * File: telegram_rate_limiter.dart
+ * Description: Component and logic definition for telegram_rate_limiter.dart in TelStorage.
+ */
 
 import '../utils/app_logger.dart';
 

@@ -1,6 +1,7 @@
-/// File: downloads_header.dart
-/// Description: Header app bar and segmented control for switching between Downloads, Uploads, and Shared Links.
-library;
+/*
+ * File: downloads_header.dart
+ * Description: Header app bar and segmented control for switching between Downloads, Uploads, and Shared Links.
+ */
 
 import 'package:flutter/material.dart';
 import '../../../../../../shared/widgets/app_search_field.dart';

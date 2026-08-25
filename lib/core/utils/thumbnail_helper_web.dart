@@ -1,6 +1,7 @@
-/// File: thumbnail_helper_web.dart
-/// Description: Component and logic definition for thumbnail_helper_web.dart in TelStorage.
-library;
+/*
+ * File: thumbnail_helper_web.dart
+ * Description: Component and logic definition for thumbnail_helper_web.dart in TelStorage.
+ */
 
 import 'dart:js_interop';
 import 'dart:typed_data';

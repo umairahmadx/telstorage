@@ -1,6 +1,7 @@
-/// File: auth_view_model.dart
-/// Description: Authentication ViewModel (Bloc) managing session state, login, and logout.
-library;
+/*
+ * File: auth_view_model.dart
+ * Description: Authentication ViewModel (Bloc) managing session state, login, and logout.
+ */
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/services/auth_service.dart';

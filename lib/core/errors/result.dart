@@ -1,6 +1,7 @@
-/// File: result.dart
-/// Description: Component and logic definition for result.dart in TelStorage.
-library;
+/*
+ * File: result.dart
+ * Description: Component and logic definition for result.dart in TelStorage.
+ */
 
 import 'package:flutter/foundation.dart';
 

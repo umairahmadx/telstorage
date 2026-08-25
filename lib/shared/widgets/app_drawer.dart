@@ -1,6 +1,7 @@
-/// File: app_drawer.dart
-/// Description: Sidebar navigation drawer for direct destination routing across views.
-library;
+/*
+ * File: app_drawer.dart
+ * Description: Sidebar navigation drawer for direct destination routing across views.
+ */
 
 import 'package:flutter/material.dart';
 import '../../core/navigation/navigation_intent.dart';
@@ -170,22 +171,28 @@ class _DrawerItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-      leading: Icon(
-        icon,
-        color: isSelected ? colors.accentPrimary : colors.textSecondary,
-        size: 24,
-      ),
-      title: Text(
-        label,
-        style: TextStyle(
-          color: isSelected ? colors.accentPrimary : colors.textSecondary,
-          fontSize: 16,
-          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      child: ListTile(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
         ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+        leading: Icon(
+          icon,
+          color: isSelected ? colors.accentPrimary : colors.textSecondary,
+          size: 24,
+        ),
+        title: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? colors.accentPrimary : colors.textSecondary,
+            fontSize: 16,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+          ),
+        ),
+        onTap: onTap,
       ),
-      onTap: onTap,
     );
   }
 }

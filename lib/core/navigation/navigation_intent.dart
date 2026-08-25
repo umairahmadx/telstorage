@@ -1,6 +1,7 @@
-/// File: navigation_intent.dart
-/// Description: Component and logic definition for navigation_intent.dart in TelStorage.
-library;
+/*
+ * File: navigation_intent.dart
+ * Description: Component and logic definition for navigation_intent.dart in TelStorage.
+ */
 
 enum AppDestination {
   home,

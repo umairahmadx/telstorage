@@ -1,6 +1,7 @@
-/// File: thumbnail_repository.dart
-/// Description: Component and logic definition for thumbnail_repository.dart in TelStorage.
-library;
+/*
+ * File: thumbnail_repository.dart
+ * Description: Component and logic definition for thumbnail_repository.dart in TelStorage.
+ */
 
 import 'dart:collection';
 import 'dart:typed_data';

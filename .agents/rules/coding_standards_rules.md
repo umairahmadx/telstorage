@@ -14,22 +14,23 @@ This document outlines mandatory coding and documentation requirements enforced 
 
 ---
 
-## 2. Top-Level Library Header Comments
+## 2. Top-Level File Header Comments
 
-Every `.dart` file (excluding generated `.g.dart` files) MUST begin with a doc header followed by `library;`:
+Every `.dart` file (excluding generated `.g.dart` files) MUST begin with a clean multiline comment:
 
 ```dart
-/// File: <file_name>.dart
-/// Description: <Clear explanation of the file's responsibility>
-library;
+/*
+ * File: <file_name>.dart
+ * Description: <Clear explanation of the file's responsibility>
+ */
 
 import 'package:flutter/material.dart';
 ...
 ```
 
 ### Why this format?
-1. Satisfies the `slash_for_doc_comments` Dart lint.
-2. Satisfies the `dangling_library_doc_comments` Dart lint by attaching the doc comment directly to the library directive.
+1. Clean, standard multiline comment without needing `library;`.
+2. Clearly explains the file's purpose at a glance.
 3. Automatically passes the automated `architecture_rules_test.dart` Rule 2.
 
 ---

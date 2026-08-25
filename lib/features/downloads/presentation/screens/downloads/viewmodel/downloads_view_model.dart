@@ -1,6 +1,7 @@
-/// File: downloads_view_model.dart
-/// Description: Downloads and transfers ViewModel (Cubit) tracking active, completed, and shared file tasks.
-library;
+/*
+ * File: downloads_view_model.dart
+ * Description: Downloads and transfers ViewModel (Cubit) tracking active, completed, and shared file tasks.
+ */
 
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -202,6 +203,15 @@ class TransferCubit extends Cubit<TransferState> {
     try {
       await ServiceLocator.instance.downloadQueue
           .deleteJobAndLocalFile(fileId);
+    } catch (e) {
+      emit(state.copyWith(errorMessage: e.toString()));
+    }
+  }
+
+  /// Clears all completed download records from local queue.
+  Future<void> clearCompletedDownloads() async {
+    try {
+      await ServiceLocator.instance.downloadQueue.clearCompleted();
     } catch (e) {
       emit(state.copyWith(errorMessage: e.toString()));
     }

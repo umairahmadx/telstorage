@@ -1,7 +1,8 @@
-/// File: architecture_rules_test.dart
-/// Description: Automated architecture and code standard verification tests.
-/// Validates file line count limits, top-level header comments, and centralized color rules.
-library;
+/*
+ * File: architecture_rules_test.dart
+ * Description: Automated architecture and code standard verification tests.
+ * Validates file line count limits, top-level header comments, and centralized color rules.
+ */
 
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
@@ -51,7 +52,7 @@ void main() {
 
       for (final file in dartFiles) {
         final content = file.readAsStringSync().trimLeft();
-        final hasHeader = content.startsWith('/**') || content.startsWith('///');
+        final hasHeader = content.startsWith('/*') || content.startsWith('///');
         if (!hasHeader) {
           missingHeaderFiles.add(file.path);
         }

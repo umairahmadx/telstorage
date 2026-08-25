@@ -1,6 +1,7 @@
-/// File: metadata_service.dart
-/// Description: Component and logic definition for metadata_service.dart in TelStorage.
-library;
+/*
+ * File: metadata_service.dart
+ * Description: Component and logic definition for metadata_service.dart in TelStorage.
+ */
 
 import 'dart:async';
 import 'dart:convert';
@@ -50,7 +51,7 @@ class MetadataService {
     AppLogger.d('Fetching metadata...', tag: 'MetadataService');
 
     // Fast path: we already know the file_id from a previous session
-    final cachedFileId = await _storage.read(key: 'metadata_file_id');
+    final cachedFileId = await _storage.read(key: AppConstants.keyMetadataFileId);
     if (cachedFileId != null) {
       AppLogger.d('Using cached file_id: $cachedFileId',
           tag: 'MetadataService');
@@ -67,9 +68,9 @@ class MetadataService {
           tag: 'MetadataService');
 
       // Cache it so next startup is fast
-      await _storage.write(key: 'metadata_file_id', value: fileId);
+      await _storage.write(key: AppConstants.keyMetadataFileId, value: fileId);
       await _storage.write(
-        key: 'metadata_message_id',
+        key: AppConstants.keyMetadataMessageId,
         value: pinnedMsgId.toString(),
       );
 
@@ -78,10 +79,10 @@ class MetadataService {
       // No pinned message → first-time setup for this channel
       AppLogger.d('No pinned message — first-time setup',
           tag: 'MetadataService');
-      final email = await _storage.read(key: 'email') ?? 'unknown@user.com';
+      final email = await _storage.read(key: AppConstants.keyEmail) ?? 'unknown@user.com';
       await initMetadata(email);
 
-      final newFileId = await _storage.read(key: 'metadata_file_id');
+      final newFileId = await _storage.read(key: AppConstants.keyMetadataFileId);
       return _downloadMeta(newFileId!);
     }
   }
@@ -94,25 +95,29 @@ class MetadataService {
     AppLogger.d('Uploading updated metadata...', tag: 'MetadataService');
     final bytes = Uint8List.fromList(utf8.encode(jsonEncode(meta.toJson())));
     final result =
-        await _telegram.uploadBytesWithFileId(bytes, '.metadata.json');
+        await _telegram.uploadBytesWithFileId(bytes, AppConstants.metadataFileName);
     final newMsgId = result['message_id'] as int;
     final newFileId = result['file_id'] as String;
     AppLogger.d('Uploaded → message_id: $newMsgId, file_id: $newFileId',
         tag: 'MetadataService');
+
+    // Unpin all previous pinned messages to keep the channel clean
+    await _telegram.unpinAllMessages();
 
     // Pin the new message so any device can discover it
     await _telegram.pinMessage(newMsgId);
 
     // Persist locally
     await _storage.write(
-      key: 'metadata_message_id',
+      key: AppConstants.keyMetadataMessageId,
       value: newMsgId.toString(),
     );
-    await _storage.write(key: 'metadata_file_id', value: newFileId);
+    await _storage.write(key: AppConstants.keyMetadataFileId, value: newFileId);
 
-    // Delete old metadata message
-    if (oldMsgId > 0) {
-      AppLogger.d('Deleting old message: $oldMsgId', tag: 'MetadataService');
+    // Delete old metadata message so it is replaced cleanly
+    if (oldMsgId > 0 && oldMsgId != newMsgId) {
+      AppLogger.d('Deleting old metadata message: $oldMsgId',
+          tag: 'MetadataService');
       await _telegram.deleteMessage(oldMsgId);
     }
 
@@ -152,7 +157,7 @@ class MetadataService {
           thumbnailFileId: fileData['thumbnail_file_id'] as String?,
         );
 
-        final fId = ref.folderId ?? 'root';
+        final fId = ref.folderId ?? AppConstants.rootFolderPartitionId;
         await _partitionService.saveFileRefsToPartition(latestMeta, fId, [ref]);
 
         latestMeta.recentFiles.removeWhere((f) => f.fileId == fileData['file_id']);
@@ -388,8 +393,8 @@ class MetadataService {
         if (existingFileId.isNotEmpty) {
           AppLogger.i('Found existing pinned metadata message ($pinnedMsgId), adopting file_id: $existingFileId',
               tag: 'MetadataService');
-          await _storage.write(key: 'metadata_message_id', value: pinnedMsgId.toString());
-          await _storage.write(key: 'metadata_file_id', value: existingFileId);
+          await _storage.write(key: AppConstants.keyMetadataMessageId, value: pinnedMsgId.toString());
+          await _storage.write(key: AppConstants.keyMetadataFileId, value: existingFileId);
           return;
         }
       }
@@ -400,7 +405,6 @@ class MetadataService {
 
     final meta = AppMetadata(
       owner: ownerEmail,
-      storageLimitMb: AppConstants.defaultStorageLimitMb,
       storageUsedMb: 0,
       totalFiles: 0,
       metadataMessageId: 0,
@@ -416,15 +420,16 @@ class MetadataService {
 
     final bytes = Uint8List.fromList(utf8.encode(jsonEncode(meta.toJson())));
     final result =
-        await _telegram.uploadBytesWithFileId(bytes, '.metadata.json');
+        await _telegram.uploadBytesWithFileId(bytes, AppConstants.metadataFileName);
     final msgId = result['message_id'] as int;
     final fileId = result['file_id'] as String;
 
-    // Pin it so all devices can discover it
+    // Unpin old messages and pin the fresh metadata index
+    await _telegram.unpinAllMessages();
     await _telegram.pinMessage(msgId);
 
-    await _storage.write(key: 'metadata_message_id', value: msgId.toString());
-    await _storage.write(key: 'metadata_file_id', value: fileId);
+    await _storage.write(key: AppConstants.keyMetadataMessageId, value: msgId.toString());
+    await _storage.write(key: AppConstants.keyMetadataFileId, value: fileId);
     AppLogger.i('Initialized — message_id: $msgId, file_id: $fileId',
         tag: 'MetadataService');
   }

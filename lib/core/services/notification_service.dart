@@ -1,6 +1,7 @@
-/// File: notification_service.dart
-/// Description: Component and logic definition for notification_service.dart in TelStorage.
-library;
+/*
+ * File: notification_service.dart
+ * Description: Component and logic definition for notification_service.dart in TelStorage.
+ */
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../models/transfer_task.dart';

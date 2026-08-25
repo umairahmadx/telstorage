@@ -1,6 +1,7 @@
-/// File: upload_service.dart
-/// Description: Component and logic definition for upload_service.dart in TelStorage.
-library;
+/*
+ * File: upload_service.dart
+ * Description: Component and logic definition for upload_service.dart in TelStorage.
+ */
 
 import 'dart:convert';
 import 'dart:typed_data';
@@ -313,7 +314,7 @@ class UploadService implements UploadServiceContract {
               tag: 'UploadService');
           final pending = PendingAction(
             id: const Uuid().v4(),
-            actionType: 'addFileMeta',
+            actionType: AppConstants.actionAddFileMeta,
             payload: {'fileMeta': fileMeta},
             timestamp: DateTime.now(),
           );

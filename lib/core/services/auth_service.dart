@@ -1,13 +1,14 @@
-/// File: auth_service.dart
-/// Description: Component and logic definition for auth_service.dart in TelStorage.
-library;
+/*
+ * File: auth_service.dart
+ * Description: Handles authentication via Google Apps Script and secure storage token management.
+ */
 
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../constants/app_constants.dart';
 import 'service_locator.dart';
 
-/// Handles authentication via Google Apps Script
+/// Handles authentication via Google Apps Script.
 class AuthService {
   static final AuthService instance = AuthService._();
   AuthService._();
@@ -27,9 +28,11 @@ class AuthService {
       );
 
       if (res.data['success'] == true) {
-        await _storage.write(key: 'bot_token', value: res.data['bot_token']);
-        await _storage.write(key: 'channel_id', value: res.data['channel_id']);
-        await _storage.write(key: 'email', value: email);
+        await _storage.write(
+            key: AppConstants.keyBotToken, value: res.data['bot_token']);
+        await _storage.write(
+            key: AppConstants.keyChannelId, value: res.data['channel_id']);
+        await _storage.write(key: AppConstants.keyEmail, value: email);
       }
 
       return res.data as Map<String, dynamic>;
@@ -56,9 +59,10 @@ class AuthService {
         },
       );
       if (res.data['success'] == true) {
-        await _storage.write(key: 'bot_token', value: botToken);
-        await _storage.write(key: 'channel_id', value: channelId);
-        await _storage.write(key: 'email', value: email);
+        await _storage.write(key: AppConstants.keyBotToken, value: botToken);
+        await _storage.write(
+            key: AppConstants.keyChannelId, value: channelId);
+        await _storage.write(key: AppConstants.keyEmail, value: email);
       }
       return res.data as Map<String, dynamic>;
     } catch (e) {
@@ -67,7 +71,7 @@ class AuthService {
   }
 
   Future<bool> isLoggedIn() async {
-    final token = await _storage.read(key: 'bot_token');
+    final token = await _storage.read(key: AppConstants.keyBotToken);
     return token != null && token.isNotEmpty;
   }
 
@@ -76,7 +80,10 @@ class AuthService {
     await _storage.deleteAll();
   }
 
-  Future<String?> getToken() async => _storage.read(key: 'bot_token');
-  Future<String?> getChannelId() async => _storage.read(key: 'channel_id');
-  Future<String?> getEmail() async => _storage.read(key: 'email');
+  Future<String?> getToken() async =>
+      _storage.read(key: AppConstants.keyBotToken);
+  Future<String?> getChannelId() async =>
+      _storage.read(key: AppConstants.keyChannelId);
+  Future<String?> getEmail() async =>
+      _storage.read(key: AppConstants.keyEmail);
 }

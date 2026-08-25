@@ -1,6 +1,7 @@
-/// File: reactive_event_bus_test.dart
-/// Description: Unit tests for DomainEventBus reactivity and typed event streaming.
-library;
+/*
+ * File: reactive_event_bus_test.dart
+ * Description: Unit tests for DomainEventBus reactivity and typed event streaming.
+ */
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:telstorage/core/events/domain_event_bus.dart';

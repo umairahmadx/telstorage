@@ -1,7 +1,8 @@
-/// File: app_colors.dart
-/// Description: Centralized color palette and design tokens for the TelStorage application.
-/// Defines base hues, semantic tokens, and file category indicators.
-library;
+/*
+ * File: app_colors.dart
+ * Description: Centralized color palette and design tokens for the TelStorage application.
+ * Defines base hues, semantic tokens, and file category indicators.
+ */
 
 import 'package:flutter/material.dart';
 
@@ -130,4 +131,30 @@ abstract final class AppColors {
 
   /// Subtle shadow overlay for light theme surfaces.
   static const Color glowLight = Color(0x1A000000);
+
+  // ── Code Snippet Canvas Theme ─────────────────────────────────────────────
+
+  /// Dark background for code preview cards.
+  static const Color codeCanvasBg = Color(0xFF14171C);
+
+  /// Header background for code preview cards.
+  static const Color codeCanvasHeader = Color(0xFF1E222A);
+
+  /// Red traffic dot for code preview cards.
+  static const Color codeCanvasDotRed = Color(0xFFFF5F56);
+
+  /// Yellow traffic dot for code preview cards.
+  static const Color codeCanvasDotYellow = Color(0xFFFFBD2E);
+
+  /// Green traffic dot for code preview cards.
+  static const Color codeCanvasDotGreen = Color(0xFF27C93F);
+
+  /// Header text color for code preview cards.
+  static const Color codeCanvasTextSecondary = Color(0xFF9AA0A6);
+
+  /// Line number color for code preview cards.
+  static const Color codeCanvasLineNumber = Color(0xFF5F6368);
+
+  /// Code text color for code preview cards.
+  static const Color codeCanvasTextPrimary = Color(0xFFE8EAED);
 }

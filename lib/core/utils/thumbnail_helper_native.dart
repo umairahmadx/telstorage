@@ -1,10 +1,12 @@
-/// File: thumbnail_helper_native.dart
-/// Description: Component and logic definition for thumbnail_helper_native.dart in TelStorage.
-library;
+/*
+ * File: thumbnail_helper_native.dart
+ * Description: Platform file helper caching 400px WebP media thumbnails to device disk.
+ */
 
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/widgets.dart';
+import 'package:get_thumbnail_video/index.dart';
 import 'package:get_thumbnail_video/video_thumbnail.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -27,23 +29,27 @@ class ThumbnailHelper {
 
   static Future<String?> cachedThumbnailPath(String fileId) async {
     final tempDir = await getTemporaryDirectory();
-    final file = File('${tempDir.path}/thumbnails/$fileId.jpg');
-    return file.existsSync() ? file.path : null;
+    final webpFile = File('${tempDir.path}/thumbnails/$fileId.webp');
+    if (webpFile.existsSync()) return webpFile.path;
+    final jpgFile = File('${tempDir.path}/thumbnails/$fileId.jpg');
+    return jpgFile.existsSync() ? jpgFile.path : null;
   }
 
   static Future<String> cacheThumbnail(String fileId, Uint8List bytes) async {
     final tempDir = await getTemporaryDirectory();
     final directory = Directory('${tempDir.path}/thumbnails');
     await directory.create(recursive: true);
-    final file = File('${directory.path}/$fileId.jpg');
+    final file = File('${directory.path}/$fileId.webp');
     await file.writeAsBytes(bytes);
     return file.path;
   }
 
   static Future<String?> cachedVideoThumbnailPath(String fileId) async {
     final tempDir = await getTemporaryDirectory();
-    final file = File('${tempDir.path}/video_thumbs/$fileId.jpg');
-    return file.existsSync() ? file.path : null;
+    final webpFile = File('${tempDir.path}/video_thumbs/$fileId.webp');
+    if (webpFile.existsSync()) return webpFile.path;
+    final jpgFile = File('${tempDir.path}/video_thumbs/$fileId.jpg');
+    return jpgFile.existsSync() ? jpgFile.path : null;
   }
 
   static Future<String?> generateVideoThumbnail(
@@ -54,8 +60,9 @@ class ThumbnailHelper {
     final thumbnail = await VideoThumbnail.thumbnailFile(
       video: videoPath,
       thumbnailPath: directory.path,
-      maxWidth: 128,
-      quality: 75,
+      imageFormat: ImageFormat.WEBP,
+      maxWidth: 400,
+      quality: 80,
     );
     return thumbnail.path;
   }

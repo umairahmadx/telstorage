@@ -2,7 +2,6 @@
 /// This is the source of truth for storage stats and folder tree
 class AppMetadata {
   final String owner;
-  final double storageLimitMb;
   double storageUsedMb;
   int totalFiles;
   int metadataMessageId; // Telegram message_id of this file (for deletion)
@@ -14,7 +13,6 @@ class AppMetadata {
 
   AppMetadata({
     required this.owner,
-    required this.storageLimitMb,
     required this.storageUsedMb,
     required this.totalFiles,
     required this.metadataMessageId,
@@ -33,9 +31,8 @@ class AppMetadata {
         {};
     return AppMetadata(
       owner: json['owner'] as String,
-      storageLimitMb: (json['storage_limit_mb'] as num).toDouble(),
-      storageUsedMb: (json['storage_used_mb'] as num).toDouble(),
-      totalFiles: json['total_files'] as int,
+      storageUsedMb: (json['storage_used_mb'] as num?)?.toDouble() ?? 0.0,
+      totalFiles: json['total_files'] as int? ?? 0,
       metadataMessageId: json['metadata_message_id'] as int? ?? 0,
       folders: (json['folders'] as List?)
               ?.map((f) => Folder.fromJson(f as Map<String, dynamic>))
@@ -65,14 +62,13 @@ class AppMetadata {
         defaults.addAll(loaded);
         return defaults;
       }(),
-      lastSynced: DateTime.parse(json['last_synced'] as String),
+      lastSynced: DateTime.parse(json['last_synced'] as String? ?? DateTime.now().toIso8601String()),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'owner': owner,
-      'storage_limit_mb': storageLimitMb,
       'storage_used_mb': storageUsedMb,
       'total_files': totalFiles,
       'metadata_message_id': metadataMessageId,

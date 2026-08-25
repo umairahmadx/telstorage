@@ -1,6 +1,7 @@
-/// File: file_manager.dart
-/// Description: Component and logic definition for file_manager.dart in TelStorage.
-library;
+/*
+ * File: file_manager.dart
+ * Description: Component and logic definition for file_manager.dart in TelStorage.
+ */
 
 import 'dart:convert';
 import 'dart:typed_data';

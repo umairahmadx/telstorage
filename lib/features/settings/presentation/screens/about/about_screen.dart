@@ -1,6 +1,7 @@
-/// File: about_screen.dart
-/// Description: About screen displaying application version, architecture highlights, and credits.
-library;
+/*
+ * File: about_screen.dart
+ * Description: About screen displaying application version, architecture highlights, and credits.
+ */
 
 import 'package:flutter/material.dart';
 import '../../../../../core/theme/app_theme.dart';

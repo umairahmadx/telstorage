@@ -1,6 +1,7 @@
-/// File: app_router.dart
-/// Description: Global application router handling route generation and smooth page transitions.
-library;
+/*
+ * File: app_router.dart
+ * Description: Global application router handling route generation and smooth page transitions.
+ */
 
 import 'package:flutter/material.dart';
 import '../../features/auth/presentation/screens/login/login_screen.dart';

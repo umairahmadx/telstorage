@@ -1,20 +1,20 @@
-/// File: browser_screen.dart
-/// Description: File and folder browser view providing directory navigation, search, and file actions.
-library;
+/*
+ * File: browser_screen.dart
+ * Description: File and folder browser view providing directory navigation, search, and file actions using centralized shared widgets.
+ */
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:telstorage/core/services/service_locator.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
-import 'package:telstorage/shared/widgets/app_common_widgets.dart';
 import 'package:telstorage/shared/widgets/app_search_field.dart';
-import 'package:telstorage/shared/widgets/mobile_shell.dart';
+import 'package:telstorage/shared/widgets/bars/app_batch_action_bar.dart';
+import 'package:telstorage/shared/widgets/feedback/app_empty_state.dart';
+import 'package:telstorage/shared/widgets/tiles/app_file_grid_tile.dart';
+import 'package:telstorage/shared/widgets/tiles/app_file_tile.dart';
+import 'package:telstorage/shared/widgets/tiles/app_folder_tile.dart';
+import 'package:telstorage/shared/widgets/typography/app_section_label.dart';
 import 'viewmodel/browser_view_model.dart';
-import 'widgets/browser_batch_bar.dart';
 import 'widgets/browser_dialogs.dart';
-import 'widgets/browser_file_grid_tile.dart';
-import 'widgets/browser_file_tile.dart';
-import 'widgets/browser_folder_tile.dart';
 
 /// Screen component rendering file directory navigation and management.
 class BrowserScreen extends StatefulWidget {
@@ -59,69 +59,93 @@ class _BrowserScreenState extends State<BrowserScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(state.errorMessage!),
-              backgroundColor: AppTheme.error,
+              backgroundColor: colors.error,
             ),
           );
         }
       },
       builder: (context, state) {
-        final currentFolder = state.currentFolderId != null
-            ? ServiceLocator.instance.storageRepository
-                .getFolder(state.currentFolderId!)
-            : null;
+        final canGoUp = state.currentFolderId != null ||
+            (state.category != null && widget.category == null);
 
-        final title = state.category != null
-            ? '${state.category![0].toUpperCase()}${state.category!.substring(1)}'
-            : (currentFolder?.name ?? 'Files');
-
-        return Scaffold(
+        return PopScope(
+          canPop: !canGoUp && !Navigator.canPop(context),
+          onPopInvokedWithResult: (didPop, result) {
+            if (didPop) return;
+            if (canGoUp) {
+              context.read<BrowserBloc>().add(NavigateUp());
+            } else if (Navigator.canPop(context)) {
+              Navigator.pop(context);
+            }
+          },
+          child: Scaffold(
+            backgroundColor: colors.bgPrimary,
           appBar: AppBar(
-            leading: (state.currentFolderId != null || state.category != null)
+            backgroundColor: colors.bgPrimary,
+            elevation: 0,
+            leading: Navigator.canPop(context)
                 ? IconButton(
-                    icon: const Icon(Icons.arrow_back_rounded),
-                    onPressed: () =>
-                        context.read<BrowserBloc>().add(NavigateUp()),
+                    icon: Icon(Icons.arrow_back_rounded,
+                        color: colors.textPrimary),
+                    onPressed: () => Navigator.pop(context),
                   )
-                : IconButton(
-                    icon: const Icon(Icons.menu_rounded),
-                    onPressed: () => MobileShell.of(context)?.openDrawer(),
-                  ),
-            title: Text(title),
+                : (state.currentFolderId != null
+                    ? IconButton(
+                        icon: Icon(Icons.arrow_back_rounded,
+                            color: colors.textPrimary),
+                        onPressed: () => context
+                            .read<BrowserBloc>()
+                            .add(NavigateUp()),
+                      )
+                    : null),
+            title: Text(
+              widget.category != null
+                  ? '${widget.category![0].toUpperCase()}${widget.category!.substring(1)}'
+                  : 'Files',
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
             actions: [
               IconButton(
-                icon: Icon(state.isGridView
-                    ? Icons.view_list_rounded
-                    : Icons.grid_view_rounded),
+                icon: Icon(
+                    state.isGridView
+                        ? Icons.view_list_rounded
+                        : Icons.grid_view_rounded,
+                    color: colors.textPrimary),
+                tooltip: state.isGridView ? 'List View' : 'Grid View',
                 onPressed: () =>
                     context.read<BrowserBloc>().add(ToggleViewMode()),
               ),
               IconButton(
-                icon: const Icon(Icons.sort_rounded),
+                icon: Icon(Icons.sort_rounded, color: colors.textPrimary),
+                tooltip: 'Sort & Filter',
                 onPressed: () => BrowserDialogs.showSortSheet(context, state),
               ),
             ],
           ),
           body: Column(
             children: [
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: AppSearchField(
-                  controller: _searchCtrl,
-                  hintText: 'Search files and folders...',
-                  onChanged: (q) => context
-                      .read<BrowserBloc>()
-                      .add(SearchQueryChanged(q)),
-                ),
+              // Search field
+              AppSearchField(
+                controller: _searchCtrl,
+                hintText: 'Search files and folders...',
+                onChanged: (q) =>
+                    context.read<BrowserBloc>().add(SearchQueryChanged(q)),
               ),
+
+              // Category Pills
+              if (widget.category == null) _buildCategoryFilter(state, colors),
+
+              // Clipboard Banner
               if (state.hasClipboard) _buildClipboardBanner(state, colors),
+
+              // Main content area
               Expanded(
                 child: state.isLoading && !state.isInitialized
                     ? const Center(child: CircularProgressIndicator())
                     : _buildContent(state),
               ),
               if (state.isMultiSelect)
-                BrowserBatchBar(
+                AppBatchActionBar(
                   selectedCount: state.selectedFolderIds.length +
                       state.selectedFileIds.length,
                   onClearSelection: () =>
@@ -141,7 +165,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
                         sourceFolderId: state.currentFolderId,
                       )),
                 ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -181,12 +206,59 @@ class _BrowserScreenState extends State<BrowserScreen> {
     );
   }
 
+  /// Builds horizontal scrollable category filter pills.
+  Widget _buildCategoryFilter(BrowserState state, AppColorsExtension colors) {
+    const categories = [
+      ('All', null),
+      ('Images', 'image'),
+      ('Videos', 'video'),
+      ('Docs', 'document'),
+      ('Audio', 'audio'),
+      ('Archives', 'archive'),
+    ];
+
+    return SizedBox(
+      height: 44,
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        scrollDirection: Axis.horizontal,
+        itemCount: categories.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (ctx, i) {
+          final (label, cat) = categories[i];
+          final isSelected = state.category == cat;
+          return FilterChip(
+            label: Text(label),
+            selected: isSelected,
+            onSelected: (_) {
+              context.read<BrowserBloc>().add(LoadDirectory(
+                    folderId: state.currentFolderId,
+                    category: cat,
+                  ));
+            },
+            backgroundColor: colors.bgSurface,
+            selectedColor: colors.accentPrimary.withValues(alpha: 0.2),
+            labelStyle: TextStyle(
+              color: isSelected ? colors.accentPrimary : colors.textSecondary,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              fontSize: 12,
+            ),
+            side: BorderSide(
+              color: isSelected ? colors.accentPrimary : colors.borderSubtle,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   /// Builds directory files & folders content list or grid.
   Widget _buildContent(BrowserState state) {
     if (state.folders.isEmpty && state.files.isEmpty) {
       return const AppEmptyState(
         icon: Icons.folder_open_rounded,
-        message: 'Folder is empty\nUpload files or create subfolders.',
+        title: 'Folder is empty',
+        subtitle: 'Upload files or create subfolders to get started.',
       );
     }
 
@@ -197,16 +269,16 @@ class _BrowserScreenState extends State<BrowserScreen> {
           crossAxisCount: 2,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
-          childAspectRatio: 1.0,
+          childAspectRatio: 0.95,
         ),
         itemCount: state.files.length,
         itemBuilder: (ctx, i) {
           final file = state.files[i];
           final isSelected = state.selectedFileIds.contains(file.fileId);
-          return BrowserFileGridTile(
+          return AppFileGridTile(
             file: file,
             isSelected: isSelected,
-            isMultiSelect: state.isMultiSelect,
+            isSelectionMode: state.isMultiSelect,
             onTap: () {
               if (state.isMultiSelect) {
                 context.read<BrowserBloc>().add(
@@ -221,7 +293,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
                     ToggleItemSelection(file.fileId, isFolder: false));
               }
             },
-            onMore: () => BrowserDialogs.showFileDetail(context, file),
+            onActionTap: () => BrowserDialogs.showFileDetail(context, file),
           );
         },
       );
@@ -231,14 +303,14 @@ class _BrowserScreenState extends State<BrowserScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       children: [
         if (state.folders.isNotEmpty) ...[
-          const AppSectionLabel('Folders', fontSize: 16),
+          const AppSectionLabel(label: 'Folders'),
           ...state.folders.map((folder) {
             final isSelected = state.selectedFolderIds.contains(folder.id);
-            return BrowserFolderTile(
+            return AppFolderTile(
               folder: folder,
               itemCount: 0,
               isSelected: isSelected,
-              isMultiSelect: state.isMultiSelect,
+              isSelectionMode: state.isMultiSelect,
               onTap: () {
                 if (state.isMultiSelect) {
                   context.read<BrowserBloc>().add(
@@ -255,19 +327,19 @@ class _BrowserScreenState extends State<BrowserScreen> {
                       ToggleItemSelection(folder.id, isFolder: true));
                 }
               },
-              onMore: () => BrowserDialogs.showFolderDetail(context, folder),
+              onActionTap: () => BrowserDialogs.showFolderDetail(context, folder),
             );
           }),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
         ],
         if (state.files.isNotEmpty) ...[
-          const AppSectionLabel('Files', fontSize: 16),
+          const AppSectionLabel(label: 'Files'),
           ...state.files.map((file) {
             final isSelected = state.selectedFileIds.contains(file.fileId);
-            return BrowserFileTile(
+            return AppFileTile(
               file: file,
               isSelected: isSelected,
-              isMultiSelect: state.isMultiSelect,
+              isSelectionMode: state.isMultiSelect,
               onTap: () {
                 if (state.isMultiSelect) {
                   context.read<BrowserBloc>().add(
@@ -282,7 +354,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
                       ToggleItemSelection(file.fileId, isFolder: false));
                 }
               },
-              onMore: () => BrowserDialogs.showFileDetail(context, file),
+              onActionTap: () => BrowserDialogs.showFileDetail(context, file),
             );
           }),
         ],

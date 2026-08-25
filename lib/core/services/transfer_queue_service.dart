@@ -1,6 +1,7 @@
-/// File: transfer_queue_service.dart
-/// Description: Component and logic definition for transfer_queue_service.dart in TelStorage.
-library;
+/*
+ * File: transfer_queue_service.dart
+ * Description: Component and logic definition for transfer_queue_service.dart in TelStorage.
+ */
 
 import 'package:flutter/foundation.dart';
 import '../models/transfer_task.dart';

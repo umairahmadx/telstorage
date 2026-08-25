@@ -1,6 +1,7 @@
-/// File: lru_folder_cache_test.dart
-/// Description: Unit tests for LRU folder cache eviction and partition retrieval.
-library;
+/*
+ * File: lru_folder_cache_test.dart
+ * Description: Unit tests for LRU folder cache eviction and partition retrieval.
+ */
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:telstorage/core/models/folder_partition.dart';

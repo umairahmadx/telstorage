@@ -1,6 +1,7 @@
-/// File: splash_screen.dart
-/// Description: Splash view displayed on startup to verify authentication and initialize services.
-library;
+/*
+ * File: splash_screen.dart
+ * Description: Splash view displayed on startup to verify authentication and initialize services.
+ */
 
 import 'dart:ui';
 

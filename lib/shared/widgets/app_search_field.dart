@@ -1,6 +1,7 @@
-/// File: app_search_field.dart
-/// Description: Component and logic definition for app_search_field.dart in TelStorage.
-library;
+/*
+ * File: app_search_field.dart
+ * Description: Component and logic definition for app_search_field.dart in TelStorage.
+ */
 
 import 'package:flutter/material.dart';
 

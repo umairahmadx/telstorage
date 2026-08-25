@@ -1,6 +1,7 @@
-/// File: share_link_sheet.dart
-/// Description: Component and logic definition for share_link_sheet.dart in TelStorage.
-library;
+/*
+ * File: share_link_sheet.dart
+ * Description: Component and logic definition for share_link_sheet.dart in TelStorage.
+ */
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -224,25 +225,30 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
                 ),
               ),
               const SizedBox(width: 12),
-              GestureDetector(
-                onTap: widget.shareUrl == null
-                    ? null
-                    : () => showDialog(
-                          context: context,
-                          builder: (_) => QrDialog(
-                              data: widget.shareUrl!, title: 'Share File QR'),
-                        ),
-                child: Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: colors.bgSurface,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Icon(
-                    AppIcons.qrCode,
-                    color:
-                        widget.shareUrl == null ? colors.textTertiary : colors.textPrimary,
+              Material(
+                color: colors.bgSurface,
+                borderRadius: BorderRadius.circular(16),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: widget.shareUrl == null
+                      ? null
+                      : () => showDialog(
+                            context: context,
+                            builder: (_) => QrDialog(
+                                data: widget.shareUrl!, title: 'Share File QR'),
+                          ),
+                  borderRadius: BorderRadius.circular(16),
+                  child: SizedBox(
+                    width: 56,
+                    height: 56,
+                    child: Center(
+                      child: Icon(
+                        AppIcons.qrCode,
+                        color: widget.shareUrl == null
+                            ? colors.textTertiary
+                            : colors.textPrimary,
+                      ),
+                    ),
                   ),
                 ),
               ),

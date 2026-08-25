@@ -1,6 +1,7 @@
-/// File: settings_storage_card.dart
-/// Description: Widget displaying cloud storage utilization summary with navigation to details screen.
-library;
+/*
+ * File: settings_storage_card.dart
+ * Description: Widget displaying cloud storage utilization summary with navigation to details screen.
+ */
 
 import 'package:flutter/material.dart';
 import 'package:telstorage/core/theme/app_theme.dart';

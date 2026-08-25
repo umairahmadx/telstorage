@@ -1,6 +1,7 @@
-/// File: browser_filter_helper.dart
-/// Description: Utility helper functions for sorting, filtering, and categorization in the Browser ViewModel.
-library;
+/*
+ * File: browser_filter_helper.dart
+ * Description: Utility helper functions for sorting, filtering, and categorization in the Browser ViewModel.
+ */
 
 import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/models/folder_record.dart';

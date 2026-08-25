@@ -1,6 +1,7 @@
-/// File: local_file_native.dart
-/// Description: Component and logic definition for local_file_native.dart in TelStorage.
-library;
+/*
+ * File: local_file_native.dart
+ * Description: Component and logic definition for local_file_native.dart in TelStorage.
+ */
 
 import 'dart:io';
 

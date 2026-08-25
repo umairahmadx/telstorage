@@ -1,6 +1,7 @@
-/// File: home_cubit_reactivity_test.dart
-/// Description: Reactivity test for browser and home state updates.
-library;
+/*
+ * File: home_cubit_reactivity_test.dart
+ * Description: Reactivity test for browser and home state updates.
+ */
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:telstorage/features/browser/presentation/screens/browser/viewmodel/browser_state.dart';

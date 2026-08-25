@@ -1,6 +1,7 @@
-/// File: folder_partition.dart
-/// Description: Component and logic definition for folder_partition.dart in TelStorage.
-library;
+/*
+ * File: folder_partition.dart
+ * Description: Component and logic definition for folder_partition.dart in TelStorage.
+ */
 
 import 'app_metadata.dart';
 

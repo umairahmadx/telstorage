@@ -1,6 +1,7 @@
-/// File: connectivity_web.dart
-/// Description: Component and logic definition for connectivity_web.dart in TelStorage.
-library;
+/*
+ * File: connectivity_web.dart
+ * Description: Component and logic definition for connectivity_web.dart in TelStorage.
+ */
 
 import 'package:web/web.dart' as web;
 

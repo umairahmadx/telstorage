@@ -1,20 +1,28 @@
-/// File: widget_test.dart
-/// Description: Widget tests for UI components.
-library;
+/*
+ * File: widget_test.dart
+ * Description: Widget tests for centralized UI components (AppFolderTile, AppFileTile).
+ */
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/models/folder_record.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
-import 'package:telstorage/features/browser/presentation/screens/browser/widgets/browser_folder_tile.dart';
+import 'package:telstorage/shared/widgets/tiles/app_file_tile.dart';
+import 'package:telstorage/shared/widgets/tiles/app_folder_tile.dart';
 
 void main() {
-  testWidgets('folder tile renders its name and item count', (tester) async {
+  setUp(() {
+    GoogleFonts.config.allowRuntimeFetching = false;
+  });
+
+  testWidgets('AppFolderTile renders its name and item count', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.dark(),
         home: Scaffold(
-          body: BrowserFolderTile(
+          body: AppFolderTile(
             folder: FolderRecord(
               id: 'folder-1',
               name: 'Documents',
@@ -23,7 +31,7 @@ void main() {
             itemCount: 3,
             onTap: () {},
             onLongPress: () {},
-            onMore: () {},
+            onActionTap: () {},
           ),
         ),
       ),
@@ -31,5 +39,35 @@ void main() {
 
     expect(find.text('Documents'), findsOneWidget);
     expect(find.text('3 items'), findsOneWidget);
+  });
+
+  testWidgets('AppFileTile renders file name and formatted size', (tester) async {
+    final file = FileRecord(
+      fileId: 'file-101',
+      metadataMessageId: 1,
+      metadataFileId: 'meta-1',
+      name: 'quarterly_report.pdf',
+      sizeMb: 2.5,
+      mimeType: 'application/pdf',
+      uploadedAt: DateTime(2026, 3, 15),
+      chunkCount: 1,
+      sha256Hash: 'dummy-hash',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark(),
+        home: Scaffold(
+          body: AppFileTile(
+            file: file,
+            onTap: () {},
+            onActionTap: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('quarterly_report.pdf'), findsOneWidget);
+    expect(find.textContaining('2.50 MB'), findsOneWidget);
   });
 }

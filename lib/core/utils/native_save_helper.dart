@@ -1,6 +1,7 @@
-/// File: native_save_helper.dart
-/// Description: Component and logic definition for native_save_helper.dart in TelStorage.
-library;
+/*
+ * File: native_save_helper.dart
+ * Description: Component and logic definition for native_save_helper.dart in TelStorage.
+ */
 
 // Native save helper — Android, iOS, Desktop.
 // Imported conditionally — not compiled on web.

@@ -1,6 +1,7 @@
-/// File: storage_details_screen.dart
-/// Description: Detailed storage breakdown view showing cloud storage connection status, integrity, and local cache.
-library;
+/*
+ * File: storage_details_screen.dart
+ * Description: Detailed storage breakdown view showing cloud storage connection status, integrity, and local cache.
+ */
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -70,15 +71,28 @@ class StorageDetailsScreen extends StatelessWidget {
                       style:
                           TextStyle(fontSize: 14, color: colors.textSecondary),
                     ),
-                    const SizedBox(height: 16),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: LinearProgressIndicator(
-                        value: (usedMb / 102400).clamp(0.02, 1.0),
-                        minHeight: 8,
-                        backgroundColor: colors.bgSurfaceInset,
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(colors.accentPrimary),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: colors.bgSurfaceInset,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: colors.borderSubtle, width: 1),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.all_inclusive_rounded, size: 16, color: colors.accentPrimary),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Unlimited Cloud Storage Active',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: colors.textPrimary,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],

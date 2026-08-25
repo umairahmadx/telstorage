@@ -1,6 +1,7 @@
-/// File: folder_record.dart
-/// Description: Component and logic definition for folder_record.dart in TelStorage.
-library;
+/*
+ * File: folder_record.dart
+ * Description: Component and logic definition for folder_record.dart in TelStorage.
+ */
 
 import 'package:hive/hive.dart';
 import 'app_metadata.dart';

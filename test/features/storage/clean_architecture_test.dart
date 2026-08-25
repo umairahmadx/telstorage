@@ -1,12 +1,14 @@
-/// File: clean_architecture_test.dart
-/// Description: Clean Architecture tests verifying domain use cases, repositories, and Result monad.
-library;
+/*
+ * File: clean_architecture_test.dart
+ * Description: Clean Architecture tests verifying domain use cases, repositories, and Result monad.
+ */
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:telstorage/core/errors/result.dart';
 import 'package:telstorage/core/events/domain_event_bus.dart';
 import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/models/folder_record.dart';
+import 'package:telstorage/core/models/folder_stats.dart';
 import 'package:telstorage/features/storage/domain/repositories/storage_repository_contract.dart';
 import 'package:telstorage/features/storage/domain/usecases/download_file_usecase.dart';
 import 'package:telstorage/features/storage/domain/usecases/generate_web_share_usecase.dart';
@@ -29,6 +31,22 @@ class MockStorageRepository implements StorageRepositoryContract {
   FolderRecord? getFolder(String folderId) => null;
 
   @override
+  List<FolderRecord> getFolders(String? parentId) => [];
+
+  @override
+  List<FileRecord> getFiles(String? folderId) => [];
+
+  @override
+  int getFilesInFolderCount(String folderId) => 0;
+
+  @override
+  FolderStats getFolderStats(String folderId) => const FolderStats(
+        fileCount: 0,
+        subfolderCount: 0,
+        totalSizeMb: 0.0,
+      );
+
+  @override
   Future<Result<String>> createFolder(String name, {String? parentId}) async =>
       const Success('folder_123');
 
@@ -41,8 +59,17 @@ class MockStorageRepository implements StorageRepositoryContract {
       const Success(null);
 
   @override
+  Future<void> moveFolder(String folderId, String? newParentId) async {}
+
+  @override
+  Future<void> copyFolder(String folderId, String? targetParentId) async {}
+
+  @override
   Future<Result<void>> renameFile(String fileId, String newName) async =>
       const Success(null);
+
+  @override
+  Future<void> moveFile(String fileId, String? newFolderId) async {}
 
   @override
   Future<Result<void>> copyFile(String fileId, String? targetFolderId) async =>

@@ -1,8 +1,10 @@
-/// File: lru_folder_cache_service.dart
-/// Description: Component and logic definition for lru_folder_cache_service.dart in TelStorage.
-library;
+/*
+ * File: lru_folder_cache_service.dart
+ * Description: Component and logic definition for lru_folder_cache_service.dart in TelStorage.
+ */
 
 import 'dart:collection';
+import '../constants/app_constants.dart';
 import '../models/folder_partition.dart';
 import '../utils/app_logger.dart';
 
@@ -10,7 +12,7 @@ import '../utils/app_logger.dart';
 class LruFolderCacheService {
   static final LruFolderCacheService instance = LruFolderCacheService._internal();
 
-  static const int maxCapacity = 30; // Max 30 cached folder partitions in memory
+  static const int maxCapacity = AppConstants.lruFolderCacheCapacity;
   final LinkedHashMap<String, FolderPartition> _cache = LinkedHashMap();
 
   LruFolderCacheService._internal();

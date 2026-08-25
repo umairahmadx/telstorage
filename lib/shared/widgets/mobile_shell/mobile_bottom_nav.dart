@@ -1,6 +1,7 @@
-/// File: mobile_bottom_nav.dart
-/// Description: Component and logic definition for mobile_bottom_nav.dart in TelStorage.
-library;
+/*
+ * File: mobile_bottom_nav.dart
+ * Description: Component and logic definition for mobile_bottom_nav.dart in TelStorage.
+ */
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -65,26 +66,35 @@ class MobileNavBar extends StatelessWidget {
           ),
           Positioned(
             top: -20,
-            child: GestureDetector(
-              onTap: () => onTap(2),
-              child: Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: colors.accentPrimary,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: colors.textPrimary.withValues(alpha: 0.12),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: colors.textPrimary.withValues(alpha: 0.12),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Material(
+                color: colors.accentPrimary,
+                shape: const CircleBorder(),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () => onTap(2),
+                  child: SizedBox(
+                    width: 60,
+                    height: 60,
+                    child: Center(
+                      child: Icon(
+                        AppIcons.add,
+                        color: colors.bgPrimary,
+                        size: 32,
+                      ),
                     ),
-                  ],
-                ),
-                child: Icon(
-                  AppIcons.add,
-                  color: colors.bgPrimary,
-                  size: 32,
+                  ),
                 ),
               ),
             ),
@@ -112,28 +122,35 @@ class NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
+    final borderRadius = BorderRadius.circular(16);
+
     return Expanded(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              color: selected ? colors.accentPrimary : colors.textTertiary,
-              size: 26,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+      child: Material(
+        type: MaterialType.transparency,
+        borderRadius: borderRadius,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          borderRadius: borderRadius,
+          onTap: onTap,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
                 color: selected ? colors.accentPrimary : colors.textTertiary,
+                size: 26,
               ),
-            ),
-          ],
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  color: selected ? colors.accentPrimary : colors.textTertiary,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

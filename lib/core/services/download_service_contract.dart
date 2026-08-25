@@ -1,6 +1,7 @@
-/// File: download_service_contract.dart
-/// Description: Component and logic definition for download_service_contract.dart in TelStorage.
-library;
+/*
+ * File: download_service_contract.dart
+ * Description: Component and logic definition for download_service_contract.dart in TelStorage.
+ */
 
 import 'dart:typed_data';
 import '../models/file_record.dart';

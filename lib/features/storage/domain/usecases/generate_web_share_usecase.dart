@@ -1,6 +1,7 @@
-/// File: generate_web_share_usecase.dart
-/// Description: Component and logic definition for generate_web_share_usecase.dart in TelStorage.
-library;
+/*
+ * File: generate_web_share_usecase.dart
+ * Description: Component and logic definition for generate_web_share_usecase.dart in TelStorage.
+ */
 
 import '../../../../core/errors/result.dart';
 import '../../../../core/models/file_record.dart';

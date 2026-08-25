@@ -1,6 +1,7 @@
-/// File: web_share_api_client.dart
-/// Description: Component and logic definition for web_share_api_client.dart in TelStorage.
-library;
+/*
+ * File: web_share_api_client.dart
+ * Description: Component and logic definition for web_share_api_client.dart in TelStorage.
+ */
 
 import 'dart:async';
 import 'dart:typed_data';

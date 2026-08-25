@@ -1,11 +1,13 @@
-/// File: storage_overview_card.dart
-/// Description: Widget displaying storage capacity bar and aggregated upload/share/download counts.
-library;
+/*
+ * File: storage_overview_card.dart
+ * Description: Widget displaying storage capacity bar and aggregated upload/share/download counts using centralized AppStatusBadge.
+ */
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../../../../../../core/theme/app_theme.dart';
-import '../../../../../../shared/widgets/app_surface_card.dart';
+import 'package:telstorage/core/theme/app_theme.dart';
+import 'package:telstorage/shared/widgets/app_surface_card.dart';
+import 'package:telstorage/shared/widgets/badges/app_status_badge.dart';
 import '../viewmodel/home_view_model.dart';
 
 /// Card component showing overall storage metrics and progress bar.
@@ -20,7 +22,6 @@ class StorageOverviewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
     final usedMb = state.storageUsedMb;
-    final limitMb = state.metadata?.storageLimitMb ?? 102400; // fallback 100GB
     final usedText = usedMb >= 1024
         ? '${(usedMb / 1024).toStringAsFixed(1)} GB'
         : '${usedMb.toStringAsFixed(0)} MB';
@@ -35,9 +36,18 @@ class StorageOverviewCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Storage Overview',
-            style: Theme.of(context).textTheme.headlineSmall,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Storage Overview',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const AppStatusBadge(
+                icon: Icons.all_inclusive_rounded,
+                label: 'Unlimited',
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           RichText(
@@ -47,23 +57,13 @@ class StorageOverviewCard extends StatelessWidget {
                 TextSpan(
                   text: usedText,
                   style: TextStyle(
-                      color: colors.textPrimary, fontWeight: FontWeight.bold),
+                      color: colors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
                 ),
-                const TextSpan(text: ' of Unlimited used'),
+                const TextSpan(text: ' total cloud storage used'),
               ],
             ),
           ),
           const SizedBox(height: 20),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: LinearProgressIndicator(
-              value: (usedMb / limitMb).clamp(0.0, 1.0),
-              minHeight: 6,
-              backgroundColor: colors.bgSurfaceInset,
-              valueColor: AlwaysStoppedAnimation<Color>(colors.accentPrimary),
-            ),
-          ),
-          const SizedBox(height: 24),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -83,28 +83,42 @@ class StorageOverviewCard extends StatelessWidget {
         .slideY(begin: 0.1, end: 0);
   }
 
-  /// Builds a small metric container with icon, label, and value.
   Widget _buildStatItem(
       AppColorsExtension colors, IconData icon, String label, String value) {
-    return Container(
-      width: 95,
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      decoration: BoxDecoration(
-        color: colors.bgSurfaceInset,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: colors.textPrimary, size: 20),
-          const SizedBox(height: 8),
-          Text(label,
-              style:
-                  const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-          const SizedBox(height: 2),
-          Text(value,
-              style: TextStyle(color: colors.textSecondary, fontSize: 11)),
-        ],
-      ),
+    return Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: colors.bgSurfaceInset,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: colors.accentPrimary, size: 18),
+        ),
+        const SizedBox(width: 8),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: colors.textTertiary,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            Text(
+              value,
+              style: TextStyle(
+                color: colors.textPrimary,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

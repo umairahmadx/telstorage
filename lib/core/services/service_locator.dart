@@ -1,6 +1,7 @@
-/// File: service_locator.dart
-/// Description: Component and logic definition for service_locator.dart in TelStorage.
-library;
+/*
+ * File: service_locator.dart
+ * Description: Component and logic definition for service_locator.dart in TelStorage.
+ */
 
 import 'dart:async';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -20,6 +21,7 @@ import 'sync_queue_service.dart';
 import 'thumbnail_repository.dart';
 import 'navigation_service.dart';
 import 'transfer_queue_service.dart';
+import 'app_cache_manager.dart';
 import 'lru_folder_cache_service.dart';
 import 'telegram_rate_limiter.dart';
 import '../../features/storage/data/repositories/storage_repository.dart';
@@ -62,6 +64,7 @@ class ServiceLocator {
   // These are always available as they don't depend on user credentials for creation
   final NavigationService _navigation = NavigationService.instance;
   final TransferQueueService _transferQueue = TransferQueueService.instance;
+  final AppCacheManager _cacheManager = AppCacheManager.instance;
 
   TelegramService get telegram => _telegram;
   HiveService get hive => _hive;
@@ -83,6 +86,7 @@ class ServiceLocator {
   GenerateWebShareUseCase get generateWebShareUseCase => _generateWebShareUseCase;
   NavigationService get navigation => _navigation;
   TransferQueueService get transferQueue => _transferQueue;
+  AppCacheManager get cacheManager => _cacheManager;
 
   Future<void>? _initFuture;
 
@@ -100,8 +104,8 @@ class ServiceLocator {
 
     const storage = FlutterSecureStorage();
 
-    final token = await storage.read(key: 'bot_token');
-    final channelId = await storage.read(key: 'channel_id');
+    final token = await storage.read(key: AppConstants.keyBotToken);
+    final channelId = await storage.read(key: AppConstants.keyChannelId);
 
     if (token == null || channelId == null) {
       _initFuture = null;

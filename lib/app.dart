@@ -1,6 +1,7 @@
-/// File: app.dart
-/// Description: Root TelStorage application widget configuring MultiBlocProvider, themes, and MaterialApp routing.
-library;
+/*
+ * File: app.dart
+ * Description: Root TelStorage application widget configuring MultiBlocProvider, themes, and MaterialApp routing.
+ */
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';

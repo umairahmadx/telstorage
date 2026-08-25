@@ -1,6 +1,7 @@
-/// File: browser_event.dart
-/// Description: Event definitions and clipboard modes for the file browser feature.
-library;
+/*
+ * File: browser_event.dart
+ * Description: Event definitions and clipboard modes for the file browser feature.
+ */
 
 import '../../../../../../core/models/file_record.dart';
 

@@ -1,12 +1,14 @@
-/// File: storage_repository.dart
-/// Description: Component and logic definition for storage_repository.dart in TelStorage.
-library;
+/*
+ * File: storage_repository.dart
+ * Description: Component and logic definition for storage_repository.dart in TelStorage.
+ */
 
 import 'package:uuid/uuid.dart';
 import '../../../../core/errors/result.dart';
 import '../../../../core/events/domain_event_bus.dart';
 import '../../../../core/models/pending_action.dart';
 import '../../../../core/models/file_record.dart';
+import '../../../../core/models/folder_stats.dart';
 import '../../../../core/models/folder_record.dart';
 import '../../../../core/models/app_metadata.dart';
 import '../../../../core/services/hive_service.dart';
@@ -122,16 +124,19 @@ class StorageRepository implements StorageRepositoryContract {
     return _hive.getFolder(folderId);
   }
 
+  @override
   int getFilesInFolderCount(String folderId) {
     return _hive.filesInFolder(folderId).length;
   }
 
   // ── Read Operations (Offline-First) ───────────────────────────────────
 
+  @override
   List<FolderRecord> getFolders(String? parentId) {
     return _hive.subfolders(parentId);
   }
 
+  @override
   List<FileRecord> getFiles(String? folderId) {
     return _hive.filesInFolder(folderId);
   }
@@ -163,6 +168,20 @@ class StorageRepository implements StorageRepositoryContract {
     return _folderTreeIds(folderId).length;
   }
 
+  @override
+  FolderStats getFolderStats(String folderId) {
+    final ids = _folderTreeIds(folderId);
+    final files =
+        _hive.allFiles.where((file) => ids.contains(file.folderId)).toList();
+    final subfolderCount = ids.length - 1;
+    final totalSizeMb = files.fold<double>(0.0, (sum, f) => sum + f.sizeMb);
+    return FolderStats(
+      fileCount: files.length,
+      subfolderCount: subfolderCount > 0 ? subfolderCount : 0,
+      totalSizeMb: totalSizeMb,
+    );
+  }
+
   // ── Mutating Operations (Local-First Optimistic Execution) ─────────────
 
   @override
@@ -179,7 +198,7 @@ class StorageRepository implements StorageRepositoryContract {
 
       final pending = PendingAction(
         id: const Uuid().v4(),
-        actionType: 'createFolder',
+        actionType: AppConstants.actionCreateFolder,
         payload: {
           'id': folderId,
           'name': name,
@@ -203,7 +222,7 @@ class StorageRepository implements StorageRepositoryContract {
 
       final pending = PendingAction(
         id: const Uuid().v4(),
-        actionType: 'renameFolder',
+        actionType: AppConstants.actionRenameFolder,
         payload: {
           'folderId': folderId,
           'name': newName,
@@ -229,7 +248,7 @@ class StorageRepository implements StorageRepositoryContract {
 
       final pending = PendingAction(
         id: const Uuid().v4(),
-        actionType: 'deleteFolder',
+        actionType: AppConstants.actionDeleteFolder,
         payload: {
           'folderId': folderId,
           'folderIds': folderIds.toList(),
@@ -263,6 +282,7 @@ class StorageRepository implements StorageRepositoryContract {
     }
   }
 
+  @override
   Future<void> moveFolder(String folderId, String? newParentId) async {
     if (folderId == newParentId || _isDescendant(newParentId, folderId)) {
       throw StateError('Cannot move a folder into itself.');
@@ -272,7 +292,7 @@ class StorageRepository implements StorageRepositoryContract {
 
     final pending = PendingAction(
       id: const Uuid().v4(),
-      actionType: 'moveFolder',
+      actionType: AppConstants.actionMoveFolder,
       payload: {
         'folderId': folderId,
         'parentId': newParentId,
@@ -283,6 +303,7 @@ class StorageRepository implements StorageRepositoryContract {
     _syncQueue.processQueue();
   }
 
+  @override
   Future<void> copyFolder(String folderId, String? targetParentId) async {
     if (folderId == targetParentId || _isDescendant(targetParentId, folderId)) {
       throw StateError('Cannot copy a folder into itself.');
@@ -333,7 +354,7 @@ class StorageRepository implements StorageRepositoryContract {
 
       final pending = PendingAction(
         id: const Uuid().v4(),
-        actionType: 'renameFile',
+        actionType: AppConstants.actionRenameFile,
         payload: {
           'fileId': fileId,
           'name': newName,
@@ -349,6 +370,7 @@ class StorageRepository implements StorageRepositoryContract {
     }
   }
 
+  @override
   Future<void> moveFile(String fileId, String? newFolderId) async {
     await _hive.updateFile(
       fileId,
@@ -358,7 +380,7 @@ class StorageRepository implements StorageRepositoryContract {
 
     final pending = PendingAction(
       id: const Uuid().v4(),
-      actionType: 'moveFile',
+      actionType: AppConstants.actionMoveFile,
       payload: {
         'fileId': fileId,
         'folderId': newFolderId,
@@ -405,7 +427,7 @@ class StorageRepository implements StorageRepositoryContract {
 
       final pending = PendingAction(
         id: const Uuid().v4(),
-        actionType: 'copyFile',
+        actionType: AppConstants.actionCopyFile,
         payload: {
           'originalFileId': fileId,
           'newFileId': newFileId,
@@ -443,7 +465,7 @@ class StorageRepository implements StorageRepositoryContract {
 
       final pending = PendingAction(
         id: const Uuid().v4(),
-        actionType: 'deleteFile',
+        actionType: AppConstants.actionDeleteFile,
         payload: payload,
         timestamp: DateTime.now(),
       );

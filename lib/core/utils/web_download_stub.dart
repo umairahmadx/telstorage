@@ -1,6 +1,7 @@
-/// File: web_download_stub.dart
-/// Description: Component and logic definition for web_download_stub.dart in TelStorage.
-library;
+/*
+ * File: web_download_stub.dart
+ * Description: Component and logic definition for web_download_stub.dart in TelStorage.
+ */
 
 import 'dart:typed_data';
 

@@ -1,6 +1,7 @@
-/// File: navigation_service.dart
-/// Description: Component and logic definition for navigation_service.dart in TelStorage.
-library;
+/*
+ * File: navigation_service.dart
+ * Description: Component and logic definition for navigation_service.dart in TelStorage.
+ */
 
 import 'package:flutter/material.dart';
 import '../navigation/navigation_intent.dart';

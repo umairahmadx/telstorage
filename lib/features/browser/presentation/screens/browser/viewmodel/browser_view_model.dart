@@ -1,6 +1,7 @@
-/// File: browser_view_model.dart
-/// Description: Browser ViewModel (Bloc) managing directory navigation, file mutations, and clipboard operations.
-library;
+/*
+ * File: browser_view_model.dart
+ * Description: Browser ViewModel (Bloc) managing directory navigation, file mutations, and clipboard operations.
+ */
 
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -9,7 +10,7 @@ import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/models/folder_record.dart';
 import 'package:telstorage/core/services/service_locator.dart';
 import 'package:telstorage/core/utils/connectivity.dart';
-import 'package:telstorage/features/storage/data/repositories/storage_repository.dart';
+import 'package:telstorage/features/storage/domain/repositories/storage_repository_contract.dart';
 import 'browser_event.dart';
 import 'browser_filter_helper.dart';
 import 'browser_state.dart';
@@ -20,8 +21,7 @@ export 'browser_state.dart';
 /// ViewModel orchestrating file and folder navigation, search, and operations.
 class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
   /// Internal repository reference.
-  final StorageRepository _repository =
-      ServiceLocator.instance.storageRepository;
+  final StorageRepositoryContract _repository;
 
   /// Subscription to Hive folders database.
   StreamSubscription? _foldersSubscription;
@@ -33,7 +33,9 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
   StreamSubscription? _domainEventSubscription;
 
   /// Constructs BrowserBloc and registers event handlers.
-  BrowserBloc() : super(BrowserState()) {
+  BrowserBloc([StorageRepositoryContract? repository])
+      : _repository = repository ?? ServiceLocator.instance.storageRepository,
+        super(BrowserState()) {
     on<LoadDirectory>(_onLoadDirectory);
     on<SearchQueryChanged>(_onSearchQueryChanged);
     on<SortOptionChanged>(_onSortOptionChanged);
@@ -65,6 +67,8 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
 
   /// Sets up reactive database and event bus listeners.
   void _initSubscriptions() {
+    if (!ServiceLocator.instance.isInitialized) return;
+
     _foldersSubscription = ServiceLocator.instance.hive.foldersListenable.value
         .watch()
         .listen((_) {

@@ -1,6 +1,7 @@
-/// File: browser_state.dart
-/// Description: State representation of the file browser, including selections, sorting, and directory data.
-library;
+/*
+ * File: browser_state.dart
+ * Description: State representation of the file browser, including selections, sorting, and directory data.
+ */
 
 import '../../../../../../core/models/file_record.dart';
 import '../../../../../../core/models/folder_record.dart';

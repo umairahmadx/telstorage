@@ -1,6 +1,7 @@
-/// File: settings_appearance_card.dart
-/// Description: Appearance settings widget allowing user to switch Light, Dark, and System themes.
-library;
+/*
+ * File: settings_appearance_card.dart
+ * Description: Appearance settings widget allowing user to switch Light, Dark, and System themes.
+ */
 
 import 'package:flutter/material.dart';
 import '../../../../../../core/services/theme_service.dart';

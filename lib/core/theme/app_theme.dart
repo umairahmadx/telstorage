@@ -1,11 +1,15 @@
-/// File: app_theme.dart
-/// Description: Main theme configuration for TelStorage.
-/// Configures Material 3 Light and Dark ThemeData, Typography, and AppColorsExtension.
-library;
+/*
+ * File: app_theme.dart
+ * Description: Main theme configuration for TelStorage.
+ * Configures Material 3 Light and Dark ThemeData, Typography, and AppColorsExtension.
+ */
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
+import 'app_colors_extension.dart';
+
+export 'app_colors_extension.dart';
 
 /// TelStorage Design System — Pure Dark & Clean Light UI.
 class AppTheme {
@@ -177,6 +181,32 @@ class AppTheme {
             visualDensity: VisualDensity.compact,
           ),
         ),
+        listTileTheme: ListTileThemeData(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+        ),
         extensions: const [
           AppColorsExtension(
             bgPrimary: black,
@@ -253,6 +283,32 @@ class AppTheme {
             visualDensity: VisualDensity.compact,
           ),
         ),
+        listTileTheme: ListTileThemeData(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+        ),
         extensions: const [
           AppColorsExtension(
             bgPrimary: white,
@@ -284,208 +340,4 @@ class AppTheme {
           ),
         ],
       );
-}
-
-/// ThemeExtension that supplies design tokens dynamically per theme mode.
-class AppColorsExtension extends ThemeExtension<AppColorsExtension> {
-  /// Primary background color.
-  final Color bgPrimary;
-
-  /// Surface card background color.
-  final Color bgSurface;
-
-  /// Inset background container color.
-  final Color bgSurfaceInset;
-
-  /// Subtle border divider color.
-  final Color borderSubtle;
-
-  /// Primary high-contrast text color.
-  final Color textPrimary;
-
-  /// Secondary subdued text color.
-  final Color textSecondary;
-
-  /// Tertiary placeholder text color.
-  final Color textTertiary;
-
-  /// Primary accent color.
-  final Color accentPrimary;
-
-  /// PDF badge color.
-  final Color filePdf;
-
-  /// Video badge color.
-  final Color fileVideo;
-
-  /// Zip archive badge color.
-  final Color fileZip;
-
-  /// Folder badge color.
-  final Color fileFolder;
-
-  /// Folder icon container background tint.
-  final Color fileFolderBg;
-
-  /// Palette image badge color.
-  final Color filePalette;
-
-  /// Video icon container background tint.
-  final Color fileVideoBg;
-
-  /// Text icon container background tint.
-  final Color fileTextBg;
-
-  /// Generic file container background tint.
-  final Color fileGenericBg;
-
-  /// PDF icon container background tint.
-  final Color filePdfBg;
-
-  /// Glow / Shadow color overlay.
-  final Color glowColor;
-
-  /// Hero background gradient colors.
-  final List<Color> heroGradient;
-
-  /// Primary button gradient colors.
-  final List<Color> primaryGradient;
-
-  /// Active selection background color.
-  final Color selectionColor;
-
-  /// Alternate selection background color.
-  final Color selectionColorAlt;
-
-  /// Success state color.
-  final Color success;
-
-  /// Error state color.
-  final Color error;
-
-  /// Warning state color.
-  final Color warning;
-
-  /// Constructs an immutable AppColorsExtension token instance.
-  const AppColorsExtension({
-    required this.bgPrimary,
-    required this.bgSurface,
-    required this.bgSurfaceInset,
-    required this.borderSubtle,
-    required this.textPrimary,
-    required this.textSecondary,
-    required this.textTertiary,
-    required this.accentPrimary,
-    required this.filePdf,
-    required this.fileVideo,
-    required this.fileZip,
-    required this.fileFolder,
-    required this.fileFolderBg,
-    required this.filePalette,
-    required this.fileVideoBg,
-    required this.fileTextBg,
-    required this.fileGenericBg,
-    required this.filePdfBg,
-    required this.glowColor,
-    required this.heroGradient,
-    required this.primaryGradient,
-    required this.selectionColor,
-    required this.selectionColorAlt,
-    required this.success,
-    required this.error,
-    required this.warning,
-  });
-
-  @override
-  ThemeExtension<AppColorsExtension> copyWith({
-    Color? bgPrimary,
-    Color? bgSurface,
-    Color? bgSurfaceInset,
-    Color? borderSubtle,
-    Color? textPrimary,
-    Color? textSecondary,
-    Color? textTertiary,
-    Color? accentPrimary,
-    Color? filePdf,
-    Color? fileVideo,
-    Color? fileZip,
-    Color? fileFolder,
-    Color? fileFolderBg,
-    Color? filePalette,
-    Color? fileVideoBg,
-    Color? fileTextBg,
-    Color? fileGenericBg,
-    Color? filePdfBg,
-    Color? glowColor,
-    List<Color>? heroGradient,
-    List<Color>? primaryGradient,
-    Color? selectionColor,
-    Color? selectionColorAlt,
-    Color? success,
-    Color? error,
-    Color? warning,
-  }) {
-    return AppColorsExtension(
-      bgPrimary: bgPrimary ?? this.bgPrimary,
-      bgSurface: bgSurface ?? this.bgSurface,
-      bgSurfaceInset: bgSurfaceInset ?? this.bgSurfaceInset,
-      borderSubtle: borderSubtle ?? this.borderSubtle,
-      textPrimary: textPrimary ?? this.textPrimary,
-      textSecondary: textSecondary ?? this.textSecondary,
-      textTertiary: textTertiary ?? this.textTertiary,
-      accentPrimary: accentPrimary ?? this.accentPrimary,
-      filePdf: filePdf ?? this.filePdf,
-      fileVideo: fileVideo ?? this.fileVideo,
-      fileZip: fileZip ?? this.fileZip,
-      fileFolder: fileFolder ?? this.fileFolder,
-      fileFolderBg: fileFolderBg ?? this.fileFolderBg,
-      filePalette: filePalette ?? this.filePalette,
-      fileVideoBg: fileVideoBg ?? this.fileVideoBg,
-      fileTextBg: fileTextBg ?? this.fileTextBg,
-      fileGenericBg: fileGenericBg ?? this.fileGenericBg,
-      filePdfBg: filePdfBg ?? this.filePdfBg,
-      glowColor: glowColor ?? this.glowColor,
-      heroGradient: heroGradient ?? this.heroGradient,
-      primaryGradient: primaryGradient ?? this.primaryGradient,
-      selectionColor: selectionColor ?? this.selectionColor,
-      selectionColorAlt: selectionColorAlt ?? this.selectionColorAlt,
-      success: success ?? this.success,
-      error: error ?? this.error,
-      warning: warning ?? this.warning,
-    );
-  }
-
-  @override
-  ThemeExtension<AppColorsExtension> lerp(
-      ThemeExtension<AppColorsExtension>? other, double t) {
-    if (other is! AppColorsExtension) return this;
-    return AppColorsExtension(
-      bgPrimary: Color.lerp(bgPrimary, other.bgPrimary, t)!,
-      bgSurface: Color.lerp(bgSurface, other.bgSurface, t)!,
-      bgSurfaceInset: Color.lerp(bgSurfaceInset, other.bgSurfaceInset, t)!,
-      borderSubtle: Color.lerp(borderSubtle, other.borderSubtle, t)!,
-      textPrimary: Color.lerp(textPrimary, other.textPrimary, t)!,
-      textSecondary: Color.lerp(textSecondary, other.textSecondary, t)!,
-      textTertiary: Color.lerp(textTertiary, other.textTertiary, t)!,
-      accentPrimary: Color.lerp(accentPrimary, other.accentPrimary, t)!,
-      filePdf: Color.lerp(filePdf, other.filePdf, t)!,
-      fileVideo: Color.lerp(fileVideo, other.fileVideo, t)!,
-      fileZip: Color.lerp(fileZip, other.fileZip, t)!,
-      fileFolder: Color.lerp(fileFolder, other.fileFolder, t)!,
-      fileFolderBg: Color.lerp(fileFolderBg, other.fileFolderBg, t)!,
-      filePalette: Color.lerp(filePalette, other.filePalette, t)!,
-      fileVideoBg: Color.lerp(fileVideoBg, other.fileVideoBg, t)!,
-      fileTextBg: Color.lerp(fileTextBg, other.fileTextBg, t)!,
-      fileGenericBg: Color.lerp(fileGenericBg, other.fileGenericBg, t)!,
-      filePdfBg: Color.lerp(filePdfBg, other.filePdfBg, t)!,
-      glowColor: Color.lerp(glowColor, other.glowColor, t)!,
-      heroGradient: other.heroGradient,
-      primaryGradient: other.primaryGradient,
-      selectionColor: Color.lerp(selectionColor, other.selectionColor, t)!,
-      selectionColorAlt: Color.lerp(selectionColorAlt, other.selectionColorAlt, t)!,
-      success: Color.lerp(success, other.success, t)!,
-      error: Color.lerp(error, other.error, t)!,
-      warning: Color.lerp(warning, other.warning, t)!,
-    );
-  }
 }

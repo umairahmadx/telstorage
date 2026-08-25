@@ -1,6 +1,7 @@
-/// File: sync_screen.dart
-/// Description: Sync Center screen displaying real-time offline queue status, connectivity, and activity logs.
-library;
+/*
+ * File: sync_screen.dart
+ * Description: Sync Center screen displaying real-time offline queue status, connectivity, and activity logs.
+ */
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';

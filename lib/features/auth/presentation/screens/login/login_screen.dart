@@ -1,6 +1,7 @@
-/// File: login_screen.dart
-/// Description: Login view enabling user authentication via email & password.
-library;
+/*
+ * File: login_screen.dart
+ * Description: Login view enabling user authentication via email & password.
+ */
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';

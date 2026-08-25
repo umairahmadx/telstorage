@@ -1,6 +1,7 @@
-/// File: file_category_helper.dart
-/// Description: Component and logic definition for file_category_helper.dart in TelStorage.
-library;
+/*
+ * File: file_category_helper.dart
+ * Description: Component and logic definition for file_category_helper.dart in TelStorage.
+ */
 
 import 'package:path/path.dart' as p;
 

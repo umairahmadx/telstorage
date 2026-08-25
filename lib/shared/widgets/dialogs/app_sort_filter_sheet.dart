@@ -1,13 +1,14 @@
-/// File: browser_sort_sheet.dart
-/// Description: Modal bottom sheet allowing user to configure file sorting and folder grouping.
-library;
+/*
+ * File: app_sort_filter_sheet.dart
+ * Description: Centralized modal bottom sheet allowing user to configure file sorting and folder grouping options.
+ */
 
 import 'package:flutter/material.dart';
-import '../../../../../../core/theme/app_theme.dart';
-import '../viewmodel/browser_event.dart';
+import 'package:telstorage/core/theme/app_theme.dart';
+import 'package:telstorage/features/browser/presentation/screens/browser/viewmodel/browser_event.dart';
 
-/// Modal bottom sheet for changing sorting criteria and grouping options.
-class BrowserSortSheet extends StatelessWidget {
+/// Centralized modal bottom sheet for configuring sort criteria and grouping rules.
+class AppSortFilterSheet extends StatelessWidget {
   /// Currently active sort option.
   final BrowserSortOption currentSort;
 
@@ -23,8 +24,8 @@ class BrowserSortSheet extends StatelessWidget {
   /// Callback when a new grouping option is selected.
   final ValueChanged<BrowserGroupOption> onGroupChanged;
 
-  /// Constructs BrowserSortSheet.
-  const BrowserSortSheet({
+  /// Constructs AppSortFilterSheet.
+  const AppSortFilterSheet({
     super.key,
     required this.currentSort,
     required this.isAscending,
@@ -73,7 +74,7 @@ class BrowserSortSheet extends StatelessWidget {
               ),
             ),
             ListTile(
-              title: const Text('Name'),
+              title: Text('Name', style: TextStyle(color: colors.textPrimary)),
               trailing: currentSort == BrowserSortOption.name
                   ? Icon(
                       isAscending
@@ -87,7 +88,7 @@ class BrowserSortSheet extends StatelessWidget {
               },
             ),
             ListTile(
-              title: const Text('Date'),
+              title: Text('Date', style: TextStyle(color: colors.textPrimary)),
               trailing: currentSort == BrowserSortOption.date
                   ? Icon(
                       isAscending
@@ -101,7 +102,7 @@ class BrowserSortSheet extends StatelessWidget {
               },
             ),
             ListTile(
-              title: const Text('Size'),
+              title: Text('Size', style: TextStyle(color: colors.textPrimary)),
               trailing: currentSort == BrowserSortOption.size
                   ? Icon(
                       isAscending
@@ -124,7 +125,7 @@ class BrowserSortSheet extends StatelessWidget {
               ),
             ),
             ListTile(
-              title: const Text('Folders First'),
+              title: Text('Folders First', style: TextStyle(color: colors.textPrimary)),
               trailing: currentGroup == BrowserGroupOption.foldersFirst
                   ? Icon(Icons.check_rounded, color: colors.accentPrimary)
                   : null,
@@ -134,7 +135,7 @@ class BrowserSortSheet extends StatelessWidget {
               },
             ),
             ListTile(
-              title: const Text('None'),
+              title: Text('Mixed', style: TextStyle(color: colors.textPrimary)),
               trailing: currentGroup == BrowserGroupOption.mixed
                   ? Icon(Icons.check_rounded, color: colors.accentPrimary)
                   : null,

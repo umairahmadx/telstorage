@@ -1,6 +1,7 @@
-/// File: main.dart
-/// Description: Entry point for TelStorage initializing WorkManager, Hive boxes, adapters, and environment variables.
-library;
+/*
+ * File: main.dart
+ * Description: Entry point for TelStorage initializing WorkManager, Hive boxes, adapters, and environment variables.
+ */
 
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';

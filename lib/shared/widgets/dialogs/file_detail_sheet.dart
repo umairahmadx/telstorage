@@ -6,11 +6,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import 'package:open_file/open_file.dart';
 import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/services/service_locator.dart';
 import 'package:telstorage/core/theme/app_icons.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
+import 'package:telstorage/core/utils/file_opener_helper.dart';
 import 'package:telstorage/shared/widgets/thumbnail_widget.dart';
 
 /// Centralized 'About File' modal bottom sheet.
@@ -166,8 +166,15 @@ class FileDetailSheet extends StatelessWidget {
                       if (onOpen != null) {
                         onOpen!();
                       } else if (resolvedPath != null) {
+                        final messenger = ScaffoldMessenger.maybeOf(context);
                         Navigator.pop(context);
-                        OpenFile.open(resolvedPath);
+                        FileOpenerHelper.openFile(
+                          context,
+                          filePath: resolvedPath,
+                          mimeType: file.mimeType,
+                          fileName: file.name,
+                          messenger: messenger,
+                        );
                       }
                     },
                   ),

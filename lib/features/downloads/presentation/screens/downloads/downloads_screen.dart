@@ -6,7 +6,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:open_file/open_file.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:telstorage/core/models/download_job.dart';
 import 'package:telstorage/core/models/file_record.dart';
@@ -15,6 +14,7 @@ import 'package:telstorage/core/navigation/navigation_intent.dart';
 import 'package:telstorage/core/services/service_locator.dart';
 import 'package:telstorage/core/services/transfer_queue_service.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
+import 'package:telstorage/core/utils/file_opener_helper.dart';
 import 'package:telstorage/shared/widgets/dialogs/app_dialogs.dart';
 import 'package:telstorage/shared/widgets/feedback/app_empty_state.dart';
 import 'package:telstorage/shared/widgets/share_link_sheet.dart';
@@ -85,10 +85,14 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   }
 
   /// Triggers local file opening via platform handler.
-  void _openFile(String? localPath) {
+  void _openFile(String? localPath, {String? mimeType, String? fileName}) {
     if (localPath != null && localPath.isNotEmpty) {
-      HapticFeedback.lightImpact();
-      OpenFile.open(localPath);
+      FileOpenerHelper.openFile(
+        context,
+        filePath: localPath,
+        mimeType: mimeType,
+        fileName: fileName,
+      );
     }
   }
 
@@ -332,7 +336,11 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                   return AppFileTile(
                     file: record,
                     subtitleText: job.localPath,
-                    onTap: () => _openFile(job.localPath),
+                    onTap: () => _openFile(
+                      job.localPath,
+                      mimeType: job.mimeType,
+                      fileName: job.name,
+                    ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [

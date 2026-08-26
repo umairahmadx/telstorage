@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:open_file/open_file.dart';
+import '../../core/utils/file_opener_helper.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/navigation/navigation_intent.dart';
@@ -100,7 +100,12 @@ class MobileShellState extends State<MobileShell> {
             .where((j) => j.fileId == id)
             .firstOrNull;
         if (job?.localPath != null) {
-          OpenFile.open(job!.localPath!);
+          FileOpenerHelper.openFile(
+            context,
+            filePath: job!.localPath!,
+            mimeType: job.mimeType,
+            fileName: job.name,
+          );
         }
       } else if (actionId.startsWith('copy_')) {
         final id = actionId.replaceFirst('copy_', '');

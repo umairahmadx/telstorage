@@ -4,6 +4,7 @@
  */
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
 import 'package:telstorage/shared/widgets/dialogs/file_detail_sheet.dart';
@@ -19,6 +20,12 @@ abstract final class AppDialogs {
     String cancelText = 'Cancel',
     bool isDestructive = false,
   }) {
+    if (isDestructive) {
+      HapticFeedback.heavyImpact();
+    } else {
+      HapticFeedback.lightImpact();
+    }
+
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
 
     return showDialog<bool>(
@@ -30,11 +37,21 @@ abstract final class AppDialogs {
         content: Text(message, style: TextStyle(color: colors.textSecondary, fontSize: 14)),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
+            onPressed: () {
+              HapticFeedback.selectionClick();
+              Navigator.pop(ctx, false);
+            },
             child: Text(cancelText, style: TextStyle(color: colors.textSecondary)),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
+            onPressed: () {
+              if (isDestructive) {
+                HapticFeedback.heavyImpact();
+              } else {
+                HapticFeedback.mediumImpact();
+              }
+              Navigator.pop(ctx, true);
+            },
             style: FilledButton.styleFrom(
               backgroundColor: isDestructive ? colors.error : colors.accentPrimary,
               foregroundColor: isDestructive ? colors.textPrimary : colors.bgPrimary,
@@ -56,6 +73,7 @@ abstract final class AppDialogs {
     String confirmText = 'Save',
     String cancelText = 'Cancel',
   }) {
+    HapticFeedback.lightImpact();
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
     final controller = TextEditingController(text: initialValue);
 
@@ -82,13 +100,17 @@ abstract final class AppDialogs {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
+            onPressed: () {
+              HapticFeedback.selectionClick();
+              Navigator.pop(ctx);
+            },
             child: Text(cancelText, style: TextStyle(color: colors.textSecondary)),
           ),
           FilledButton(
             onPressed: () {
               final text = controller.text.trim();
               if (text.isNotEmpty) {
+                HapticFeedback.mediumImpact();
                 Navigator.pop(ctx, text);
               }
             },
@@ -110,11 +132,15 @@ abstract final class AppDialogs {
     required FileRecord file,
     required VoidCallback onShare,
     required VoidCallback onDownload,
+    VoidCallback? onOpen,
+    bool? isDownloaded,
+    String? localPath,
     required VoidCallback onRename,
     VoidCallback? onMove,
     VoidCallback? onCopy,
     required VoidCallback onDelete,
   }) {
+    HapticFeedback.lightImpact();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -123,6 +149,9 @@ abstract final class AppDialogs {
         file: file,
         onShare: onShare,
         onDownload: onDownload,
+        onOpen: onOpen,
+        isDownloaded: isDownloaded,
+        localPath: localPath,
         onRename: onRename,
         onMove: onMove,
         onCopy: onCopy,
@@ -131,3 +160,4 @@ abstract final class AppDialogs {
     );
   }
 }
+

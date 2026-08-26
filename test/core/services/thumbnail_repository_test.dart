@@ -15,9 +15,8 @@ class FakeTelegramService implements TelegramService {
   @override
   Future<Map<String, dynamic>> uploadBytesWithFileId(
     Uint8List bytes,
-    String fileName, {
-    void Function(double progress)? onProgress,
-  }) async => {'file_id': 'mock_file_id', 'message_id': 1};
+    String filename,
+  ) async => {'file_id': 'mock_file_id', 'message_id': 1};
 
   @override
   Future<Uint8List> downloadByFileId(

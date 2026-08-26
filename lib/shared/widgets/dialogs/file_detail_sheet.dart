@@ -4,8 +4,11 @@
  */
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:open_file/open_file.dart';
 import 'package:telstorage/core/models/file_record.dart';
+import 'package:telstorage/core/services/service_locator.dart';
 import 'package:telstorage/core/theme/app_icons.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
 import 'package:telstorage/shared/widgets/thumbnail_widget.dart';
@@ -20,6 +23,15 @@ class FileDetailSheet extends StatelessWidget {
 
   /// Callback when Download is pressed.
   final VoidCallback onDownload;
+
+  /// Optional callback when Open is pressed.
+  final VoidCallback? onOpen;
+
+  /// Explicit isDownloaded flag override.
+  final bool? isDownloaded;
+
+  /// Local path of downloaded file if available.
+  final String? localPath;
 
   /// Callback when Rename is pressed.
   final VoidCallback onRename;
@@ -39,6 +51,9 @@ class FileDetailSheet extends StatelessWidget {
     required this.file,
     required this.onShare,
     required this.onDownload,
+    this.onOpen,
+    this.isDownloaded,
+    this.localPath,
     required this.onRename,
     this.onMove,
     this.onCopy,
@@ -49,6 +64,17 @@ class FileDetailSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
     final dateStr = DateFormat('dd MMM yyyy, HH:mm').format(file.uploadedAt);
+
+    String? resolvedPath = localPath;
+    bool downloaded = isDownloaded ?? false;
+
+    if (ServiceLocator.instance.isInitialized && !downloaded) {
+      final completedPath = ServiceLocator.instance.downloadQueue.getCompletedPath(file.fileId);
+      if (completedPath != null) {
+        downloaded = true;
+        resolvedPath ??= completedPath;
+      }
+    }
 
     return Container(
       decoration: BoxDecoration(
@@ -111,34 +137,83 @@ class FileDetailSheet extends StatelessWidget {
                 _ActionButton(
                   icon: AppIcons.share,
                   label: 'Share',
-                  onTap: onShare,
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    onShare();
+                  },
                 ),
-                _ActionButton(
-                  icon: AppIcons.download,
-                  label: 'Download',
-                  onTap: onDownload,
-                ),
+                if (downloaded) ...[
+                  _ActionButton(
+                    icon: Icons.cloud_done_rounded,
+                    label: 'Downloaded',
+                    isSuccess: true,
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('${file.name} is saved to device'),
+                          behavior: SnackBarBehavior.floating,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                  ),
+                  _ActionButton(
+                    icon: Icons.open_in_new_rounded,
+                    label: 'Open',
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      if (onOpen != null) {
+                        onOpen!();
+                      } else if (resolvedPath != null) {
+                        Navigator.pop(context);
+                        OpenFile.open(resolvedPath);
+                      }
+                    },
+                  ),
+                ] else ...[
+                  _ActionButton(
+                    icon: AppIcons.download,
+                    label: 'Download',
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      onDownload();
+                    },
+                  ),
+                ],
                 _ActionButton(
                   icon: AppIcons.rename,
                   label: 'Rename',
-                  onTap: onRename,
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    onRename();
+                  },
                 ),
                 if (onMove != null)
                   _ActionButton(
                     icon: AppIcons.move,
                     label: 'Move',
-                    onTap: onMove!,
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      onMove!();
+                    },
                   ),
                 if (onCopy != null)
                   _ActionButton(
                     icon: AppIcons.copyLink,
                     label: 'Copy',
-                    onTap: onCopy!,
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      onCopy!();
+                    },
                   ),
                 _ActionButton(
                   icon: AppIcons.delete,
                   label: 'Delete',
-                  onTap: onDelete,
+                  onTap: () {
+                    HapticFeedback.heavyImpact();
+                    onDelete();
+                  },
                   isDestructive: true,
                 ),
               ],
@@ -148,6 +223,7 @@ class FileDetailSheet extends StatelessWidget {
           const SizedBox(height: 28),
           const Divider(height: 1),
           const SizedBox(height: 20),
+
 
           // Detailed Metadata List
           _DetailRow(label: 'Type', value: file.mimeType),
@@ -169,18 +245,22 @@ class _ActionButton extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
   final bool isDestructive;
+  final bool isSuccess;
 
   const _ActionButton({
     required this.icon,
     required this.label,
     required this.onTap,
     this.isDestructive = false,
+    this.isSuccess = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
-    final color = isDestructive ? colors.error : colors.textPrimary;
+    final color = isDestructive
+        ? colors.error
+        : (isSuccess ? colors.success : colors.textPrimary);
     final borderRadius = BorderRadius.circular(16);
 
     return Padding(
@@ -200,7 +280,9 @@ class _ActionButton extends StatelessWidget {
                 Material(
                   color: isDestructive
                       ? colors.error.withValues(alpha: 0.12)
-                      : colors.bgSurfaceInset,
+                      : (isSuccess
+                          ? colors.success.withValues(alpha: 0.12)
+                          : colors.bgSurfaceInset),
                   borderRadius: BorderRadius.circular(14),
                   clipBehavior: Clip.antiAlias,
                   child: SizedBox(
@@ -228,6 +310,7 @@ class _ActionButton extends StatelessWidget {
     );
   }
 }
+
 
 class _DetailRow extends StatelessWidget {
   final String label;

@@ -11,3 +11,12 @@ Future<bool> deleteLocalFileIfExists(String path) async {
   await file.delete();
   return true;
 }
+
+bool checkLocalFileExists(String path) {
+  try {
+    return File(path).existsSync();
+  } catch (_) {
+    return false;
+  }
+}
+

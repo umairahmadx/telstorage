@@ -4,10 +4,12 @@
  */
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../core/navigation/navigation_intent.dart';
 import '../../core/services/service_locator.dart';
 import '../../core/theme/app_icons.dart';
 import '../../core/theme/app_theme.dart';
+
 
 /// Navigation drawer widget providing primary application destinations.
 class AppDrawer extends StatelessWidget {
@@ -191,7 +193,10 @@ class _DrawerItem extends StatelessWidget {
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
           ),
         ),
-        onTap: onTap,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
       ),
     );
   }

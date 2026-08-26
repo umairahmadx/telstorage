@@ -4,6 +4,7 @@
  */
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:open_file/open_file.dart';
 import 'package:share_plus/share_plus.dart';
@@ -85,14 +86,55 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   /// Triggers local file opening via platform handler.
   void _openFile(String? localPath) {
     if (localPath != null && localPath.isNotEmpty) {
+      HapticFeedback.lightImpact();
       OpenFile.open(localPath);
     }
   }
 
+  /// Copies share URL to clipboard.
+  Future<void> _copyUrl(String url) async {
+    HapticFeedback.lightImpact();
+    await Clipboard.setData(ClipboardData(text: url));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Share link copied to clipboard!'),
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
   /// Shares link or file externally using system share sheet.
   void _shareUrl(String url) {
+    HapticFeedback.lightImpact();
     SharePlus.instance.share(ShareParams(text: url));
   }
+
+  /// Deletes and expires the share link remotely and locally.
+  Future<void> _deleteShareLink(String fileId, String fileName) async {
+    HapticFeedback.heavyImpact();
+    final ok = await AppDialogs.showConfirm(
+      context,
+      title: 'Delete Share Link?',
+      message: 'Are you sure you want to expire and delete the share link for "$fileName"?',
+      confirmText: 'Delete Link',
+      isDestructive: true,
+    );
+    if (ok == true && mounted) {
+      HapticFeedback.heavyImpact();
+      await context.read<TransferCubit>().deleteShareJob(fileId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Share link deleted and expired.'),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
 
   /// Displays share configuration modal for a downloaded file.
   void _showShareSheet(FileRecord file) {
@@ -280,15 +322,29 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                           icon: Icon(Icons.share_outlined,
                               color: colors.textSecondary, size: 20),
                           onPressed: () {
+                            HapticFeedback.lightImpact();
                             if (file != null) _showShareSheet(file);
                           },
                         ),
                         IconButton(
                           icon: Icon(Icons.delete_outline_rounded,
                               color: colors.error, size: 20),
-                          onPressed: () => context
-                              .read<TransferCubit>()
-                              .deleteDownloadedFile(job.fileId),
+                          onPressed: () async {
+                            HapticFeedback.heavyImpact();
+                            final ok = await AppDialogs.showConfirm(
+                              context,
+                              title: 'Delete Downloaded File?',
+                              message: 'Are you sure you want to remove "${job.name}" from device storage?',
+                              confirmText: 'Delete',
+                              isDestructive: true,
+                            );
+                            if (ok == true && mounted) {
+                              HapticFeedback.heavyImpact();
+                              context
+                                  .read<TransferCubit>()
+                                  .deleteDownloadedFile(job.fileId);
+                            }
+                          },
                         ),
                       ],
                     ),
@@ -303,11 +359,17 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                 ...uploadFiles.map(
                   (file) => AppFileTile(
                     file: file,
-                    onTap: () => _showShareSheet(file),
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      _showShareSheet(file);
+                    },
                     trailing: IconButton(
                       icon: Icon(Icons.share_outlined,
                           color: colors.textSecondary, size: 20),
-                      onPressed: () => _showShareSheet(file),
+                      onPressed: () {
+                        HapticFeedback.lightImpact();
+                        _showShareSheet(file);
+                      },
                     ),
                   ),
                 ),
@@ -344,10 +406,28 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                             color: colors.textSecondary, fontSize: 12),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis),
-                    trailing: IconButton(
-                      icon: Icon(Icons.copy_rounded,
-                          color: colors.accentPrimary, size: 20),
-                      onPressed: () => _shareUrl(url),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.copy_rounded,
+                              color: colors.accentPrimary, size: 20),
+                          tooltip: 'Copy Link',
+                          onPressed: () => _copyUrl(url),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.share_outlined,
+                              color: colors.textSecondary, size: 20),
+                          tooltip: 'Share',
+                          onPressed: () => _shareUrl(url),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.link_off_rounded,
+                              color: colors.error, size: 20),
+                          tooltip: 'Delete Link',
+                          onPressed: () => _deleteShareLink(job.fileId, name),
+                        ),
+                      ],
                     ),
                   );
                 }),

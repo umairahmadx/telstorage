@@ -107,7 +107,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Triggers file download through ViewModel.
   Future<void> _downloadFile(FileRecord file) async {
+    HapticFeedback.mediumImpact();
     await context.read<HomeCubit>().downloadFile(file);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Downloading ${file.name}…'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   @override

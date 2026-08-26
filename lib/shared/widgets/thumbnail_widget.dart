@@ -177,7 +177,9 @@ class _ThumbnailWidgetState extends State<ThumbnailWidget> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.file.fileId != widget.file.fileId ||
         oldWidget.file.thumbnailFileId != widget.file.thumbnailFileId) {
-      _initThumbnail();
+      setState(() {
+        _initThumbnail();
+      });
     }
   }
 
@@ -186,25 +188,23 @@ class _ThumbnailWidgetState extends State<ThumbnailWidget> {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
 
     // 1. Instant Synchronous LRU Memory Hit (0ms latency, zero flicker)
-    if (widget.file.thumbnailFileId != null) {
-      Uint8List? memoryBytes;
-      try {
-        memoryBytes = ServiceLocator.instance.thumbnailRepository
-            .getMemoryCachedBytes(widget.file.fileId);
-      } catch (_) {}
+    Uint8List? memoryBytes;
+    try {
+      memoryBytes = ServiceLocator.instance.thumbnailRepository
+          .getMemoryCachedBytes(widget.file.fileId);
+    } catch (_) {}
 
-      if (memoryBytes != null) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.memory(
-            memoryBytes,
-            width: widget.width,
-            height: widget.height,
-            fit: widget.fit,
-            errorBuilder: (_, __, ___) => _buildThumbnailerFallback(colors),
-          ),
-        );
-      }
+    if (memoryBytes != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.memory(
+          memoryBytes,
+          width: widget.width,
+          height: widget.height,
+          fit: widget.fit,
+          errorBuilder: (_, __, ___) => _buildThumbnailerFallback(colors),
+        ),
+      );
     }
 
     // 2. For files with uploaded thumbnails (Async path)

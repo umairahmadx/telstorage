@@ -4,6 +4,7 @@
  */
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/theme/app_theme.dart';
 
@@ -47,8 +48,12 @@ class AppSegmentedControl<T> extends StatelessWidget {
             final isSelected = segment.value == value;
             return Expanded(
               child: GestureDetector(
-                onTap: () => onChanged(segment.value),
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  onChanged(segment.value);
+                },
                 child: Container(
+
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: isSelected

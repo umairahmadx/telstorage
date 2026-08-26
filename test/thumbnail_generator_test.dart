@@ -163,5 +163,28 @@ class MyApp extends StatelessWidget {
       expect(result!.extension, 'webp');
       expect(result.bytes.length, lessThanOrEqualTo(ThumbnailGenerator.maxByteSize));
     });
+
+    test('TC-14: ThumbnailGenerator extracts embedded JPEG from HEIC file', () async {
+      final innerImage = img.Image(width: 200, height: 200);
+      final jpegBytes = img.encodeJpg(innerImage);
+
+      // Construct a mock HEIC container with dummy ftyp box prefix followed by valid JPEG bytes
+      final mockHeicBytes = Uint8List.fromList([
+        0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63, // ftypheic box
+        0x00, 0x00, 0x00, 0x00,
+        ...jpegBytes,
+        0x00, 0x00, 0x00, 0x08, 0x6D, 0x65, 0x74, 0x61, // meta box trailing
+      ]);
+
+      final result = await ThumbnailGenerator.generate(
+        bytes: mockHeicBytes,
+        filename: 'photo.heic',
+        mimeType: 'image/heic',
+      );
+
+      expect(result, isNotNull);
+      expect(result!.extension, 'webp');
+      expect(result.bytes.length, lessThanOrEqualTo(ThumbnailGenerator.maxByteSize));
+    });
   });
 }

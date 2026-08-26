@@ -99,6 +99,8 @@ class FileManagerService {
 
     final meta = await _meta.fetch();
     meta.folders.removeWhere((f) => idsToDelete.contains(f.id));
+    meta.recentFiles.removeWhere(
+        (f) => f.folderId != null && idsToDelete.contains(f.folderId));
 
     await _meta.update(meta);
     for (final id in idsToDelete) {
@@ -210,31 +212,49 @@ class FileManagerService {
     final record = _hive.getFile(fileId);
     if (record == null) return;
 
-    late Map<String, dynamic> fileMeta;
-    try {
-      fileMeta = await _fetchFileMeta(
-        record.metadataMessageId,
-        record.metadataFileId,
-      );
-    } catch (e) {
-      AppLogger.w(
-          'Could not fetch metadata for $fileId — deleting from cache only. Error: $e',
-          tag: 'FileManager');
-      await _hive.deleteFile(fileId);
-      return;
+    Map<String, dynamic>? fileMeta;
+    if (record.metadataFileId != null && record.metadataFileId!.isNotEmpty) {
+      try {
+        fileMeta = await _fetchFileMeta(
+          record.metadataMessageId,
+          record.metadataFileId,
+        );
+      } catch (e) {
+        AppLogger.w(
+            'Could not fetch remote chunk metadata for $fileId: $e',
+            tag: 'FileManager');
+      }
     }
 
-    final chunks = fileMeta['chunks'] as List? ?? [];
-    for (final chunk in chunks) {
+    if (fileMeta != null) {
+      final chunks = fileMeta['chunks'] as List? ?? [];
+      for (final chunk in chunks) {
+        try {
+          await _telegram.deleteMessage(chunk['message_id'] as int);
+        } catch (_) {}
+      }
+    }
+
+    if (record.metadataMessageId > 0) {
       try {
-        await _telegram.deleteMessage(chunk['message_id'] as int);
+        await _telegram.deleteMessage(record.metadataMessageId);
       } catch (_) {}
     }
 
-    await _telegram.deleteMessage(record.metadataMessageId);
-
-    final meta = await _meta.fetch();
-    await _meta.removeFile(meta, fileId, record.sizeMb, record.mimeType, folderId: record.folderId);
+    try {
+      final meta = await _meta.fetch();
+      await _meta.removeFile(
+        meta,
+        fileId,
+        record.sizeMb,
+        record.mimeType,
+        folderId: record.folderId,
+      );
+    } catch (e) {
+      AppLogger.w(
+          'Could not remove file $fileId from remote partition: $e',
+          tag: 'FileManager');
+    }
 
     await _hive.deleteFile(fileId);
     AppLogger.i('File $fileId deleted successfully', tag: 'FileManager');

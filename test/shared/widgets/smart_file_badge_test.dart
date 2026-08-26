@@ -67,5 +67,25 @@ void main() {
       expect(badge.label, 'FILE');
       expect(badge.iconColor, darkColors.textSecondary);
     });
+
+    testWidgets('TC-18: Image extensions HEIC, PNG, JPG, and WEBP resolve to respective tags', (tester) async {
+      final darkColors = AppTheme.dark().extension<AppColorsExtension>()!;
+
+      final heicBadge = SmartBadgeInfo.resolve('photo.heic', 'image/heic', darkColors);
+      expect(heicBadge.label, 'HEIC');
+      expect(heicBadge.iconColor, darkColors.accentPrimary);
+
+      final pngBadge = SmartBadgeInfo.resolve('screenshot.png', 'image/png', darkColors);
+      expect(pngBadge.label, 'PNG');
+      expect(pngBadge.iconColor, darkColors.accentPrimary);
+
+      final jpgBadge = SmartBadgeInfo.resolve('vacation.jpg', 'image/jpeg', darkColors);
+      expect(jpgBadge.label, 'JPG');
+      expect(jpgBadge.iconColor, darkColors.accentPrimary);
+
+      final webpBadge = SmartBadgeInfo.resolve('sticker.webp', 'image/webp', darkColors);
+      expect(webpBadge.label, 'WEBP');
+      expect(webpBadge.iconColor, darkColors.accentPrimary);
+    });
   });
 }

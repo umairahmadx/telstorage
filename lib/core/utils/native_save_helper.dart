@@ -8,11 +8,9 @@
 
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:open_file/open_file.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:share_plus/share_plus.dart';
 import 'app_logger.dart';
 import 'file_category_helper.dart';
 
@@ -62,11 +60,6 @@ Future<NativeSaveResult> _saveAndroid(Uint8List bytes, String filename) async {
     await file.writeAsBytes(bytes);
     AppLogger.i('Android: saved to ${file.path}', tag: 'SaveHelper');
 
-    // Try to open the file — allows user to see it immediately
-    try {
-      await OpenFile.open(file.path);
-    } catch (_) {}
-
     return NativeSaveResult(
       success: true,
       savedPath: file.path,
@@ -107,18 +100,10 @@ Future<NativeSaveResult> _saveIos(Uint8List bytes, String filename) async {
     await file.writeAsBytes(bytes);
     AppLogger.i('iOS: saved to ${file.path}', tag: 'SaveHelper');
 
-    // Show share sheet so user can "Save to Files", "Save to Photos", AirDrop…
-    await SharePlus.instance.share(
-      ShareParams(
-        files: [XFile(file.path, name: filename)],
-        text: 'Downloaded from TelStorage',
-      ),
-    );
-
     return NativeSaveResult(
       success: true,
       savedPath: file.path,
-      message: '✅ File ready — use the share sheet to save to Files or Photos.',
+      message: '✅ Saved to Files: TelStorage/$subfolder/$filename',
     );
   } catch (e) {
     return NativeSaveResult(success: false, message: '❌ Save failed: $e');
@@ -137,9 +122,6 @@ Future<NativeSaveResult> _saveDesktop(Uint8List bytes, String filename) async {
 
     final file = File(p.join(targetDir.path, filename));
     await file.writeAsBytes(bytes);
-    try {
-      await OpenFile.open(file.path);
-    } catch (_) {}
     return NativeSaveResult(
       success: true,
       savedPath: file.path,

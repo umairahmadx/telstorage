@@ -1,6 +1,6 @@
 /*
  * File: upload_service.dart
- * Description: Component and logic definition for upload_service.dart in TelStorage.
+ * Description: Handles chunked and streaming uploads to Telegram, local thumbnail caching, and metadata indexing.
  */
 
 import 'dart:convert';
@@ -18,6 +18,8 @@ import '../models/pending_action.dart';
 import '../utils/app_logger.dart';
 import '../utils/connectivity.dart';
 import '../utils/thumbnail_generator.dart';
+import '../utils/thumbnail_helper_native.dart'
+    if (dart.library.js_interop) '../utils/thumbnail_helper_web.dart';
 import 'hive_service.dart';
 import 'metadata_service.dart';
 import 'notification_service.dart';
@@ -26,6 +28,7 @@ import 'telegram_service.dart';
 import 'transfer_queue_service.dart';
 import '../models/transfer_task.dart';
 import '../events/domain_event_bus.dart';
+import 'upload_service_contract.dart';
 
 /// Handles file upload pipeline — non-blocking on Flutter web (single JS thread).
 ///
@@ -33,8 +36,6 @@ import '../events/domain_event_bus.dart';
 ///   • Files ≤ 19 MB  →  upload directly as original filename.
 ///   • Files > 19 MB  →  wrap in ZIP (STORE mode, no DEFLATE compression) →
 ///                        split into 19 MB parts → upload each as name.zip.001…
-import 'upload_service_contract.dart';
-
 ///
 /// SHA-256 is computed in 1 MB chunks with event-loop yields between each
 /// chunk so the UI never freezes.  ZIP uses STORE mode which is near-instant
@@ -125,7 +126,10 @@ class UploadService implements UploadServiceContract {
 
       // ── Step 1.2: Check for SHA-256 Deduplication ──────────────────────────
       final existingFile = _hive.allFiles.firstWhere(
-        (f) => f.sha256Hash == hash && (f.sizeMb - sizeMb).abs() < 0.01 && f.metadataFileId != null,
+        (f) =>
+            f.sha256Hash == hash &&
+            (f.sizeMb - sizeMb).abs() < 0.01 &&
+            f.metadataFileId != null,
         orElse: () => FileRecord(
           fileId: '',
           name: '',
@@ -140,8 +144,10 @@ class UploadService implements UploadServiceContract {
         ),
       );
 
-      if (existingFile.fileId.isNotEmpty && existingFile.metadataFileId != null) {
-        AppLogger.i('Duplicate file hash detected for $name — linking existing remote chunks instantly!',
+      if (existingFile.fileId.isNotEmpty &&
+          existingFile.metadataFileId != null) {
+        AppLogger.i(
+            'Duplicate file hash detected for $name — linking existing remote chunks instantly!',
             tag: 'UploadService');
         internalOnProgress(0.90, 'Instant deduplication copy…');
 
@@ -156,7 +162,8 @@ class UploadService implements UploadServiceContract {
           'uploaded_at': DateTime.now().toIso8601String(),
           'metadata_message_id': existingFile.metadataMessageId,
           'metadata_file_id': existingFile.metadataFileId,
-          if (existingFile.thumbnailFileId != null) 'thumbnail_file_id': existingFile.thumbnailFileId,
+          if (existingFile.thumbnailFileId != null)
+            'thumbnail_file_id': existingFile.thumbnailFileId,
         };
 
         final savedFile = FileRecord.fromMap(fileMeta);
@@ -171,7 +178,8 @@ class UploadService implements UploadServiceContract {
         }
 
         internalOnProgress(1.0, 'Upload complete (Instant Deduplication)!');
-        TransferQueueService.instance.updateTask(fileId, status: TransferStatus.completed);
+        TransferQueueService.instance
+            .updateTask(fileId, status: TransferStatus.completed);
 
         await NotificationService.instance.showCompletionNotification(
           title: 'Instant Upload Complete',
@@ -193,6 +201,12 @@ class UploadService implements UploadServiceContract {
         );
 
         if (thumbResult != null) {
+          try {
+            ServiceLocator.instance.thumbnailRepository
+                .addToMemoryCache(fileId, thumbResult.bytes);
+            await ThumbnailHelper.cacheThumbnail(fileId, thumbResult.bytes);
+          } catch (_) {}
+
           internalOnProgress(0.10, 'Uploading thumbnail…');
           final thumbUpload = await _telegram.uploadBytesWithFileId(
             thumbResult.bytes,
@@ -212,8 +226,8 @@ class UploadService implements UploadServiceContract {
         internalOnProgress(0.12, 'Uploading "$name"…');
         AppLogger.d('Small file — uploading directly', tag: 'UploadService');
 
-        final result =
-            await _withRetry(() => _telegram.uploadBytesWithFileId(bytes, name));
+        final result = await _withRetry(
+            () => _telegram.uploadBytesWithFileId(bytes, name));
         chunkInfos.add(ChunkInfo(
           index: 1,
           messageId: result['message_id'] as int,
@@ -310,7 +324,8 @@ class UploadService implements UploadServiceContract {
           final appMeta = await _metadata.fetch();
           await _metadata.addFile(appMeta, fileMeta);
         } catch (e) {
-          AppLogger.w('Direct metadata index update failed ($e), enqueuing background sync action',
+          AppLogger.w(
+              'Direct metadata index update failed ($e), enqueuing background sync action',
               tag: 'UploadService');
           final pending = PendingAction(
             id: const Uuid().v4(),
@@ -319,7 +334,8 @@ class UploadService implements UploadServiceContract {
             timestamp: DateTime.now(),
           );
           if (Hive.isBoxOpen(AppConstants.pendingActionsBox)) {
-            await Hive.box<PendingAction>(AppConstants.pendingActionsBox).put(pending.id, pending);
+            await Hive.box<PendingAction>(AppConstants.pendingActionsBox)
+                .put(pending.id, pending);
             ServiceLocator.instance.syncQueue.processQueue();
           }
         }

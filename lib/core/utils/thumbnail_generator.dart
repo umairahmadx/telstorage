@@ -165,8 +165,33 @@ class ThumbnailGenerator {
     return null;
   }
 
+  /// Attempts to extract an embedded JPEG preview stream from HEIC/HEIF or EXIF container bytes.
+  static Uint8List? _extractEmbeddedJpegFromHeic(Uint8List bytes) {
+  try {
+    final int searchLimit = bytes.length > 500000 ? 500000 : bytes.length;
+    for (int i = 0; i < searchLimit - 4; i++) {
+      if (bytes[i] == 0xFF && bytes[i + 1] == 0xD8 && bytes[i + 2] == 0xFF) {
+        final maxScan = (i + 300000).clamp(0, bytes.length - 1);
+        for (int j = i + 100; j < maxScan; j++) {
+          if (bytes[j] == 0xFF && bytes[j + 1] == 0xD9) {
+            final candidate = bytes.sublist(i, j + 2);
+            if (candidate.length >= 1024) {
+              final decoded = img.decodeJpg(candidate);
+              if (decoded != null && decoded.width >= 50 && decoded.height >= 50) {
+                return _isolateProcessImage(candidate);
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
   /// Generates image thumbnail scaled proportionally to max 400px preserving original aspect ratio.
   static Future<Uint8List?> generateImageThumbnail(Uint8List bytes) async {
+    // 1. Primary: Standard decode via isolate
     try {
       final isolateResult = await compute(_isolateProcessImage, bytes);
       if (isolateResult != null && isolateResult.length <= maxByteSize) {
@@ -174,6 +199,15 @@ class ThumbnailGenerator {
       }
     } catch (_) {}
 
+    // 2. Secondary: Embedded JPEG preview extraction (e.g. for HEIC/HEIF container images)
+    try {
+      final embedded = _extractEmbeddedJpegFromHeic(bytes);
+      if (embedded != null && embedded.length <= maxByteSize) {
+        return embedded;
+      }
+    } catch (_) {}
+
+    // 3. Tertiary: Native platform codec (works on Apple and Android devices supporting HEIC)
     try {
       final ui.Codec codec = await ui.instantiateImageCodec(
         bytes,

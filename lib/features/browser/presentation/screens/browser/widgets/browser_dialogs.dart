@@ -4,8 +4,10 @@
  */
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:telstorage/core/models/file_record.dart';
+
 import 'package:telstorage/core/models/folder_record.dart';
 import 'package:telstorage/core/services/service_locator.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
@@ -132,6 +134,7 @@ abstract final class BrowserDialogs {
               leading: Icon(Icons.drive_file_rename_outline_rounded, color: colors.textPrimary),
               title: Text('Rename', style: TextStyle(color: colors.textPrimary)),
               onTap: () {
+                HapticFeedback.selectionClick();
                 Navigator.pop(ctx);
                 renameFolder(context, folder);
               },
@@ -140,6 +143,7 @@ abstract final class BrowserDialogs {
               leading: Icon(Icons.drive_file_move_outlined, color: colors.textPrimary),
               title: Text('Move', style: TextStyle(color: colors.textPrimary)),
               onTap: () {
+                HapticFeedback.selectionClick();
                 Navigator.pop(ctx);
                 context.read<BrowserBloc>().add(SetClipboard(
                       mode: ClipboardMode.move,
@@ -153,6 +157,7 @@ abstract final class BrowserDialogs {
               leading: Icon(Icons.content_copy_rounded, color: colors.textPrimary),
               title: Text('Copy', style: TextStyle(color: colors.textPrimary)),
               onTap: () {
+                HapticFeedback.selectionClick();
                 Navigator.pop(ctx);
                 context.read<BrowserBloc>().add(SetClipboard(
                       mode: ClipboardMode.copy,
@@ -166,6 +171,7 @@ abstract final class BrowserDialogs {
               leading: Icon(Icons.delete_outline_rounded, color: colors.error),
               title: Text('Delete', style: TextStyle(color: colors.error)),
               onTap: () {
+                HapticFeedback.heavyImpact();
                 Navigator.pop(ctx);
                 deleteFolder(context, folder);
               },

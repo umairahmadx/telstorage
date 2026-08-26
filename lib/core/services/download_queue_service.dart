@@ -51,8 +51,23 @@ class DownloadQueueService {
   List<DownloadJob> get completedJobs =>
       _box.values.where((j) => j.status == 'completed').toList();
 
+  /// Returns the local path if file has been completed and exists on disk, otherwise null.
+  String? getCompletedPath(String fileId) {
+    final job = _box.get(fileId);
+    if (job != null && job.isComplete && job.localPath != null) {
+      if (checkLocalFileExists(job.localPath!)) {
+        return job.localPath;
+      }
+    }
+    return null;
+  }
+
+  /// Check if a file is already downloaded and exists locally.
+  bool isFileDownloaded(String fileId) => getCompletedPath(fileId) != null;
+
   /// Clears all completed download job records.
   Future<void> clearCompleted() async {
+
     final completed = completedJobs;
     for (final job in completed) {
       await _box.delete(job.fileId);

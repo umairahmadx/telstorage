@@ -460,6 +460,7 @@ class StorageRepository implements StorageRepositoryContract {
         'metadataFileId': record.metadataFileId,
         'sizeMb': record.sizeMb,
         'mimeType': record.mimeType,
+        'folderId': record.folderId,
       };
 
       await _hive.deleteFile(fileId);

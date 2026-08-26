@@ -51,7 +51,16 @@ class MetadataPartitionService {
     String folderId,
     List<FileRef> newRefs,
   ) async {
-    final existingPartition = LruFolderCacheService.instance.get(folderId) ??
+    FolderPartition? existingPartition =
+        LruFolderCacheService.instance.get(folderId);
+    if (existingPartition == null &&
+        meta.folderPartitionsMap.containsKey(folderId)) {
+      try {
+        existingPartition =
+            await fetchFolderPartition(folderId, () async => meta);
+      } catch (_) {}
+    }
+    existingPartition ??=
         FolderPartition(folderId: folderId, messageId: 0, files: []);
 
     final updatedFiles = List<FileRef>.from(existingPartition.files);

@@ -153,6 +153,7 @@ class MobileShellState extends State<MobileShell> {
 
   /// Shows floating add/upload modal action bottom sheet.
   void _showAddMenu() {
+    HapticFeedback.mediumImpact();
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
     showModalBottomSheet(
       context: context,
@@ -183,6 +184,7 @@ class MobileShellState extends State<MobileShell> {
                   label: 'Upload File',
                   color: AppTheme.primary,
                   onTap: () {
+                    HapticFeedback.selectionClick();
                     Navigator.pop(ctx);
                     _pickAndUpload();
                   },
@@ -193,6 +195,7 @@ class MobileShellState extends State<MobileShell> {
                     label: 'New Folder',
                     color: AppTheme.warning,
                     onTap: () {
+                      HapticFeedback.selectionClick();
                       Navigator.pop(ctx);
                       _showCreateFolderDialog();
                     },

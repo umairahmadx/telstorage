@@ -4,3 +4,6 @@
  */
 
 Future<bool> deleteLocalFileIfExists(String path) async => false;
+
+bool checkLocalFileExists(String path) => false;
+

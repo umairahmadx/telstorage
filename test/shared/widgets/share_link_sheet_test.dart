@@ -75,6 +75,8 @@ void main() {
 
       // Verify Copy Link button is present
       expect(find.text('Copy Link'), findsOneWidget);
+      expect(find.text('Share'), findsOneWidget);
+      expect(find.text('Delete Link (Expire Now)'), findsOneWidget);
       expect(find.text('Get URL'), findsNothing);
 
       // Verify active link card displays URL

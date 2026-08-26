@@ -36,11 +36,25 @@ class SyncQueueService {
   bool _isFlushing = false;
   Timer? _debounceTimer;
   DateTime? _firstUnflushedAt;
+  Timer? _periodicTimer;
   final ValueNotifier<int> pendingCountNotifier = ValueNotifier<int>(0);
   final ValueNotifier<List<SyncLogItem>> logsNotifier = ValueNotifier<List<SyncLogItem>>([]);
 
   SyncQueueService(this._fileManager) {
     _updatePendingCount();
+    _periodicTimer = Timer.periodic(
+      const Duration(seconds: AppConstants.syncIntervalSeconds),
+      (_) {
+        if (pendingCount > 0 && !_isProcessing) {
+          processQueue();
+        }
+      },
+    );
+  }
+
+  void dispose() {
+    _debounceTimer?.cancel();
+    _periodicTimer?.cancel();
   }
 
   Box<PendingAction> get _pendingBox =>
@@ -265,12 +279,14 @@ class SyncQueueService {
         final metadataFileId = payload['metadataFileId'] as String?;
         final sizeMb = (payload['sizeMb'] as num?)?.toDouble() ?? 0.0;
         final mimeType = (payload['mimeType'] as String?) ?? 'application/octet-stream';
+        final folderId = payload['folderId'] as String?;
         await _fileManager.deleteFileRemoteOnly(
           fileId: fileId,
           metadataMessageId: metadataMessageId,
           metadataFileId: metadataFileId,
           sizeMb: sizeMb,
           mimeType: mimeType,
+          folderId: folderId,
         );
         break;
 

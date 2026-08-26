@@ -34,8 +34,6 @@ class _SplashScreenState extends State<SplashScreen>
 
   /// Verifies active session and routes user accordingly.
   Future<void> _checkAuth() async {
-    await Future.delayed(const Duration(seconds: 2));
-
     final isLoggedIn = await AuthService.instance.isLoggedIn();
 
     if (!mounted) return;
@@ -124,13 +122,13 @@ class _SplashScreenState extends State<SplashScreen>
                     )
                         .animate()
                         .fadeIn(
-                          duration: 600.ms,
+                          duration: 400.ms,
                           curve: Curves.easeOutCubic,
                         )
                         .scale(
                           begin: const Offset(0.8, 0.8),
                           end: const Offset(1.0, 1.0),
-                          duration: 600.ms,
+                          duration: 400.ms,
                           curve: Curves.easeOutCubic,
                         ),
                     const SizedBox(height: 28),
@@ -147,14 +145,12 @@ class _SplashScreenState extends State<SplashScreen>
                     )
                         .animate()
                         .fadeIn(
-                          delay: 300.ms,
-                          duration: 500.ms,
+                          duration: 400.ms,
                         )
                         .slideY(
-                          begin: 0.3,
+                          begin: 0.2,
                           end: 0,
-                          delay: 300.ms,
-                          duration: 500.ms,
+                          duration: 400.ms,
                           curve: Curves.easeOutCubic,
                         ),
                     const SizedBox(height: 8),
@@ -171,14 +167,12 @@ class _SplashScreenState extends State<SplashScreen>
                     )
                         .animate()
                         .fadeIn(
-                          delay: 500.ms,
-                          duration: 500.ms,
+                          duration: 400.ms,
                         )
                         .slideY(
-                          begin: 0.3,
+                          begin: 0.2,
                           end: 0,
-                          delay: 500.ms,
-                          duration: 500.ms,
+                          duration: 400.ms,
                           curve: Curves.easeOutCubic,
                         ),
                     const SizedBox(height: 56),
@@ -194,8 +188,7 @@ class _SplashScreenState extends State<SplashScreen>
                         ),
                       ),
                     ).animate().fadeIn(
-                          delay: 800.ms,
-                          duration: 400.ms,
+                          duration: 300.ms,
                         ),
                   ],
                 ),

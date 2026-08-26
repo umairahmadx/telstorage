@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:open_file/open_file.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:telstorage/core/models/download_job.dart';
 import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/models/transfer_task.dart';
 import 'package:telstorage/core/navigation/navigation_intent.dart';
@@ -135,10 +136,27 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     }
   }
 
+  /// Deletes downloaded file from device storage after confirmation.
+  Future<void> _deleteDownloadedFile(DownloadJob job) async {
+    HapticFeedback.heavyImpact();
+    final ok = await AppDialogs.showConfirm(
+      context,
+      title: 'Delete Downloaded File?',
+      message: 'Are you sure you want to remove "${job.name}" from device storage?',
+      confirmText: 'Delete',
+      isDestructive: true,
+    );
+    if (ok == true && mounted) {
+      HapticFeedback.heavyImpact();
+      if (!mounted) return;
+      context.read<TransferCubit>().deleteDownloadedFile(job.fileId);
+    }
+  }
 
   /// Displays share configuration modal for a downloaded file.
   void _showShareSheet(FileRecord file) {
     final existing = context.read<TransferCubit>().getShareJob(file.fileId);
+
 
     showModalBottomSheet(
       context: context,
@@ -329,22 +347,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                         IconButton(
                           icon: Icon(Icons.delete_outline_rounded,
                               color: colors.error, size: 20),
-                          onPressed: () async {
-                            HapticFeedback.heavyImpact();
-                            final ok = await AppDialogs.showConfirm(
-                              context,
-                              title: 'Delete Downloaded File?',
-                              message: 'Are you sure you want to remove "${job.name}" from device storage?',
-                              confirmText: 'Delete',
-                              isDestructive: true,
-                            );
-                            if (ok == true && mounted) {
-                              HapticFeedback.heavyImpact();
-                              context
-                                  .read<TransferCubit>()
-                                  .deleteDownloadedFile(job.fileId);
-                            }
-                          },
+                          onPressed: () => _deleteDownloadedFile(job),
                         ),
                       ],
                     ),

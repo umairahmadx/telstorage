@@ -219,14 +219,16 @@ class TransferCubit extends Cubit<TransferState> {
 
   @override
   Future<void> close() {
-    ServiceLocator.instance.transferQueue.tasksNotifier
-        .removeListener(_onTasksChanged);
-    ServiceLocator.instance.downloadQueue.listenable
-        .removeListener(_onDownloadsChanged);
-    ServiceLocator.instance.webShareQueue.listenable
-        .removeListener(_onSharesChanged);
-    ServiceLocator.instance.hive.filesListenable
-        .removeListener(_onFilesChanged);
+    if (_isSubscribed) {
+      ServiceLocator.instance.transferQueue.tasksNotifier
+          .removeListener(_onTasksChanged);
+      ServiceLocator.instance.downloadQueue.listenable
+          .removeListener(_onDownloadsChanged);
+      ServiceLocator.instance.webShareQueue.listenable
+          .removeListener(_onSharesChanged);
+      ServiceLocator.instance.hive.filesListenable
+          .removeListener(_onFilesChanged);
+    }
     return super.close();
   }
 }

@@ -255,7 +255,16 @@ class WebShareQueueService {
         payload: 'transfer_share',
         actions: [
           if (current.shareUrl != null)
-            AndroidNotificationAction('copy_${current.fileId}', 'Copy Link'),
+            AndroidNotificationAction(
+              'copy_url:${current.shareUrl}',
+              'Copy Link',
+              showsUserInterface: true,
+            ),
+          const AndroidNotificationAction(
+            'view_shared',
+            'View Shares',
+            showsUserInterface: true,
+          ),
         ],
       );
 
@@ -330,6 +339,7 @@ class WebShareQueueService {
         await NotificationService.instance.showCompletionNotification(
           title: 'Share Failed',
           body: 'Failed to share ${current.name}: $e',
+          payload: 'transfer_share',
         );
       }
     }

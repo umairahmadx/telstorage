@@ -6,13 +6,13 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:telstorage/core/events/domain_event_bus.dart';
-import 'package:telstorage/core/models/file_record.dart';
-import 'package:telstorage/core/models/folder_record.dart';
 import 'package:telstorage/core/services/service_locator.dart';
 import 'package:telstorage/core/utils/connectivity.dart';
 import 'package:telstorage/features/storage/domain/repositories/storage_repository_contract.dart';
+import 'browser_batch_helper.dart';
 import 'browser_event.dart';
 import 'browser_filter_helper.dart';
+import 'browser_mutation_helper.dart';
 import 'browser_state.dart';
 
 export 'browser_event.dart';
@@ -20,16 +20,9 @@ export 'browser_state.dart';
 
 /// ViewModel orchestrating file and folder navigation, search, and operations.
 class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
-  /// Internal repository reference.
   final StorageRepositoryContract _repository;
-
-  /// Subscription to Hive folders database.
   StreamSubscription? _foldersSubscription;
-
-  /// Subscription to Hive files database.
   StreamSubscription? _filesSubscription;
-
-  /// Subscription to global domain event bus.
   StreamSubscription? _domainEventSubscription;
 
   /// Constructs BrowserBloc and registers event handlers.
@@ -42,9 +35,13 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
     on<GroupOptionChanged>(_onGroupOptionChanged);
     on<ToggleViewMode>(_onToggleViewMode);
     on<ToggleItemSelection>(_onToggleItemSelection);
+    on<ToggleSelectAll>(_onToggleSelectAll);
     on<ClearSelection>(_onClearSelection);
     on<EnqueueDownload>(_onEnqueueDownload);
     on<EnqueueShare>(_onEnqueueShare);
+    on<BatchDownload>(_onBatchDownload);
+    on<DownloadFolder>(_onDownloadFolder);
+    on<ExportFolderAsZip>(_onExportFolderAsZip);
     on<NavigateUp>(_onNavigateUp);
 
     // Mutation Handlers
@@ -71,27 +68,22 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
 
     _foldersSubscription = ServiceLocator.instance.hive.foldersListenable.value
         .watch()
-        .listen((_) {
-      if (state.isInitialized) {
-        add(LoadDirectory(
-            folderId: state.currentFolderId, category: state.category));
-      }
-    });
+        .listen((_) => _refreshIfInitialized());
     _filesSubscription = ServiceLocator.instance.hive.filesListenable.value
         .watch()
-        .listen((_) {
-      if (state.isInitialized) {
-        add(LoadDirectory(
-            folderId: state.currentFolderId, category: state.category));
-      }
-    });
-    _domainEventSubscription =
-        DomainEventBus.instance.on<FileUploadedEvent>().listen((_) {
-      if (state.isInitialized) {
-        add(LoadDirectory(
-            folderId: state.currentFolderId, category: state.category));
-      }
-    });
+        .listen((_) => _refreshIfInitialized());
+    _domainEventSubscription = DomainEventBus.instance
+        .on<FileUploadedEvent>()
+        .listen((_) => _refreshIfInitialized());
+  }
+
+  void _refreshIfInitialized() {
+    if (state.isInitialized) {
+      add(LoadDirectory(
+        folderId: state.currentFolderId,
+        category: state.category,
+      ));
+    }
   }
 
   /// Handles directory loading and offline synchronization check.
@@ -120,56 +112,32 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
 
   /// Reloads, filters, and sorts contents in current directory.
   void _reloadContents(Emitter<BrowserState> emit, {required bool isOffline}) {
-    final folderId = state.currentFolderId;
-    final category = state.category;
-
-    List<FolderRecord> rawFolders = [];
-    List<FileRecord> rawFiles = [];
-
-    if (category != null) {
-      rawFiles = _repository.getFiles(folderId)
-        ..retainWhere((f) => BrowserFilterHelper.matchesCategory(f, category));
-      rawFolders = [];
-    } else {
-      rawFolders = _repository.getFolders(folderId);
-      rawFiles = _repository.getFiles(folderId);
-    }
-
-    final q = state.searchQuery.toLowerCase();
-    if (q.isNotEmpty) {
-      rawFolders =
-          rawFolders.where((f) => f.name.toLowerCase().contains(q)).toList();
-      rawFiles =
-          rawFiles.where((f) => f.name.toLowerCase().contains(q)).toList();
-    }
-
-    BrowserFilterHelper.sortItems(
-        rawFolders, rawFiles, state.sortOption, state.sortAscending);
-
-    final Map<String, int> counts = {};
-    for (final f in rawFolders) {
-      counts[f.id] = _repository.getFilesInFolderCount(f.id);
-    }
+    final result = BrowserFilterHelper.loadAndFilterContents(
+      repository: _repository,
+      folderId: state.currentFolderId,
+      category: state.category,
+      searchQuery: state.searchQuery,
+      sortOption: state.sortOption,
+      sortAscending: state.sortAscending,
+    );
 
     emit(state.copyWith(
       isLoading: false,
       isInitialized: true,
-      folders: rawFolders,
-      files: rawFiles,
-      folderItemCounts: counts,
+      folders: result.folders,
+      files: result.files,
+      folderItemCounts: result.folderItemCounts,
       isOffline: isOffline,
       pendingActionsCount: ServiceLocator.instance.syncQueue.pendingCount,
     ));
   }
 
-  /// Updates search query and refreshes.
   void _onSearchQueryChanged(
       SearchQueryChanged event, Emitter<BrowserState> emit) {
     emit(state.copyWith(searchQuery: event.query));
     _reloadContents(emit, isOffline: state.isOffline);
   }
 
-  /// Updates sorting option and reloads.
   void _onSortOptionChanged(
       SortOptionChanged event, Emitter<BrowserState> emit) {
     final isSameOption = state.sortOption == event.option;
@@ -178,18 +146,15 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
     _reloadContents(emit, isOffline: state.isOffline);
   }
 
-  /// Updates grouping hierarchy.
   void _onGroupOptionChanged(
       GroupOptionChanged event, Emitter<BrowserState> emit) {
     emit(state.copyWith(groupOption: event.option));
   }
 
-  /// Toggles view mode (grid vs list).
   void _onToggleViewMode(ToggleViewMode event, Emitter<BrowserState> emit) {
     emit(state.copyWith(isGridView: !state.isGridView));
   }
 
-  /// Toggles selection of an item.
   void _onToggleItemSelection(
       ToggleItemSelection event, Emitter<BrowserState> emit) {
     final selectedFolders = Set<String>.from(state.selectedFolderIds);
@@ -215,15 +180,60 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
     ));
   }
 
-  /// Clears active multi-selections.
   void _onClearSelection(ClearSelection event, Emitter<BrowserState> emit) {
+    emit(state.copyWith(selectedFolderIds: {}, selectedFileIds: {}));
+  }
+
+  void _onToggleSelectAll(ToggleSelectAll event, Emitter<BrowserState> emit) {
+    final res = BrowserBatchHelper.toggleSelectAll(
+      state: state,
+      selectAll: event.selectAll,
+    );
     emit(state.copyWith(
-      selectedFolderIds: {},
-      selectedFileIds: {},
+      selectedFolderIds: res.folderIds,
+      selectedFileIds: res.fileIds,
     ));
   }
 
-  /// Enqueues download task.
+  Future<void> _onBatchDownload(
+      BatchDownload event, Emitter<BrowserState> emit) async {
+    try {
+      final count = await BrowserBatchHelper.executeBatchDownload(
+        state: state,
+        repository: _repository,
+      );
+      if (count > 0) {
+        emit(state.copyWith(selectedFolderIds: {}, selectedFileIds: {}));
+      }
+    } catch (e) {
+      emit(state.copyWith(errorMessage: '$e'.replaceAll('Exception: ', '')));
+    }
+  }
+
+  Future<void> _onDownloadFolder(
+      DownloadFolder event, Emitter<BrowserState> emit) async {
+    try {
+      await BrowserBatchHelper.executeDownloadFolder(
+        folder: event.folder,
+        repository: _repository,
+      );
+    } catch (e) {
+      emit(state.copyWith(errorMessage: '$e'.replaceAll('Exception: ', '')));
+    }
+  }
+
+  Future<void> _onExportFolderAsZip(
+      ExportFolderAsZip event, Emitter<BrowserState> emit) async {
+    try {
+      await BrowserBatchHelper.executeExportFolderAsZip(
+        folder: event.folder,
+        repository: _repository,
+      );
+    } catch (e) {
+      emit(state.copyWith(errorMessage: '$e'.replaceAll('Exception: ', '')));
+    }
+  }
+
   Future<void> _onEnqueueDownload(
       EnqueueDownload event, Emitter<BrowserState> emit) async {
     try {
@@ -233,7 +243,6 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
     }
   }
 
-  /// Enqueues web share task.
   Future<void> _onEnqueueShare(
       EnqueueShare event, Emitter<BrowserState> emit) async {
     try {
@@ -248,7 +257,6 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
     }
   }
 
-  /// Navigates up to parent directory.
   void _onNavigateUp(NavigateUp event, Emitter<BrowserState> emit) {
     if (state.category != null) {
       add(LoadDirectory(folderId: state.currentFolderId));
@@ -258,120 +266,116 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
     }
   }
 
-  /// Handles creation of a folder.
   Future<void> _onCreateFolder(
       CreateFolder event, Emitter<BrowserState> emit) async {
     emit(state.copyWith(isLoading: true));
-    final res = await _repository.createFolder(event.name,
-        parentId: state.currentFolderId);
-    res.fold(
-      (_) {
-        ServiceLocator.instance.syncQueue.processQueue();
-        _reloadContents(emit, isOffline: state.isOffline);
-      },
-      (failure) =>
-          emit(state.copyWith(isLoading: false, errorMessage: failure.message)),
+    final err = await BrowserMutationHelper.createFolder(
+      name: event.name,
+      parentId: state.currentFolderId,
+      repository: _repository,
     );
+    if (err != null) {
+      emit(state.copyWith(isLoading: false, errorMessage: err));
+    } else {
+      _reloadContents(emit, isOffline: state.isOffline);
+    }
   }
 
-  /// Handles folder rename.
   Future<void> _onRenameFolder(
       RenameFolder event, Emitter<BrowserState> emit) async {
     emit(state.copyWith(isLoading: true));
-    final res = await _repository.renameFolder(event.folderId, event.newName);
-    res.fold(
-      (_) {
-        ServiceLocator.instance.syncQueue.processQueue();
-        _reloadContents(emit, isOffline: state.isOffline);
-      },
-      (failure) =>
-          emit(state.copyWith(isLoading: false, errorMessage: failure.message)),
+    final err = await BrowserMutationHelper.renameFolder(
+      folderId: event.folderId,
+      newName: event.newName,
+      repository: _repository,
     );
+    if (err != null) {
+      emit(state.copyWith(isLoading: false, errorMessage: err));
+    } else {
+      _reloadContents(emit, isOffline: state.isOffline);
+    }
   }
 
-  /// Handles folder deletion.
   Future<void> _onDeleteFolder(
       DeleteFolder event, Emitter<BrowserState> emit) async {
     emit(state.copyWith(isLoading: true));
-    final res = await _repository.deleteFolder(event.folderId);
-    res.fold(
-      (_) {
-        ServiceLocator.instance.syncQueue.processQueue();
-        _reloadContents(emit, isOffline: state.isOffline);
-      },
-      (failure) =>
-          emit(state.copyWith(isLoading: false, errorMessage: failure.message)),
+    final err = await BrowserMutationHelper.deleteFolder(
+      folderId: event.folderId,
+      repository: _repository,
     );
+    if (err != null) {
+      emit(state.copyWith(isLoading: false, errorMessage: err));
+    } else {
+      _reloadContents(emit, isOffline: state.isOffline);
+    }
   }
 
-  /// Handles file rename.
   Future<void> _onRenameFile(
       RenameFile event, Emitter<BrowserState> emit) async {
     emit(state.copyWith(isLoading: true));
-    final res = await _repository.renameFile(event.fileId, event.newName);
-    res.fold(
-      (_) {
-        ServiceLocator.instance.syncQueue.processQueue();
-        _reloadContents(emit, isOffline: state.isOffline);
-      },
-      (failure) =>
-          emit(state.copyWith(isLoading: false, errorMessage: failure.message)),
+    final err = await BrowserMutationHelper.renameFile(
+      fileId: event.fileId,
+      newName: event.newName,
+      repository: _repository,
     );
+    if (err != null) {
+      emit(state.copyWith(isLoading: false, errorMessage: err));
+    } else {
+      _reloadContents(emit, isOffline: state.isOffline);
+    }
   }
 
-  /// Handles single file move.
   Future<void> _onMoveFile(MoveFile event, Emitter<BrowserState> emit) async {
     emit(state.copyWith(isLoading: true));
     try {
-      await _repository.moveFile(event.fileId, event.targetFolderId);
-      ServiceLocator.instance.syncQueue.processQueue();
+      await BrowserMutationHelper.moveFile(
+        fileId: event.fileId,
+        targetFolderId: event.targetFolderId,
+        repository: _repository,
+      );
       _reloadContents(emit, isOffline: state.isOffline);
     } catch (e) {
       emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
     }
   }
 
-  /// Handles single file copy.
   Future<void> _onCopyFile(CopyFile event, Emitter<BrowserState> emit) async {
     emit(state.copyWith(isLoading: true));
-    final res = await _repository.copyFile(event.fileId, event.targetFolderId);
-    res.fold(
-      (_) {
-        ServiceLocator.instance.syncQueue.processQueue();
-        _reloadContents(emit, isOffline: state.isOffline);
-      },
-      (failure) =>
-          emit(state.copyWith(isLoading: false, errorMessage: failure.message)),
+    final err = await BrowserMutationHelper.copyFile(
+      fileId: event.fileId,
+      targetFolderId: event.targetFolderId,
+      repository: _repository,
     );
+    if (err != null) {
+      emit(state.copyWith(isLoading: false, errorMessage: err));
+    } else {
+      _reloadContents(emit, isOffline: state.isOffline);
+    }
   }
 
-  /// Handles single file deletion.
   Future<void> _onDeleteFile(
       DeleteFile event, Emitter<BrowserState> emit) async {
     emit(state.copyWith(isLoading: true));
-    final res = await _repository.deleteFile(event.fileId);
-    res.fold(
-      (_) {
-        ServiceLocator.instance.syncQueue.processQueue();
-        _reloadContents(emit, isOffline: state.isOffline);
-      },
-      (failure) =>
-          emit(state.copyWith(isLoading: false, errorMessage: failure.message)),
+    final err = await BrowserMutationHelper.deleteFile(
+      fileId: event.fileId,
+      repository: _repository,
     );
+    if (err != null) {
+      emit(state.copyWith(isLoading: false, errorMessage: err));
+    } else {
+      _reloadContents(emit, isOffline: state.isOffline);
+    }
   }
 
-  /// Handles batch deletion of items.
   Future<void> _onBatchDelete(
       BatchDelete event, Emitter<BrowserState> emit) async {
     emit(state.copyWith(isLoading: true));
     try {
-      for (final folderId in List.from(state.selectedFolderIds)) {
-        await _repository.deleteFolder(folderId);
-      }
-      for (final fileId in List.from(state.selectedFileIds)) {
-        await _repository.deleteFile(fileId);
-      }
-      ServiceLocator.instance.syncQueue.processQueue();
+      await BrowserBatchHelper.executeBatchDelete(
+        folderIds: state.selectedFolderIds,
+        fileIds: state.selectedFileIds,
+        repository: _repository,
+      );
       emit(state.copyWith(selectedFolderIds: {}, selectedFileIds: {}));
       _reloadContents(emit, isOffline: state.isOffline);
     } catch (e) {
@@ -379,17 +383,15 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
     }
   }
 
-  /// Handles batch move of items.
   Future<void> _onBatchMove(BatchMove event, Emitter<BrowserState> emit) async {
     emit(state.copyWith(isLoading: true));
     try {
-      for (final folderId in List.from(state.selectedFolderIds)) {
-        await _repository.moveFolder(folderId, event.targetFolderId);
-      }
-      for (final fileId in List.from(state.selectedFileIds)) {
-        await _repository.moveFile(fileId, event.targetFolderId);
-      }
-      ServiceLocator.instance.syncQueue.processQueue();
+      await BrowserBatchHelper.executeBatchMove(
+        folderIds: state.selectedFolderIds,
+        fileIds: state.selectedFileIds,
+        targetFolderId: event.targetFolderId,
+        repository: _repository,
+      );
       emit(state.copyWith(selectedFolderIds: {}, selectedFileIds: {}));
       _reloadContents(emit, isOffline: state.isOffline);
     } catch (e) {
@@ -397,17 +399,15 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
     }
   }
 
-  /// Handles batch copy of items.
   Future<void> _onBatchCopy(BatchCopy event, Emitter<BrowserState> emit) async {
     emit(state.copyWith(isLoading: true));
     try {
-      for (final folderId in List.from(state.selectedFolderIds)) {
-        await _repository.copyFolder(folderId, event.targetFolderId);
-      }
-      for (final fileId in List.from(state.selectedFileIds)) {
-        await _repository.copyFile(fileId, event.targetFolderId);
-      }
-      ServiceLocator.instance.syncQueue.processQueue();
+      await BrowserBatchHelper.executeBatchCopy(
+        folderIds: state.selectedFolderIds,
+        fileIds: state.selectedFileIds,
+        targetFolderId: event.targetFolderId,
+        repository: _repository,
+      );
       emit(state.copyWith(selectedFolderIds: {}, selectedFileIds: {}));
       _reloadContents(emit, isOffline: state.isOffline);
     } catch (e) {
@@ -415,7 +415,6 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
     }
   }
 
-  /// Sets clipboard contents for cut/copy.
   void _onSetClipboard(SetClipboard event, Emitter<BrowserState> emit) {
     emit(state.copyWith(
       clipboardMode: event.mode,
@@ -427,12 +426,10 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
     ));
   }
 
-  /// Clears clipboard.
   void _onClearClipboard(ClearClipboard event, Emitter<BrowserState> emit) {
     emit(state.copyWith(clearClipboard: true));
   }
 
-  /// Pastes clipboard contents into destination folder.
   Future<void> _onPasteClipboard(
       PasteClipboard event, Emitter<BrowserState> emit) async {
     if (!state.hasClipboard) return;
@@ -452,23 +449,15 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
     emit(state.copyWith(isLoading: true));
 
     try {
-      if (mode == ClipboardMode.move) {
-        for (final folderId in List.from(state.clipboardFolderIds)) {
-          await _repository.moveFolder(folderId, targetFolderId);
-        }
-        for (final fileId in List.from(state.clipboardFileIds)) {
-          await _repository.moveFile(fileId, targetFolderId);
-        }
-      } else if (mode == ClipboardMode.copy) {
-        for (final folderId in List.from(state.clipboardFolderIds)) {
-          await _repository.copyFolder(folderId, targetFolderId);
-        }
-        for (final fileId in List.from(state.clipboardFileIds)) {
-          await _repository.copyFile(fileId, targetFolderId);
-        }
+      if (mode != null) {
+        await BrowserBatchHelper.executePasteClipboard(
+          mode: mode,
+          folderIds: state.clipboardFolderIds,
+          fileIds: state.clipboardFileIds,
+          targetFolderId: targetFolderId,
+          repository: _repository,
+        );
       }
-
-      ServiceLocator.instance.syncQueue.processQueue();
       emit(state.copyWith(clearClipboard: true));
       _reloadContents(emit, isOffline: state.isOffline);
     } catch (e) {

@@ -80,6 +80,11 @@ class ServiceLocator {
   FileManagerService get fileManager => _fileManager;
   SyncQueueService get syncQueue => _syncQueue;
   StorageRepository get storageRepository => _storageRepository;
+
+  /// Injects storage repository instance for test isolation.
+  void setStorageRepositoryForTesting(StorageRepository repo) {
+    _storageRepository = repo;
+  }
   ThumbnailRepository get thumbnailRepository => _thumbnailRepository;
   WebShareQueueService get webShareQueue => _webShareQueue;
   DownloadFileUseCase get downloadFileUseCase => _downloadFileUseCase;

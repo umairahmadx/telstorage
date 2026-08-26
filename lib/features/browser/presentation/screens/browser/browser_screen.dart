@@ -5,10 +5,13 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:telstorage/core/services/folder_traversal_service.dart';
 import 'package:telstorage/core/services/service_locator.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
+import 'package:telstorage/core/utils/connectivity.dart';
 import 'package:telstorage/shared/widgets/app_search_field.dart';
 import 'package:telstorage/shared/widgets/bars/app_batch_action_bar.dart';
+import 'package:telstorage/shared/widgets/dialogs/app_dialogs.dart';
 import 'package:telstorage/shared/widgets/feedback/app_empty_state.dart';
 import 'package:telstorage/shared/widgets/mobile_shell.dart';
 import 'package:telstorage/shared/widgets/tiles/app_file_tile.dart';
@@ -159,28 +162,50 @@ class _BrowserScreenState extends State<BrowserScreen> {
 
                     // Batch selection action bar
                     if (state.isMultiSelect)
-                      AppBatchActionBar(
-                        selectedCount: state.selectedFolderIds.length +
-                            state.selectedFileIds.length,
-                        onClearSelection: () =>
-                            context.read<BrowserBloc>().add(ClearSelection()),
-                        onDelete: () =>
-                            context.read<BrowserBloc>().add(BatchDelete()),
-                        onMove: () =>
-                            context.read<BrowserBloc>().add(SetClipboard(
-                                  mode: ClipboardMode.move,
-                                  fileIds: state.selectedFileIds,
-                                  folderIds: state.selectedFolderIds,
-                                  sourceFolderId: state.currentFolderId,
-                                )),
-                        onCopy: () =>
-                            context.read<BrowserBloc>().add(SetClipboard(
-                                  mode: ClipboardMode.copy,
-                                  fileIds: state.selectedFileIds,
-                                  folderIds: state.selectedFolderIds,
-                                  sourceFolderId: state.currentFolderId,
-                                )),
-                      ),
+                      Builder(builder: (ctx) {
+                        final visibleFolderIds =
+                            state.folders.map((f) => f.id).toSet();
+                        final visibleFileIds =
+                            state.files.map((f) => f.fileId).toSet();
+                        final totalVisible =
+                            visibleFolderIds.length + visibleFileIds.length;
+                        final isAllSelected = totalVisible > 0 &&
+                            visibleFolderIds
+                                .every(state.selectedFolderIds.contains) &&
+                            visibleFileIds.every(state.selectedFileIds.contains);
+                        final selectedCount = state.selectedFolderIds.length +
+                            state.selectedFileIds.length;
+
+                        return AppBatchActionBar(
+                          selectedCount: selectedCount,
+                          isAllSelected: isAllSelected,
+                          onClearSelection: () => context
+                              .read<BrowserBloc>()
+                              .add(ClearSelection()),
+                          onToggleSelectAll: () => context
+                              .read<BrowserBloc>()
+                              .add(ToggleSelectAll(
+                                  selectAll: !isAllSelected)),
+                          onDownload: () =>
+                              _handleBatchDownload(context, state),
+                          onDelete: () =>
+                              context.read<BrowserBloc>().add(BatchDelete()),
+                          onMove: () =>
+                              context.read<BrowserBloc>().add(SetClipboard(
+                                    mode: ClipboardMode.move,
+                                    fileIds: state.selectedFileIds,
+                                    folderIds: state.selectedFolderIds,
+                                    sourceFolderId: state.currentFolderId,
+                                  )),
+                          onCopy: () =>
+                              context.read<BrowserBloc>().add(SetClipboard(
+                                    mode: ClipboardMode.copy,
+                                    fileIds: state.selectedFileIds,
+                                    folderIds: state.selectedFolderIds,
+                                    sourceFolderId: state.currentFolderId,
+                                  )),
+                        );
+                      }),
                   ],
                 ),
 
@@ -357,5 +382,53 @@ class _BrowserScreenState extends State<BrowserScreen> {
         ],
       ],
     );
+  }
+
+  Future<void> _handleBatchDownload(
+      BuildContext context, BrowserState state) async {
+    if (state.selectedFolderIds.isEmpty && state.selectedFileIds.isEmpty) {
+      return;
+    }
+
+    if (!await Connectivity.hasConnection()) {
+      if (!context.mounted) return;
+      await AppDialogs.showInfo(
+        context,
+        title: 'Offline',
+        message:
+            'You are currently offline. Please check your internet connection to download files.',
+      );
+      return;
+    }
+
+    final repo = ServiceLocator.instance.storageRepository;
+    final items = FolderTraversalService.resolveMultiSelection(
+      folderIds: state.selectedFolderIds,
+      fileIds: state.selectedFileIds,
+      allFolders: repo.getFolders(null),
+      allFiles: repo.getFiles(null),
+    );
+    final stats = FolderTraversalService.calculateStats(items);
+
+    if (stats.totalFiles == 0) {
+      if (!context.mounted) return;
+      await AppDialogs.showInfo(
+        context,
+        title: 'No Files Selected',
+        message: 'The selected item(s) contain no files to download.',
+      );
+      return;
+    }
+
+    if (!context.mounted) return;
+    final ok = await BrowserDialogs.showBatchDownloadConfirmation(
+      context,
+      fileCount: stats.totalFiles,
+      totalSizeMb: stats.totalSizeMb,
+    );
+
+    if (ok == true && context.mounted) {
+      context.read<BrowserBloc>().add(const BatchDownload());
+    }
   }
 }

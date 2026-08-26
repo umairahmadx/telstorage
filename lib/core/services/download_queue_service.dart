@@ -86,7 +86,7 @@ class DownloadQueueService {
       TransferQueueService.instance.isPaused(fileId);
 
   /// Add a new download job or resume an existing failed/cancelled one
-  Future<void> enqueueDownload(FileRecord file) async {
+  Future<void> enqueueDownload(FileRecord file, {String? subpath}) async {
     final existingJob = _box.get(file.fileId);
 
     if (existingJob != null) {
@@ -112,6 +112,7 @@ class DownloadQueueService {
         progress: 0.0,
         status: 'queued',
         addedAt: DateTime.now(),
+        subpath: subpath,
       );
       await _box.put(file.fileId, job);
     }
@@ -339,7 +340,11 @@ class DownloadQueueService {
       TransferQueueService.instance
           .updateTask(fileId, progress: 0.95, currentStage: 'Finalizing…');
 
-      final saveResult = await _downloadService.saveAndOpen(bytes, job.name);
+      final saveResult = await _downloadService.saveAndOpen(
+        bytes,
+        job.name,
+        subpath: job.subpath,
+      );
 
       if (saveResult.success) {
         job.status = 'completed';
@@ -357,7 +362,16 @@ class DownloadQueueService {
           payload: 'transfer_download',
           actions: [
             if (saveResult.savedPath != null)
-              AndroidNotificationAction('open_${job.fileId}', 'Open File'),
+              AndroidNotificationAction(
+                'open_path:${saveResult.savedPath}',
+                'Open File',
+                showsUserInterface: true,
+              ),
+            const AndroidNotificationAction(
+              'view_downloads',
+              'View Downloads',
+              showsUserInterface: true,
+            ),
           ],
         );
       } else {
@@ -371,6 +385,7 @@ class DownloadQueueService {
         await NotificationService.instance.showCompletionNotification(
           title: 'Download Failed',
           body: 'Failed to download ${job.name}: ${saveResult.message}',
+          payload: 'transfer_download',
         );
       }
     } catch (e) {
@@ -391,6 +406,7 @@ class DownloadQueueService {
         await NotificationService.instance.showCompletionNotification(
           title: 'Download Failed',
           body: 'Failed to download ${job.name}: $e',
+          payload: 'transfer_download',
         );
       }
       await job.save();

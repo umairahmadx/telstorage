@@ -9,8 +9,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:telstorage/core/models/file_record.dart';
 
 import 'package:telstorage/core/models/folder_record.dart';
+import 'package:telstorage/core/services/folder_traversal_service.dart';
 import 'package:telstorage/core/services/service_locator.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
+import 'package:telstorage/core/utils/connectivity.dart';
 import 'package:telstorage/features/downloads/presentation/screens/downloads/viewmodel/downloads_view_model.dart';
 import 'package:telstorage/shared/widgets/dialogs/app_dialogs.dart';
 import 'package:telstorage/shared/widgets/dialogs/app_sort_filter_sheet.dart';
@@ -131,6 +133,26 @@ abstract final class BrowserDialogs {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
+              leading: Icon(Icons.download_rounded, color: colors.textPrimary),
+              title: Text('Download Folder', style: TextStyle(color: colors.textPrimary)),
+              subtitle: Text('Download folder with all subfolders', style: TextStyle(color: colors.textSecondary, fontSize: 12)),
+              onTap: () {
+                HapticFeedback.selectionClick();
+                Navigator.pop(ctx);
+                downloadFolder(context, folder);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.archive_outlined, color: colors.textPrimary),
+              title: Text('Export as ZIP', style: TextStyle(color: colors.textPrimary)),
+              subtitle: Text('Compress folder into a .zip file', style: TextStyle(color: colors.textSecondary, fontSize: 12)),
+              onTap: () {
+                HapticFeedback.selectionClick();
+                Navigator.pop(ctx);
+                exportFolderAsZip(context, folder);
+              },
+            ),
+            ListTile(
               leading: Icon(Icons.drive_file_rename_outline_rounded, color: colors.textPrimary),
               title: Text('Rename', style: TextStyle(color: colors.textPrimary)),
               onTap: () {
@@ -231,6 +253,113 @@ abstract final class BrowserDialogs {
     if (ok == true) {
       context.read<BrowserBloc>().add(DeleteFolder(folder.id));
     }
+  }
+
+  /// Initiates recursive folder download with confirmation.
+  static Future<void> downloadFolder(
+      BuildContext context, FolderRecord folder) async {
+    if (!await Connectivity.hasConnection()) {
+      if (!context.mounted) return;
+      await AppDialogs.showInfo(
+        context,
+        title: 'Offline',
+        message:
+            'You are currently offline. Please check your internet connection to download folders.',
+      );
+      return;
+    }
+
+    final repo = ServiceLocator.instance.storageRepository;
+    final items = FolderTraversalService.resolveDescendants(
+      targetFolderId: folder.id,
+      allFolders: repo.getFolders(null),
+      allFiles: repo.getFiles(null),
+    );
+    final stats = FolderTraversalService.calculateStats(items);
+
+    if (stats.totalFiles == 0) {
+      if (!context.mounted) return;
+      await AppDialogs.showInfo(
+        context,
+        title: 'Folder is Empty',
+        message: '"${folder.name}" contains no files to download.',
+      );
+      return;
+    }
+
+    if (!context.mounted) return;
+    final ok = await AppDialogs.showConfirm(
+      context,
+      title: 'Download "${folder.name}"?',
+      message:
+          'This will enqueue ${stats.totalFiles} ${stats.totalFiles == 1 ? 'file' : 'files'} (${stats.totalSizeMb.toStringAsFixed(1)} MB) preserving folder structure.',
+      confirmText: 'Download',
+    );
+    if (!context.mounted) return;
+    if (ok == true) {
+      context.read<BrowserBloc>().add(DownloadFolder(folder));
+    }
+  }
+
+  /// Initiates folder export to ZIP archive with confirmation.
+  static Future<void> exportFolderAsZip(
+      BuildContext context, FolderRecord folder) async {
+    if (!await Connectivity.hasConnection()) {
+      if (!context.mounted) return;
+      await AppDialogs.showInfo(
+        context,
+        title: 'Offline',
+        message:
+            'You are currently offline. Please check your internet connection to export archives.',
+      );
+      return;
+    }
+
+    final repo = ServiceLocator.instance.storageRepository;
+    final items = FolderTraversalService.resolveDescendants(
+      targetFolderId: folder.id,
+      allFolders: repo.getFolders(null),
+      allFiles: repo.getFiles(null),
+    );
+    final stats = FolderTraversalService.calculateStats(items);
+
+    if (stats.totalFiles == 0) {
+      if (!context.mounted) return;
+      await AppDialogs.showInfo(
+        context,
+        title: 'Folder is Empty',
+        message: '"${folder.name}" contains no files to export.',
+      );
+      return;
+    }
+
+    if (!context.mounted) return;
+    final ok = await AppDialogs.showConfirm(
+      context,
+      title: 'Export "${folder.name}" as ZIP?',
+      message:
+          'This will download and compress ${stats.totalFiles} ${stats.totalFiles == 1 ? 'file' : 'files'} (${stats.totalSizeMb.toStringAsFixed(1)} MB) into "${folder.name}.zip".',
+      confirmText: 'Export ZIP',
+    );
+    if (!context.mounted) return;
+    if (ok == true) {
+      context.read<BrowserBloc>().add(ExportFolderAsZip(folder));
+    }
+  }
+
+  /// Displays batch download confirmation dialog.
+  static Future<bool?> showBatchDownloadConfirmation(
+    BuildContext context, {
+    required int fileCount,
+    required double totalSizeMb,
+  }) {
+    return AppDialogs.showConfirm(
+      context,
+      title: 'Download $fileCount ${fileCount == 1 ? 'file' : 'files'}?',
+      message:
+          'Are you sure you want to download all $fileCount items (${totalSizeMb.toStringAsFixed(1)} MB)?',
+      confirmText: 'Download All',
+    );
   }
 
   /// Opens the sort and grouping modal bottom sheet.

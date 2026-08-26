@@ -1,6 +1,6 @@
 /*
  * File: connectivity_web.dart
- * Description: Component and logic definition for connectivity_web.dart in TelStorage.
+ * Description: Browser connectivity adapter with test mock override.
  */
 
 import 'package:web/web.dart' as web;
@@ -8,7 +8,15 @@ import 'package:web/web.dart' as web;
 /// Browser connectivity is advisory: the actual request still determines
 /// whether the current network can reach the service.
 class Connectivity {
-  static Future<bool> hasConnection() async => web.window.navigator.onLine;
+  /// Test override hook for deterministic connectivity simulation.
+  static bool? mockConnectionStatus;
+
+  static Future<bool> hasConnection() async {
+    if (mockConnectionStatus != null) {
+      return mockConnectionStatus!;
+    }
+    return web.window.navigator.onLine;
+  }
 }
 
 class OfflineException implements Exception {

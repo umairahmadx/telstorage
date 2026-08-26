@@ -8,6 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import '../../core/utils/app_logger.dart';
+import '../../core/utils/battery_optimization_helper.dart';
 import '../../core/utils/file_opener_helper.dart';
 import 'package:uuid/uuid.dart';
 
@@ -60,6 +62,15 @@ class MobileShellState extends State<MobileShell> {
         .addListener(_onIntentChanged);
     NotificationService.instance.onNotificationTap =
         handleNotificationResponse;
+
+    // Check if app was opened directly from a notification tap
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final launchResponse =
+          await NotificationService.instance.getAppLaunchNotificationDetails();
+      if (launchResponse != null && mounted) {
+        handleNotificationResponse(launchResponse);
+      }
+    });
   }
 
   @override
@@ -84,56 +95,117 @@ class MobileShellState extends State<MobileShell> {
     final payload = details.payload;
     final actionId = details.actionId;
 
-    if (actionId != null) {
+    AppLogger.i(
+        'Notification response: actionId=$actionId, payload=$payload',
+        tag: 'MobileShell');
+
+    if (actionId != null && actionId.isNotEmpty) {
       if (actionId.startsWith('pause_')) {
         final id = actionId.replaceFirst('pause_', '');
         TransferQueueService.instance.pauseTask(id);
+        return;
       } else if (actionId.startsWith('resume_')) {
         final id = actionId.replaceFirst('resume_', '');
         TransferQueueService.instance.resumeTask(id);
+        return;
       } else if (actionId.startsWith('cancel_')) {
         final id = actionId.replaceFirst('cancel_', '');
         TransferQueueService.instance.cancelTask(id);
+        return;
+      } else if (actionId.startsWith('open_path:')) {
+        final filePath = actionId.replaceFirst('open_path:', '');
+        FileOpenerHelper.openFile(
+          context,
+          filePath: filePath,
+        );
+        return;
       } else if (actionId.startsWith('open_')) {
         final id = actionId.replaceFirst('open_', '');
         final job = ServiceLocator.instance.downloadQueue.allJobs
             .where((j) => j.fileId == id)
             .firstOrNull;
-        if (job?.localPath != null) {
+        final path = job?.localPath ??
+            ServiceLocator.instance.downloadQueue.getCompletedPath(id);
+        if (path != null) {
           FileOpenerHelper.openFile(
             context,
-            filePath: job!.localPath!,
-            mimeType: job.mimeType,
-            fileName: job.name,
+            filePath: path,
+            mimeType: job?.mimeType,
+            fileName: job?.name,
           );
+        } else {
+          ServiceLocator.instance.navigation
+              .navigateTo(AppDestination.transferDownloads);
         }
+        return;
+      } else if (actionId.startsWith('copy_url:')) {
+        final url = actionId.replaceFirst('copy_url:', '');
+        _copyAndFeedback(url);
+        return;
       } else if (actionId.startsWith('copy_')) {
         final id = actionId.replaceFirst('copy_', '');
         final share = ServiceLocator.instance.webShareQueue.allShares
             .where((s) => s.fileId == id)
             .firstOrNull;
         if (share?.shareUrl != null) {
-          Clipboard.setData(ClipboardData(text: share!.shareUrl!));
+          _copyAndFeedback(share!.shareUrl!);
         }
+        return;
       } else if (actionId == 'view_all') {
         ServiceLocator.instance.navigation
             .navigateTo(AppDestination.transferActive);
+        return;
+      } else if (actionId == 'view_uploads') {
+        ServiceLocator.instance.navigation
+            .navigateTo(AppDestination.transferUploads);
+        return;
+      } else if (actionId == 'view_downloads') {
+        ServiceLocator.instance.navigation
+            .navigateTo(AppDestination.transferDownloads);
+        return;
+      } else if (actionId == 'view_shared') {
+        ServiceLocator.instance.navigation
+            .navigateTo(AppDestination.transferShared);
+        return;
       }
-      return;
     }
 
     if (payload == 'transfer_active') {
       ServiceLocator.instance.navigation
           .navigateTo(AppDestination.transferActive);
-    } else if (details.payload == 'transfer_upload') {
+    } else if (payload == 'transfer_upload') {
       ServiceLocator.instance.navigation
           .navigateTo(AppDestination.transferUploads);
-    } else if (details.payload == 'transfer_download') {
+    } else if (payload == 'transfer_download') {
       ServiceLocator.instance.navigation
           .navigateTo(AppDestination.transferDownloads);
-    } else if (details.payload == 'transfer_share') {
+    } else if (payload == 'transfer_share') {
       ServiceLocator.instance.navigation
           .navigateTo(AppDestination.transferShared);
+    }
+  }
+
+  void _copyAndFeedback(String url) {
+    Clipboard.setData(ClipboardData(text: url));
+    HapticFeedback.lightImpact();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded,
+                  color: Colors.green, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Share link copied: $url',
+                    overflow: TextOverflow.ellipsis),
+              ),
+            ],
+          ),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
   }
 
@@ -287,6 +359,8 @@ class MobileShellState extends State<MobileShell> {
     }
 
     if (tasks.isNotEmpty && mounted) {
+      await BatteryOptimizationHelper.maybePromptBatteryOptimization(context);
+      if (!mounted) return;
       context.read<UploadBloc>().add(AddUploads(tasks));
       ServiceLocator.instance.navigation
           .navigateTo(AppDestination.transferUploads);

@@ -64,6 +64,46 @@ abstract final class AppDialogs {
     );
   }
 
+  /// Shows an informative notice dialog with an OK button.
+  static Future<void> showInfo(
+    BuildContext context, {
+    required String title,
+    required String message,
+    String buttonText = 'OK',
+  }) {
+    HapticFeedback.lightImpact();
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
+
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: colors.bgSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(title,
+            style: TextStyle(
+                color: colors.textPrimary, fontWeight: FontWeight.bold)),
+        content: Text(message,
+            style: TextStyle(color: colors.textSecondary, fontSize: 14)),
+        actions: [
+          FilledButton(
+            onPressed: () {
+              HapticFeedback.selectionClick();
+              Navigator.pop(ctx);
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: colors.accentPrimary,
+              foregroundColor: colors.bgPrimary,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text(buttonText,
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Shows a standardized text input dialog.
   static Future<String?> showInput(
     BuildContext context, {

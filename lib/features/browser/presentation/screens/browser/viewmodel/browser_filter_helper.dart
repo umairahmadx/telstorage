@@ -5,10 +5,58 @@
 
 import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/models/folder_record.dart';
+import 'package:telstorage/features/storage/domain/repositories/storage_repository_contract.dart';
 import 'browser_event.dart';
 
 /// Helper methods for sorting and filtering directory files and folders.
 abstract final class BrowserFilterHelper {
+  /// Queries repository, applies category, search filtering, and sorting.
+  static ({
+    List<FolderRecord> folders,
+    List<FileRecord> files,
+    Map<String, int> folderItemCounts,
+  }) loadAndFilterContents({
+    required StorageRepositoryContract repository,
+    required String? folderId,
+    required String? category,
+    required String searchQuery,
+    required BrowserSortOption sortOption,
+    required bool sortAscending,
+  }) {
+    List<FolderRecord> rawFolders = [];
+    List<FileRecord> rawFiles = [];
+
+    if (category != null) {
+      rawFiles = repository.getFiles(folderId)
+        ..retainWhere((f) => matchesCategory(f, category));
+      rawFolders = [];
+    } else {
+      rawFolders = repository.getFolders(folderId);
+      rawFiles = repository.getFiles(folderId);
+    }
+
+    final q = searchQuery.toLowerCase();
+    if (q.isNotEmpty) {
+      rawFolders =
+          rawFolders.where((f) => f.name.toLowerCase().contains(q)).toList();
+      rawFiles =
+          rawFiles.where((f) => f.name.toLowerCase().contains(q)).toList();
+    }
+
+    sortItems(rawFolders, rawFiles, sortOption, sortAscending);
+
+    final Map<String, int> counts = {};
+    for (final f in rawFolders) {
+      counts[f.id] = repository.getFilesInFolderCount(f.id);
+    }
+
+    return (
+      folders: rawFolders,
+      files: rawFiles,
+      folderItemCounts: counts,
+    );
+  }
+
   /// Sorts folders and files based on criteria and sort order.
   static void sortItems(
     List<FolderRecord> folders,

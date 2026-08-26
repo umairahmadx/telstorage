@@ -6,15 +6,36 @@
 import 'package:flutter/material.dart';
 import 'package:telstorage/core/theme/app_icons.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
+import 'package:telstorage/core/utils/battery_optimization_helper.dart';
 import 'package:telstorage/features/settings/presentation/screens/about/about_screen.dart';
 import 'package:telstorage/features/sync/presentation/screens/sync/sync_screen.dart';
 import 'package:telstorage/shared/widgets/app_surface_card.dart';
 import 'package:telstorage/shared/widgets/mobile_shell.dart';
 
-/// Card component presenting operational tools and diagnostics.
-class SettingsToolsCard extends StatelessWidget {
+/// Card component presenting operational tools, diagnostics, and battery management.
+class SettingsToolsCard extends StatefulWidget {
   /// Constructs SettingsToolsCard.
   const SettingsToolsCard({super.key});
+
+  @override
+  State<SettingsToolsCard> createState() => _SettingsToolsCardState();
+}
+
+class _SettingsToolsCardState extends State<SettingsToolsCard> {
+  bool _isBatteryExempt = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkBatteryStatus();
+  }
+
+  Future<void> _checkBatteryStatus() async {
+    final exempt = await BatteryOptimizationHelper.isOptimizationDisabled();
+    if (mounted) {
+      setState(() => _isBatteryExempt = exempt);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,6 +72,54 @@ class SettingsToolsCard extends StatelessWidget {
           Divider(color: colors.borderSubtle, height: 1),
           _buildToolTile(
             colors,
+            icon: Icons.battery_charging_full_rounded,
+            title: 'Background Upload & Battery',
+            subtitle: _isBatteryExempt
+                ? 'Unrestricted (optimized for background)'
+                : 'Restricted — tap to enable for large transfers',
+            trailing: Icon(
+              _isBatteryExempt
+                  ? Icons.check_circle_rounded
+                  : Icons.warning_amber_rounded,
+              color: _isBatteryExempt ? colors.success : colors.warning,
+              size: 20,
+            ),
+            borderRadius: BorderRadius.zero,
+            onTap: () async {
+              if (_isBatteryExempt) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                          'Unrestricted background execution is already active.'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+                return;
+              }
+
+              final granted =
+                  await BatteryOptimizationHelper.requestOptimizationDisabled();
+              await _checkBatteryStatus();
+
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      granted
+                          ? 'Background battery optimization disabled.'
+                          : 'Battery optimization is still active.',
+                    ),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+          ),
+          Divider(color: colors.borderSubtle, height: 1),
+          _buildToolTile(
+            colors,
             icon: AppIcons.info,
             title: 'About TelStorage',
             subtitle: 'v1.2.0 — Telegram-powered Cloud Storage',
@@ -75,6 +144,7 @@ class SettingsToolsCard extends StatelessWidget {
     required String subtitle,
     required BorderRadius borderRadius,
     required VoidCallback onTap,
+    Widget? trailing,
   }) {
     return ListTile(
       shape: RoundedRectangleBorder(borderRadius: borderRadius),
@@ -104,8 +174,9 @@ class SettingsToolsCard extends StatelessWidget {
           fontSize: 12,
         ),
       ),
-      trailing: Icon(Icons.chevron_right_rounded,
-          color: colors.textTertiary, size: 20),
+      trailing: trailing ??
+          Icon(Icons.chevron_right_rounded,
+              color: colors.textTertiary, size: 20),
     );
   }
 }

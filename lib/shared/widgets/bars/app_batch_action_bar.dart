@@ -1,6 +1,6 @@
 /*
  * File: app_batch_action_bar.dart
- * Description: Centralized bottom floating batch action bar displayed during multi-selection mode.
+ * Description: Centralized bottom floating batch action bar displayed during multi-selection mode with Select All, download, and file operation actions.
  */
 
 import 'package:flutter/material.dart';
@@ -11,8 +11,14 @@ class AppBatchActionBar extends StatelessWidget {
   /// Number of currently selected items.
   final int selectedCount;
 
+  /// Whether all visible items are selected.
+  final bool isAllSelected;
+
   /// Callback to dismiss selection mode.
   final VoidCallback onClearSelection;
+
+  /// Callback to toggle select all / deselect all.
+  final VoidCallback? onToggleSelectAll;
 
   /// Callback to batch delete selected items.
   final VoidCallback? onDelete;
@@ -33,7 +39,9 @@ class AppBatchActionBar extends StatelessWidget {
   const AppBatchActionBar({
     super.key,
     required this.selectedCount,
+    this.isAllSelected = false,
     required this.onClearSelection,
+    this.onToggleSelectAll,
     this.onDelete,
     this.onMove,
     this.onCopy,
@@ -68,6 +76,16 @@ class AppBatchActionBar extends StatelessWidget {
               onPressed: onClearSelection,
               tooltip: 'Cancel selection',
             ),
+            if (onToggleSelectAll != null)
+              IconButton(
+                icon: Icon(
+                  isAllSelected
+                      ? Icons.deselect_rounded
+                      : Icons.select_all_rounded,
+                ),
+                tooltip: isAllSelected ? 'Deselect all' : 'Select all',
+                onPressed: onToggleSelectAll,
+              ),
             const SizedBox(width: 4),
             Text(
               '$selectedCount selected',

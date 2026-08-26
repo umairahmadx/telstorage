@@ -4,6 +4,7 @@
  */
 
 import '../../../../../../core/models/file_record.dart';
+import '../../../../../../core/models/folder_record.dart';
 
 /// Supported sorting options in the file browser.
 enum BrowserSortOption {
@@ -36,7 +37,10 @@ enum ClipboardMode {
 }
 
 /// Base abstract event for the file browser.
-sealed class BrowserEvent {}
+sealed class BrowserEvent {
+  /// Base const constructor.
+  const BrowserEvent();
+}
 
 /// Loads directory contents by folder ID or category filter.
 class LoadDirectory extends BrowserEvent {
@@ -254,4 +258,37 @@ class PasteClipboard extends BrowserEvent {
 
   /// Constructs PasteClipboard event.
   PasteClipboard(this.targetFolderId);
+}
+
+/// Toggles selection of all items in the current view.
+class ToggleSelectAll extends BrowserEvent {
+  /// True to select all, false to deselect all.
+  final bool selectAll;
+
+  /// Constructs ToggleSelectAll event.
+  const ToggleSelectAll({required this.selectAll});
+}
+
+/// Enqueues all currently selected files and folders for download.
+class BatchDownload extends BrowserEvent {
+  /// Constructs BatchDownload event.
+  const BatchDownload();
+}
+
+/// Recursively downloads an entire folder hierarchy.
+class DownloadFolder extends BrowserEvent {
+  /// Target folder to download.
+  final FolderRecord folder;
+
+  /// Constructs DownloadFolder event.
+  const DownloadFolder(this.folder);
+}
+
+/// Exports a folder structure into a standalone `.zip` archive.
+class ExportFolderAsZip extends BrowserEvent {
+  /// Target folder to export.
+  final FolderRecord folder;
+
+  /// Constructs ExportFolderAsZip event.
+  const ExportFolderAsZip(this.folder);
 }

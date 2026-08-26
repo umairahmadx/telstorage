@@ -39,6 +39,9 @@ class DownloadJob extends HiveObject {
   @HiveField(9)
   DateTime? completedAt;
 
+  @HiveField(10)
+  final String? subpath;
+
   DownloadJob({
     required this.fileId,
     required this.name,
@@ -50,6 +53,7 @@ class DownloadJob extends HiveObject {
     this.error,
     required this.addedAt,
     this.completedAt,
+    this.subpath,
   });
 
   bool get isComplete => status == 'completed';

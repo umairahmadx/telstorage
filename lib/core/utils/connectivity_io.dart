@@ -1,13 +1,19 @@
 /*
  * File: connectivity_io.dart
- * Description: Component and logic definition for connectivity_io.dart in TelStorage.
+ * Description: Lightweight connectivity check for native platforms with test mock override.
  */
 
 import 'dart:io';
 
 /// Lightweight connectivity check for native platforms.
 class Connectivity {
+  /// Test override hook for deterministic connectivity simulation.
+  static bool? mockConnectionStatus;
+
   static Future<bool> hasConnection() async {
+    if (mockConnectionStatus != null) {
+      return mockConnectionStatus!;
+    }
     try {
       final result = await InternetAddress.lookup('google.com').timeout(
         const Duration(seconds: 3),

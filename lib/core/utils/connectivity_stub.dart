@@ -1,10 +1,18 @@
 /*
  * File: connectivity_stub.dart
- * Description: Component and logic definition for connectivity_stub.dart in TelStorage.
+ * Description: Connectivity stub definition with test mock override.
  */
 
 class Connectivity {
-  static Future<bool> hasConnection() async => true;
+  /// Test override hook for deterministic connectivity simulation.
+  static bool? mockConnectionStatus;
+
+  static Future<bool> hasConnection() async {
+    if (mockConnectionStatus != null) {
+      return mockConnectionStatus!;
+    }
+    return true;
+  }
 }
 
 class OfflineException implements Exception {

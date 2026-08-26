@@ -20,6 +20,9 @@ import '../utils/connectivity.dart';
 import '../utils/thumbnail_generator.dart';
 import '../utils/thumbnail_helper_native.dart'
     if (dart.library.js_interop) '../utils/thumbnail_helper_web.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'chunk_resume_service.dart';
 import 'hive_service.dart';
 import 'metadata_service.dart';
 import 'notification_service.dart';
@@ -57,10 +60,8 @@ class UploadService implements UploadServiceContract {
         return await fn();
       } catch (e) {
         if (attempt >= maxAttempts) rethrow;
-        AppLogger.w(
-          'Upload attempt $attempt failed ($e), retrying in ${1 << (attempt - 1)}s...',
-          tag: 'UploadService',
-        );
+        AppLogger.w('Upload attempt $attempt failed ($e), retrying…',
+            tag: 'UploadService');
         await Future.delayed(Duration(seconds: 1 << (attempt - 1)));
       }
     }
@@ -130,18 +131,7 @@ class UploadService implements UploadServiceContract {
             f.sha256Hash == hash &&
             (f.sizeMb - sizeMb).abs() < 0.01 &&
             f.metadataFileId != null,
-        orElse: () => FileRecord(
-          fileId: '',
-          name: '',
-          folderId: null,
-          sizeMb: 0,
-          mimeType: '',
-          uploadedAt: DateTime.now(),
-          chunkCount: 0,
-          sha256Hash: '',
-          metadataMessageId: 0,
-          metadataFileId: null,
-        ),
+        orElse: () => FileRecord.empty(),
       );
 
       if (existingFile.fileId.isNotEmpty &&
@@ -185,38 +175,53 @@ class UploadService implements UploadServiceContract {
           title: 'Instant Upload Complete',
           body: '$name linked instantly via deduplication.',
           payload: 'transfer_upload',
+          actions: [
+            const AndroidNotificationAction(
+              'view_uploads',
+              'View Uploads',
+              showsUserInterface: true,
+            ),
+          ],
         );
 
         return fileMeta;
       }
 
       // ── Step 1.5: Generate and Upload Thumbnail ────────────────────────────
-      String? thumbnailFileId;
-      try {
-        internalOnProgress(0.08, 'Generating thumbnail…');
-        final thumbResult = await ThumbnailGenerator.generate(
-          bytes: bytes,
-          filename: name,
-          mimeType: mimeType,
-        );
+      String? thumbnailFileId =
+          ChunkResumeService.instance.getCachedThumbnailFileId(hash);
 
-        if (thumbResult != null) {
-          try {
-            ServiceLocator.instance.thumbnailRepository
-                .addToMemoryCache(fileId, thumbResult.bytes);
-            await ThumbnailHelper.cacheThumbnail(fileId, thumbResult.bytes);
-          } catch (_) {}
-
-          internalOnProgress(0.10, 'Uploading thumbnail…');
-          final thumbUpload = await _telegram.uploadBytesWithFileId(
-            thumbResult.bytes,
-            '.thumb_$name.${thumbResult.extension}',
+      if (thumbnailFileId == null) {
+        try {
+          internalOnProgress(0.08, 'Generating thumbnail…');
+          final thumbResult = await ThumbnailGenerator.generate(
+            bytes: bytes,
+            filename: name,
+            mimeType: mimeType,
           );
-          thumbnailFileId = thumbUpload['file_id'] as String?;
+
+          if (thumbResult != null) {
+            try {
+              ServiceLocator.instance.thumbnailRepository
+                  .addToMemoryCache(fileId, thumbResult.bytes);
+              await ThumbnailHelper.cacheThumbnail(fileId, thumbResult.bytes);
+            } catch (_) {}
+
+            internalOnProgress(0.10, 'Uploading thumbnail…');
+            final thumbUpload = await _telegram.uploadBytesWithFileId(
+              thumbResult.bytes,
+              '.thumb_$name.${thumbResult.extension}',
+            );
+            thumbnailFileId = thumbUpload['file_id'] as String?;
+            if (thumbnailFileId != null) {
+              await ChunkResumeService.instance
+                  .saveThumbnailFileId(hash, thumbnailFileId);
+            }
+          }
+        } catch (e) {
+          AppLogger.e('Thumbnail upload step failed for $name: $e',
+              tag: 'UploadService');
         }
-      } catch (e) {
-        AppLogger.e('Thumbnail upload step failed for $name: $e',
-            tag: 'UploadService');
       }
 
       final chunkInfos = <ChunkInfo>[];
@@ -252,7 +257,11 @@ class UploadService implements UploadServiceContract {
             'ZIP size: ${(zipBytes.length / 1048576).toStringAsFixed(2)} MB, ${parts.length} part(s)',
             tag: 'UploadService');
 
+        final existingChunks =
+            ChunkResumeService.instance.getUploadedChunks(hash);
+
         for (var i = 0; i < parts.length; i++) {
+          final chunkIndex = i + 1;
           // Check for pause/cancel
           while (TransferQueueService.instance.isPaused(fileId)) {
             await Future.delayed(const Duration(seconds: 1));
@@ -263,30 +272,41 @@ class UploadService implements UploadServiceContract {
 
           final partName = parts.length == 1
               ? '$baseName.zip'
-              : '$baseName.zip.${(i + 1).toString().padLeft(3, '0')}';
+              : '$baseName.zip.${chunkIndex.toString().padLeft(3, '0')}';
+
+          final cachedChunk = existingChunks[chunkIndex];
+          if (cachedChunk != null) {
+            AppLogger.d(
+                'Resuming already-uploaded part $chunkIndex/${parts.length}: "$partName"',
+                tag: 'UploadService');
+            chunkInfos.add(cachedChunk);
+            internalOnProgress(
+              0.15 + (i / parts.length * 0.68),
+              'Resumed part $chunkIndex/${parts.length}…',
+            );
+            continue;
+          }
 
           internalOnProgress(
             0.15 + (i / parts.length * 0.68),
-            'Uploading part ${i + 1}/${parts.length}…',
+            'Uploading part $chunkIndex/${parts.length}…',
           );
           AppLogger.d(
-              'Part ${i + 1}/${parts.length}: "$partName" (${(parts[i].length / 1048576).toStringAsFixed(2)} MB)',
+              'Part $chunkIndex/${parts.length}: "$partName" (${(parts[i].length / 1048576).toStringAsFixed(2)} MB)',
               tag: 'UploadService');
 
           final result = await _withRetry(
               () => _telegram.uploadBytesWithFileId(parts[i], partName));
-          chunkInfos.add(ChunkInfo(
-            index: i + 1,
+          final chunkInfo = ChunkInfo(
+            index: chunkIndex,
             messageId: result['message_id'] as int,
             fileId: result['file_id'] as String,
             sizeMb: parts[i].length / 1048576,
             partName: partName,
-          ));
-
-          // Brief pause between uploads to respect Telegram rate limits
-          await Future.delayed(
-            const Duration(milliseconds: AppConstants.uploadDelayMs),
           );
+          chunkInfos.add(chunkInfo);
+          await ChunkResumeService.instance
+              .saveUploadedChunk(hash, chunkIndex, chunkInfo);
         }
       }
 
@@ -319,6 +339,9 @@ class UploadService implements UploadServiceContract {
       await _hive.saveFile(savedFile);
       DomainEventBus.instance.fire(FileUploadedEvent(savedFile));
 
+      // Clean up cached chunk and thumbnail references upon successful commit
+      await ChunkResumeService.instance.clearFileCache(hash);
+
       if (!skipGlobalMetadataUpdate) {
         try {
           final appMeta = await _metadata.fetch();
@@ -350,6 +373,13 @@ class UploadService implements UploadServiceContract {
         title: 'Upload Complete',
         body: '$name has been successfully uploaded.',
         payload: 'transfer_upload',
+        actions: [
+          const AndroidNotificationAction(
+            'view_uploads',
+            'View Uploads',
+            showsUserInterface: true,
+          ),
+        ],
       );
 
       return fileMeta;
@@ -401,8 +431,8 @@ class UploadService implements UploadServiceContract {
       // Report progress
       onProgress(offset / data.length);
 
-      // Yield to event loop periodically so UI frames can render
-      if (chunk % yieldEvery == 0) {
+      // Yield to event loop periodically on Web so UI frames can render
+      if (kIsWeb && chunk % yieldEvery == 0) {
         await Future.delayed(Duration.zero);
       }
     }
@@ -417,8 +447,10 @@ class UploadService implements UploadServiceContract {
   /// running DEFLATE.  For already-compressed files (MP4, JPEG, etc.) this
   /// is functionally identical and takes milliseconds instead of seconds.
   Future<Uint8List> _wrapInZipStore(Uint8List bytes, String filename) async {
-    // Yield one frame so the "Packaging…" status text is visible
-    await Future.delayed(Duration.zero);
+    // Yield one frame on Web so the "Packaging…" status text is visible
+    if (kIsWeb) {
+      await Future.delayed(Duration.zero);
+    }
 
     final archive = Archive();
     // level: 0 = Deflate.NO_COMPRESSION → STORE mode

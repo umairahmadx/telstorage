@@ -27,13 +27,14 @@ class DownloadJobAdapter extends TypeAdapter<DownloadJob> {
       error: fields[7] as String?,
       addedAt: fields[8] as DateTime,
       completedAt: fields[9] as DateTime?,
+      subpath: fields[10] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, DownloadJob obj) {
     writer
-      ..writeByte(10)
+      ..writeByte(11)
       ..writeByte(0)
       ..write(obj.fileId)
       ..writeByte(1)
@@ -53,7 +54,9 @@ class DownloadJobAdapter extends TypeAdapter<DownloadJob> {
       ..writeByte(8)
       ..write(obj.addedAt)
       ..writeByte(9)
-      ..write(obj.completedAt);
+      ..write(obj.completedAt)
+      ..writeByte(10)
+      ..write(obj.subpath);
   }
 
   @override

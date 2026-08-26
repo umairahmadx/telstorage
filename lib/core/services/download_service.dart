@@ -168,7 +168,11 @@ class DownloadService implements DownloadServiceContract {
   /// • iOS    → Documents folder (iOS Files app) + share sheet
   /// • Desktop → Downloads folder, then open
   @override
-  Future<SaveResult> saveAndOpen(Uint8List bytes, String filename) async {
+  Future<SaveResult> saveAndOpen(
+    Uint8List bytes,
+    String filename, {
+    String? subpath,
+  }) async {
     if (kIsWeb) {
       triggerWebDownload(bytes, filename);
       return const SaveResult(
@@ -178,7 +182,7 @@ class DownloadService implements DownloadServiceContract {
     }
 
     // Native: delegate to platform-specific helper
-    final result = await saveNative(bytes, filename);
+    final result = await saveNative(bytes, filename, subpath: subpath);
     return SaveResult(
       success: result.success,
       savedPath: result.savedPath,
@@ -188,12 +192,16 @@ class DownloadService implements DownloadServiceContract {
 
   /// Legacy compatibility — delegates to [saveAndOpen].
   @override
-  Future<void> saveFile(Uint8List bytes, String filename) async {
+  Future<void> saveFile(
+    Uint8List bytes,
+    String filename, {
+    String? subpath,
+  }) async {
     if (kIsWeb) {
       triggerWebDownload(bytes, filename);
       return;
     }
-    await saveAndOpen(bytes, filename);
+    await saveAndOpen(bytes, filename, subpath: subpath);
   }
 
   // ── Private helpers ────────────────────────────────────────────────────────

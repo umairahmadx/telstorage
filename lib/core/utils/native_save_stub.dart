@@ -14,5 +14,9 @@ class NativeSaveResult {
       {this.savedPath, required this.message, required this.success});
 }
 
-Future<NativeSaveResult> saveNative(Uint8List bytes, String filename) =>
+Future<NativeSaveResult> saveNative(
+  Uint8List bytes,
+  String filename, {
+  String? subpath,
+}) =>
     throw UnsupportedError('Use web download on web platform');

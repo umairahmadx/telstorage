@@ -58,6 +58,18 @@ class FileRecord extends HiveObject {
     this.thumbnailFileId,
   });
 
+  /// Creates an empty sentinel FileRecord instance.
+  factory FileRecord.empty() => FileRecord(
+        fileId: '',
+        name: '',
+        metadataMessageId: 0,
+        sizeMb: 0,
+        mimeType: '',
+        uploadedAt: DateTime.fromMillisecondsSinceEpoch(0),
+        chunkCount: 0,
+        sha256Hash: '',
+      );
+
   factory FileRecord.fromMap(Map<String, dynamic> map) {
     return FileRecord(
       fileId: map['file_id'] as String,

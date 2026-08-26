@@ -49,6 +49,9 @@ class AppConstants {
   /// Hive box storing active web share links.
   static const String webSharesBox = 'web_shares';
 
+  /// Hive box storing partially uploaded chunk states for instant resume.
+  static const String uploadChunksBox = 'upload_chunks';
+
   // ── Secure Storage Keys ──────────────────────────────────────────────────
 
   /// FlutterSecureStorage key for the Telegram bot token.

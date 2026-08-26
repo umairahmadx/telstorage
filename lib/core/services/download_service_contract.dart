@@ -12,6 +12,10 @@ abstract class DownloadServiceContract {
     FileRecord record,
     void Function(double progress, String status) onProgress,
   );
-  Future<SaveResult> saveAndOpen(Uint8List bytes, String filename);
-  Future<void> saveFile(Uint8List bytes, String filename);
+  Future<SaveResult> saveAndOpen(
+    Uint8List bytes,
+    String filename, {
+    String? subpath,
+  });
+  Future<void> saveFile(Uint8List bytes, String filename, {String? subpath});
 }

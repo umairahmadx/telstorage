@@ -5,6 +5,7 @@
 
 import 'dart:typed_data';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/services/notification_service.dart';
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/utils/connectivity.dart';
 
@@ -232,6 +233,14 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
     _queue.addAll(event.tasks);
     _totalCount += event.tasks.length;
 
+    // Proactively start Foreground Service and CPU wakelock in foreground context
+    NotificationService.instance.startTransferSession(
+      title: event.tasks.length == 1
+          ? 'Uploading ${event.tasks.first.name}…'
+          : 'Uploading ${event.tasks.length} files…',
+      body: 'Starting upload queue',
+    );
+
     if (!_isWaitingForNetwork) {
       final workersToSpawn =
           (_maxConcurrentWorkers - _activeWorkers).clamp(0, _queue.length);
@@ -261,6 +270,7 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
       _totalCount = 0;
       _completedCount = 0;
       _isWaitingForNetwork = false;
+      await NotificationService.instance.stopTransferSession();
       emit(UploadSuccess("All files"));
       return;
     }
@@ -382,6 +392,7 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
     _completedCount = 0;
     _activeWorkers = 0;
     _isWaitingForNetwork = false;
+    NotificationService.instance.stopTransferSession();
     emit(UploadIdle());
   }
 

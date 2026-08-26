@@ -18,6 +18,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <!-- Android 13+ notification permission for download progress -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Unrestricted background uploads for aggressive OEM power managers -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <application
         android:label="TelStorage"
         android:name="${applicationName}"
@@ -50,10 +52,9 @@
             android:name="flutterEmbedding"
             android:value="2" />
         <service
-            android:name="id.flutter.flutter_background_service.BackgroundService"
+            android:name="com.dexterous.flutterlocalnotifications.ForegroundService"
             android:foregroundServiceType="dataSync"
-            android:exported="false"
-            tools:replace="android:exported" />
+            android:exported="false" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

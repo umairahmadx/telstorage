@@ -401,9 +401,12 @@ class NotificationService {
   }
 
   /// Shows a high-priority transfer completion or failure notification.
+  /// When [bigText] is provided, the notification is expandable on Android
+  /// to reveal the full error details or additional context.
   Future<void> showCompletionNotification({
     required String title,
     required String body,
+    String? bigText,
     String? payload,
     List<AndroidNotificationAction>? actions,
   }) async {
@@ -419,6 +422,13 @@ class NotificationService {
         priority: Priority.high,
         icon: '@mipmap/launcher_icon',
         category: AndroidNotificationCategory.status,
+        styleInformation: bigText != null
+            ? BigTextStyleInformation(
+                bigText,
+                contentTitle: title,
+                summaryText: body,
+              )
+            : null,
         actions: actions,
       ),
       iOS: const DarwinNotificationDetails(

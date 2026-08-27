@@ -352,7 +352,8 @@ class WebShareQueueService {
       if (!wasCancelled) {
         await NotificationService.instance.showCompletionNotification(
           title: 'Share Failed',
-          body: 'Failed to share ${current.name}: $e',
+          body: 'Failed to share ${current.name}',
+          bigText: 'Failed to share ${current.name}\n\nError: $e',
           payload: 'transfer_share',
         );
       }

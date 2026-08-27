@@ -257,7 +257,8 @@ abstract final class ZipArchiveService {
         );
         await NotificationService.instance.showCompletionNotification(
           title: 'ZIP Export Failed',
-          body: 'Failed to export ${folder.name}.zip: $e',
+          body: 'Failed to export ${folder.name}.zip',
+          bigText: 'Failed to export ${folder.name}.zip\n\nError: $e',
           payload: 'transfer_download',
         );
         return null;

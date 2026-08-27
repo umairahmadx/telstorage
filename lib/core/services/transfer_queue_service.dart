@@ -174,9 +174,11 @@ class TransferQueueService {
   }
 
   /// Checks if a task is currently in cancelled state.
+  /// Returns false for unknown task IDs (e.g., file downloads invoked
+  /// outside the queue, such as ZIP export sub-downloads).
   bool isCancelled(String id) {
     final index = tasks.indexWhere((t) => t.id == id);
-    if (index == -1) return true;
+    if (index == -1) return false;
     return tasks[index].status == TransferStatus.cancelled;
   }
 

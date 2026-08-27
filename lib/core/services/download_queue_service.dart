@@ -306,7 +306,8 @@ class DownloadQueueService {
 
       await NotificationService.instance.showCompletionNotification(
         title: 'Download Failed',
-        body: 'Failed to download ${job.name}: no internet connection.',
+        body: 'Failed to download ${job.name}',
+        bigText: 'Failed to download ${job.name}\n\nError: No internet connection.',
       );
 
       _runningFileIds.remove(fileId);
@@ -387,7 +388,8 @@ class DownloadQueueService {
 
           await NotificationService.instance.showCompletionNotification(
             title: 'Download Failed',
-            body: 'Failed to download ${job.name}: ${saveResult.message}',
+            body: 'Failed to download ${job.name}',
+            bigText: 'Failed to download ${job.name}\n\nError: ${saveResult.message}',
             payload: 'transfer_download',
           );
         }
@@ -408,7 +410,8 @@ class DownloadQueueService {
 
           await NotificationService.instance.showCompletionNotification(
             title: 'Download Failed',
-            body: 'Failed to download ${job.name}: $e',
+            body: 'Failed to download ${job.name}',
+            bigText: 'Failed to download ${job.name}\n\nError: $e',
             payload: 'transfer_download',
           );
         }

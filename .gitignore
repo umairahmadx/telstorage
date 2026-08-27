@@ -14,6 +14,12 @@ migrate_working_dir/
 Future.md
 TODO.md
 doc/
+/docs/
+docs/
+docs/superpowers/
+/docs/superpowers/
+
+
 # Environment files
 .env
 .env.production
@@ -41,6 +47,8 @@ doc/
 .pub/
 /build/
 /coverage/
+test_hive_*/
+
 
 # Symbolication related
 app.*.symbols

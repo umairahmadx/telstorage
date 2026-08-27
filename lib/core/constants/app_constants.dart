@@ -52,6 +52,12 @@ class AppConstants {
   /// Hive box storing partially uploaded chunk states for instant resume.
   static const String uploadChunksBox = 'upload_chunks';
 
+  /// Hive box storing persistent diagnostic error and warning logs.
+  static const String errorLogsBox = 'error_logs';
+
+
+
+
   // ── Secure Storage Keys ──────────────────────────────────────────────────
 
   /// FlutterSecureStorage key for the Telegram bot token.

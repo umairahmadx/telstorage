@@ -3,6 +3,7 @@
  * Description: Entry point for TelStorage initializing WorkManager, Hive boxes, adapters, and environment variables.
  */
 
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -14,8 +15,10 @@ import 'core/models/download_job.dart';
 import 'core/models/file_record.dart';
 import 'core/models/folder_record.dart';
 import 'core/models/pending_action.dart';
+import 'core/services/error_log_service.dart';
 import 'core/services/hive_service.dart';
 import 'core/services/theme_service.dart';
+
 
 /// Top-level callback dispatcher for Workmanager background sync execution.
 @pragma('vm:entry-point')
@@ -98,8 +101,36 @@ Future<void> main() async {
   await HiveService.openBoxDefensively(AppConstants.webSharesBox);
   await HiveService.openBoxDefensively(AppConstants.uploadChunksBox);
 
+
+  // Initialize ErrorLogService & Hive Box
+  await ErrorLogService.instance.init();
+
+
+  // Setup Global Error Handlers to record uncaught crashes
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    ErrorLogService.instance.logError(
+      details.exceptionAsString(),
+      tag: 'FlutterUI',
+      error: details.exception,
+      stackTrace: details.stack,
+      metadata: {'library': details.library},
+    );
+  };
+
+  PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+    ErrorLogService.instance.logError(
+      error.toString(),
+      tag: 'UncaughtAsync',
+      error: error,
+      stackTrace: stack,
+    );
+    return true;
+  };
+
   // Initialize Theme Service
   await ThemeService.instance.init();
 
   runApp(const TelStorageApp());
 }
+

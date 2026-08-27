@@ -10,6 +10,7 @@ import '../utils/app_logger.dart';
 import 'download_queue_service.dart';
 import 'download_service.dart';
 import 'notification_service.dart';
+import 'error_log_service.dart';
 import 'file_manager.dart';
 import 'hive_service.dart';
 import 'metadata_service.dart';
@@ -105,6 +106,8 @@ class ServiceLocator {
   NavigationService get navigation => _navigation;
   TransferQueueService get transferQueue => _transferQueue;
   AppCacheManager get cacheManager => _cacheManager;
+  ErrorLogService get errorLogService => ErrorLogService.instance;
+
 
   Future<void>? _initFuture;
 

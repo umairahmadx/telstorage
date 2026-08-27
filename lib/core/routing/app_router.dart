@@ -8,6 +8,8 @@ import '../../features/auth/presentation/screens/login/login_screen.dart';
 import '../../features/auth/presentation/screens/splash/splash_screen.dart';
 import '../../features/browser/presentation/screens/browser/browser_screen.dart';
 import '../../features/downloads/presentation/screens/downloads/downloads_screen.dart';
+import '../../features/settings/presentation/screens/error_logs/error_logs_screen.dart';
+
 import '../../features/settings/presentation/screens/settings/settings_screen.dart';
 import '../../shared/widgets/mobile_shell.dart';
 import '../services/auth_service.dart';
@@ -35,6 +37,9 @@ class AppRouter {
 
   /// Settings control center route path.
   static const String settings = '/settings';
+
+  /// Error & diagnostic logs route path.
+  static const String errorLogs = '/settings/error-logs';
 
   /// Generates the requested route dynamically with transition effects.
   static Route<dynamic> onGenerateRoute(RouteSettings routeSettings) {
@@ -69,6 +74,10 @@ class AppRouter {
 
       case AppRouter.settings:
         return _pageRoute(const SettingsScreen(), routeSettings);
+
+      case errorLogs:
+        return _pageRoute(const ErrorLogsScreen(), routeSettings);
+
 
       default:
         return _pageRoute(const FallbackRedirectorScreen(), routeSettings);

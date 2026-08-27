@@ -8,6 +8,7 @@ import 'package:telstorage/core/theme/app_icons.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
 import 'package:telstorage/core/utils/battery_optimization_helper.dart';
 import 'package:telstorage/features/settings/presentation/screens/about/about_screen.dart';
+import 'package:telstorage/features/settings/presentation/screens/error_logs/error_logs_screen.dart';
 import 'package:telstorage/features/sync/presentation/screens/sync/sync_screen.dart';
 import 'package:telstorage/shared/widgets/app_surface_card.dart';
 import 'package:telstorage/shared/widgets/mobile_shell.dart';
@@ -61,6 +62,19 @@ class _SettingsToolsCardState extends State<SettingsToolsCard> {
           Divider(color: colors.borderSubtle, height: 1),
           _buildToolTile(
             colors,
+            icon: Icons.bug_report_rounded,
+            title: 'Error & Diagnostic Logs',
+            subtitle: 'Inspect system warnings, network logs, and errors',
+            borderRadius: BorderRadius.zero,
+            onTap: () {
+              Navigator.of(context, rootNavigator: true).push(
+                MaterialPageRoute(builder: (_) => const ErrorLogsScreen()),
+              );
+            },
+          ),
+          Divider(color: colors.borderSubtle, height: 1),
+          _buildToolTile(
+            colors,
             icon: AppIcons.share,
             title: 'Public Web Shares',
             subtitle: 'Manage active storage.to shared links',
@@ -69,6 +83,7 @@ class _SettingsToolsCardState extends State<SettingsToolsCard> {
               MobileShell.of(context)?.switchTab(1);
             },
           ),
+
           Divider(color: colors.borderSubtle, height: 1),
           _buildToolTile(
             colors,

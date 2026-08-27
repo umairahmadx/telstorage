@@ -16,6 +16,12 @@ import 'package:telstorage/shared/widgets/dialogs/app_dialogs.dart';
 
 class _MockEmptyStorageRepository implements StorageRepository {
   @override
+  List<FolderRecord> get currentFolders => [];
+
+  @override
+  List<FileRecord> get currentFiles => [];
+
+  @override
   List<FolderRecord> getFolders(String? parentId) => [];
 
   @override

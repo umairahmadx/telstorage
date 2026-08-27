@@ -22,6 +22,12 @@ class _FakeStorageRepository implements StorageRepositoryContract {
   }
 
   @override
+  List<FolderRecord> get currentFolders => _folders;
+
+  @override
+  List<FileRecord> get currentFiles => _files;
+
+  @override
   List<FolderRecord> getFolders(String? parentId) =>
       _folders.where((f) => f.parentId == parentId).toList();
 

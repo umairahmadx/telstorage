@@ -281,8 +281,8 @@ abstract final class BrowserDialogs {
     final repo = ServiceLocator.instance.storageRepository;
     final items = FolderTraversalService.resolveDescendants(
       targetFolderId: folder.id,
-      allFolders: repo.getFolders(null),
-      allFiles: repo.getFiles(null),
+      allFolders: repo.currentFolders,
+      allFiles: repo.currentFiles,
     );
     final stats = FolderTraversalService.calculateStats(items);
 
@@ -327,8 +327,8 @@ abstract final class BrowserDialogs {
     final repo = ServiceLocator.instance.storageRepository;
     final items = FolderTraversalService.resolveDescendants(
       targetFolderId: folder.id,
-      allFolders: repo.getFolders(null),
-      allFiles: repo.getFiles(null),
+      allFolders: repo.currentFolders,
+      allFiles: repo.currentFiles,
     );
     final stats = FolderTraversalService.calculateStats(items);
 

@@ -12,6 +12,12 @@ import 'package:telstorage/features/storage/data/repositories/storage_repository
 
 class _MockStorageRepo implements StorageRepository {
   @override
+  List<FolderRecord> get currentFolders => [];
+
+  @override
+  List<FileRecord> get currentFiles => [];
+
+  @override
   List<FolderRecord> getFolders(String? parentId) => [];
 
   @override

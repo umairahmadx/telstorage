@@ -404,8 +404,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
     final items = FolderTraversalService.resolveMultiSelection(
       folderIds: state.selectedFolderIds,
       fileIds: state.selectedFileIds,
-      allFolders: repo.getFolders(null),
-      allFiles: repo.getFiles(null),
+      allFolders: repo.currentFolders,
+      allFiles: repo.currentFiles,
     );
     final stats = FolderTraversalService.calculateStats(items);
 

@@ -51,8 +51,8 @@ abstract final class BrowserBatchHelper {
       throw Exception('Cannot download while offline');
     }
 
-    final allFolders = repository.getFolders(null);
-    final allFiles = repository.getFiles(null);
+    final allFolders = repository.currentFolders;
+    final allFiles = repository.currentFiles;
 
     final items = FolderTraversalService.resolveMultiSelection(
       folderIds: state.selectedFolderIds,
@@ -81,8 +81,8 @@ abstract final class BrowserBatchHelper {
       throw Exception('Cannot download folder while offline');
     }
 
-    final allFolders = repository.getFolders(null);
-    final allFiles = repository.getFiles(null);
+    final allFolders = repository.currentFolders;
+    final allFiles = repository.currentFiles;
 
     final items = FolderTraversalService.resolveDescendants(
       targetFolderId: folder.id,
@@ -110,8 +110,8 @@ abstract final class BrowserBatchHelper {
       throw Exception('Cannot export ZIP while offline');
     }
 
-    final allFolders = repository.getFolders(null);
-    final allFiles = repository.getFiles(null);
+    final allFolders = repository.currentFolders;
+    final allFiles = repository.currentFiles;
 
     final items = FolderTraversalService.resolveDescendants(
       targetFolderId: folder.id,

@@ -1,19 +1,18 @@
 /*
  * File: share_link_sheet.dart
- * Description: Modal bottom sheet for configuring and generating public web share URLs with expiry, passwords, QR codes, and real thumbnail previews.
+ * Description: Modal bottom sheet for configuring and generating public web share URLs with expiry, passwords, QR codes, and thumbnail previews.
  */
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/models/file_record.dart';
 import '../../../core/services/service_locator.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/app_icons.dart';
 import 'dialogs/app_dialogs.dart';
+import 'dialogs/share_link_active_actions.dart';
+import 'dialogs/share_link_options_section.dart';
 import 'thumbnail_widget.dart';
-import 'qr_dialog.dart';
 
 /// Modal bottom sheet providing public web link sharing controls with dynamic Get URL / Copy Link states.
 class ShareLinkSheet extends StatefulWidget {
@@ -24,7 +23,8 @@ class ShareLinkSheet extends StatefulWidget {
   final String? shareUrl;
 
   /// Callback to enqueue/generate public share link.
-  final Function(String? password, int expiryDays, String? vanitySlug) onCopyLink;
+  final Function(String? password, int expiryDays, String? vanitySlug)
+      onCopyLink;
 
   /// Constructs ShareLinkSheet.
   const ShareLinkSheet({
@@ -62,8 +62,8 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
 
     try {
       if (ServiceLocator.instance.isInitialized) {
-        final existing =
-            ServiceLocator.instance.webShareQueue.getActiveShare(widget.file.fileId);
+        final existing = ServiceLocator.instance.webShareQueue
+            .getActiveShare(widget.file.fileId);
         if (existing != null &&
             existing.shareUrl != null &&
             existing.shareUrl!.isNotEmpty) {
@@ -112,14 +112,16 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
     final confirm = await AppDialogs.showConfirm(
       context,
       title: 'Delete Share Link?',
-      message: 'This will immediately revoke access and expire the public link.',
+      message:
+          'This will immediately revoke access and expire the public link.',
       confirmText: 'Delete Link',
       isDestructive: true,
     );
     if (confirm == true && context.mounted) {
       HapticFeedback.heavyImpact();
       if (ServiceLocator.instance.isInitialized) {
-        await ServiceLocator.instance.webShareQueue.deleteShare(widget.file.fileId);
+        await ServiceLocator.instance.webShareQueue
+            .deleteShare(widget.file.fileId);
       }
       setState(() {
         _hasActiveShare = false;
@@ -141,8 +143,6 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
-    final dateStr = DateFormat('dd MMM yyyy')
-        .format(DateTime.now().add(Duration(days: _expiryDays)));
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -185,34 +185,37 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
                       Text(
                         widget.file.name,
                         style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: colors.textPrimary),
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: colors.textPrimary,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
                       Text(
                         widget.file.formattedSize,
-                        style:
-                            TextStyle(color: colors.textSecondary, fontSize: 13),
+                        style: TextStyle(
+                          color: colors.textSecondary,
+                          fontSize: 13,
+                        ),
                       ),
                     ],
                   ),
                 ),
               ],
             ),
-
-            // If active share URL exists, display it in a clean card
             if (_hasActiveShare && _effectiveShareUrl != null) ...[
               const SizedBox(height: 20),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   color: colors.bgSurface,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                      color: colors.accentPrimary.withValues(alpha: 0.3)),
+                    color: colors.accentPrimary.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -235,209 +238,22 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
                 ),
               ),
             ],
-
             const SizedBox(height: 24),
-            Text('Expires',
-                style: TextStyle(color: colors.textSecondary, fontSize: 14)),
-            const SizedBox(height: 12),
-            PopupMenuButton<int>(
-              onSelected: (days) {
-                HapticFeedback.selectionClick();
-                setState(() => _expiryDays = days);
-              },
-              itemBuilder: (ctx) => [
-                const PopupMenuItem(value: 1, child: Text('In 1 day')),
-                const PopupMenuItem(value: 3, child: Text('In 3 days')),
-                const PopupMenuItem(value: 7, child: Text('In 7 days')),
-              ],
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                decoration: BoxDecoration(
-                  color: colors.bgSurface,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Row(
-                  children: [
-                    Icon(AppIcons.calendar,
-                        size: 20, color: colors.textTertiary),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('In $_expiryDays days',
-                              style: TextStyle(
-                                  color: colors.textPrimary,
-                                  fontWeight: FontWeight.w600)),
-                          Text(dateStr,
-                              style: TextStyle(
-                                  color: colors.textTertiary, fontSize: 11)),
-                        ],
-                      ),
-                    ),
-                    Icon(AppIcons.dropdownArrow,
-                        color: colors.textTertiary),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text('Password (Optional)',
-                style: TextStyle(color: colors.textSecondary, fontSize: 14)),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              decoration: BoxDecoration(
-                color: colors.bgSurface,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                children: [
-                  Icon(AppIcons.lock,
-                      size: 20, color: colors.textTertiary),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Text('Set password',
-                        style: TextStyle(
-                            color: colors.textPrimary,
-                            fontWeight: FontWeight.w500)),
-                  ),
-                  Switch(
-                    value: _setPassword,
-                    onChanged: (v) {
-                      HapticFeedback.selectionClick();
-                      setState(() => _setPassword = v);
-                    },
-                    activeTrackColor: colors.accentPrimary,
-                    activeThumbColor: colors.bgPrimary,
-                  ),
-                ],
-              ),
-            ),
-            if (_setPassword) ...[
-              const SizedBox(height: 12),
-              TextField(
-                controller: _passCtrl,
-                obscureText: true,
-                style: TextStyle(color: colors.textPrimary),
-                decoration: InputDecoration(
-                  hintText: 'Enter password',
-                  hintStyle: TextStyle(color: colors.textTertiary),
-                  filled: true,
-                  fillColor: colors.bgSurface,
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide.none),
-                ),
-              ),
-            ],
-            const SizedBox(height: 20),
-            Text('Custom Vanity Link (Optional)',
-                style: TextStyle(color: colors.textSecondary, fontSize: 14)),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _slugCtrl,
-              style: TextStyle(color: colors.textPrimary),
-              decoration: InputDecoration(
-                prefixText: 'storage.to/v/',
-                prefixStyle: TextStyle(
-                    color: colors.accentPrimary, fontWeight: FontWeight.bold),
-                hintText: 'my-custom-alias',
-                hintStyle: TextStyle(color: colors.textTertiary),
-                filled: true,
-                fillColor: colors.bgSurface,
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide.none),
-              ),
+            ShareLinkOptionsSection(
+              expiryDays: _expiryDays,
+              onExpiryDaysChanged: (days) => setState(() => _expiryDays = days),
+              setPassword: _setPassword,
+              onSetPasswordChanged: (val) => setState(() => _setPassword = val),
+              passwordController: _passCtrl,
+              slugController: _slugCtrl,
             ),
             const SizedBox(height: 28),
             if (_hasActiveShare && _effectiveShareUrl != null) ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () =>
-                          _handleCopyExistingLink(context, colors),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: colors.accentPrimary,
-                        foregroundColor: colors.bgPrimary,
-                        minimumSize: const Size(double.infinity, 50),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16)),
-                      ),
-                      icon: const Icon(Icons.copy_rounded, size: 18),
-                      label: const Text('Copy Link',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 14)),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _handleNativeShare,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: colors.textPrimary,
-                        side: BorderSide(color: colors.borderSubtle),
-                        minimumSize: const Size(double.infinity, 50),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16)),
-                      ),
-                      icon: const Icon(Icons.share_outlined, size: 18),
-                      label: const Text('Share',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 14)),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Material(
-                    color: colors.bgSurface,
-                    borderRadius: BorderRadius.circular(16),
-                    clipBehavior: Clip.antiAlias,
-                    child: InkWell(
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        showDialog(
-                          context: context,
-                          builder: (_) => QrDialog(
-                            data: _effectiveShareUrl!,
-                            title: 'Share File QR',
-                          ),
-                        );
-                      },
-                      borderRadius: BorderRadius.circular(16),
-                      child: SizedBox(
-                        width: 50,
-                        height: 50,
-                        child: Center(
-                          child: Icon(
-                            AppIcons.qrCode,
-                            color: colors.textPrimary,
-                            size: 22,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: TextButton.icon(
-                  onPressed: () => _handleDeleteShare(context, colors),
-                  style: TextButton.styleFrom(
-                    foregroundColor: colors.error,
-                    backgroundColor: colors.error.withValues(alpha: 0.08),
-                    minimumSize: const Size(double.infinity, 46),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
-                  ),
-                  icon: const Icon(Icons.link_off_rounded, size: 18),
-                  label: const Text('Delete Link (Expire Now)',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 14)),
-                ),
+              ShareLinkActiveActions(
+                shareUrl: _effectiveShareUrl!,
+                onCopy: () => _handleCopyExistingLink(context, colors),
+                onShare: _handleNativeShare,
+                onDelete: () => _handleDeleteShare(context, colors),
               ),
             ] else ...[
               SizedBox(
@@ -458,13 +274,16 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
                     foregroundColor: colors.bgPrimary,
                     minimumSize: const Size(double.infinity, 54),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16)),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                   ),
                   icon: const Icon(Icons.cloud_upload_outlined),
                   label: const Text(
                     'Get URL',
                     style: TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 15),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
                   ),
                 ),
               ),
@@ -476,4 +295,3 @@ class _ShareLinkSheetState extends State<ShareLinkSheet> {
     );
   }
 }
-

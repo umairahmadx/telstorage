@@ -177,7 +177,8 @@ class AppCacheManager {
         limitMb: limitMb,
       );
     } catch (e) {
-      AppLogger.w('Failed to compute partition stats: $e', tag: 'AppCacheManager');
+      AppLogger.w('Failed to compute partition stats: $e',
+          tag: 'AppCacheManager');
       final limitMb = await getCacheLimitMb();
       return CachePartitionStats(
         thumbnailBytes: 0,
@@ -229,7 +230,8 @@ class AppCacheManager {
   /// Clears in-memory LRU folder partitions.
   Future<void> clearFolderPartitionCache() async {
     LruFolderCacheService.instance.clear();
-    AppLogger.i('Folder partition memory cache cleared', tag: 'AppCacheManager');
+    AppLogger.i('Folder partition memory cache cleared',
+        tag: 'AppCacheManager');
   }
 
   /// Clears all segregated local caches.
@@ -237,7 +239,8 @@ class AppCacheManager {
     await clearThumbnailCache();
     await clearTempCache();
     await clearFolderPartitionCache();
-    AppLogger.i('All local cache partitions successfully flushed', tag: 'AppCacheManager');
+    AppLogger.i('All local cache partitions successfully flushed',
+        tag: 'AppCacheManager');
   }
 
   /// Enforces user-configured cache ceiling using LRU eviction on oldest thumbnail files.
@@ -259,11 +262,9 @@ class AppCacheManager {
       final thumbDir = Directory('${tempDir.path}/thumbnails');
 
       if (thumbDir.existsSync()) {
-        final files = thumbDir
-            .listSync()
-            .whereType<File>()
-            .toList()
-          ..sort((a, b) => a.lastModifiedSync().compareTo(b.lastModifiedSync()));
+        final files = thumbDir.listSync().whereType<File>().toList()
+          ..sort(
+              (a, b) => a.lastModifiedSync().compareTo(b.lastModifiedSync()));
 
         int freedBytes = 0;
         final targetBytesToFree = stats.totalBytes - (maxBytes * 0.85).toInt();
@@ -276,7 +277,8 @@ class AppCacheManager {
             freedBytes += len;
           } catch (_) {}
         }
-        AppLogger.i('LRU eviction freed ${(freedBytes / 1024).toStringAsFixed(1)} KB',
+        AppLogger.i(
+            'LRU eviction freed ${(freedBytes / 1024).toStringAsFixed(1)} KB',
             tag: 'AppCacheManager');
       }
     } catch (e) {

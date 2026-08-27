@@ -77,8 +77,27 @@ class ThumbnailGenerator {
 
   /// Supported code and text extensions for canvas snippet previews.
   static const Set<String> codeExtensions = {
-    'dart', 'json', 'txt', 'md', 'py', 'js', 'ts', 'html', 'css',
-    'yaml', 'yml', 'xml', 'log', 'sh', 'sql', 'cpp', 'c', 'h', 'java', 'kt', 'rs',
+    'dart',
+    'json',
+    'txt',
+    'md',
+    'py',
+    'js',
+    'ts',
+    'html',
+    'css',
+    'yaml',
+    'yml',
+    'xml',
+    'log',
+    'sh',
+    'sql',
+    'cpp',
+    'c',
+    'h',
+    'java',
+    'kt',
+    'rs',
   };
 
   /// Ensures thumbnail binary output is strictly under 50KB using iterative step-down without ratio distortion.
@@ -104,7 +123,8 @@ class ThumbnailGenerator {
             width: targetW,
             height: targetH,
           );
-          final encoded = Uint8List.fromList(img.encodeJpg(resized, quality: q));
+          final encoded =
+              Uint8List.fromList(img.encodeJpg(resized, quality: q));
           if (encoded.length <= maxByteSize) return encoded;
           if (q > 30) {
             q -= 15;
@@ -133,11 +153,14 @@ class ThumbnailGenerator {
       if (mimeType.startsWith('video/')) {
         thumbBytes = await generateVideoThumbnail(bytes, filename);
         thumbBytes ??= await generateImageThumbnail(bytes);
-      } else if (mimeType.startsWith('image/') || fileExt == 'heic' || fileExt == 'heif') {
+      } else if (mimeType.startsWith('image/') ||
+          fileExt == 'heic' ||
+          fileExt == 'heif') {
         thumbBytes = await generateImageThumbnail(bytes);
       } else if (mimeType == 'application/pdf' || fileExt == 'pdf') {
         thumbBytes = await generatePdfThumbnail(bytes);
-      } else if (fileExt == 'apk' || mimeType.contains('android.package-archive')) {
+      } else if (fileExt == 'apk' ||
+          mimeType.contains('android.package-archive')) {
         thumbBytes = await generateApkThumbnail(bytes);
       } else if (codeExtensions.contains(fileExt) ||
           mimeType.startsWith('text/') ||
@@ -146,7 +169,10 @@ class ThumbnailGenerator {
         thumbBytes = await generateCodeThumbnail(bytes, filename);
       }
 
-      if (thumbBytes == null && (mimeType.startsWith('image/') || fileExt == 'heic' || fileExt == 'heif')) {
+      if (thumbBytes == null &&
+          (mimeType.startsWith('image/') ||
+              fileExt == 'heic' ||
+              fileExt == 'heif')) {
         try {
           thumbBytes = await generateImageThumbnail(bytes);
         } catch (_) {}
@@ -167,27 +193,29 @@ class ThumbnailGenerator {
 
   /// Attempts to extract an embedded JPEG preview stream from HEIC/HEIF or EXIF container bytes.
   static Uint8List? _extractEmbeddedJpegFromHeic(Uint8List bytes) {
-  try {
-    final int searchLimit = bytes.length > 500000 ? 500000 : bytes.length;
-    for (int i = 0; i < searchLimit - 4; i++) {
-      if (bytes[i] == 0xFF && bytes[i + 1] == 0xD8 && bytes[i + 2] == 0xFF) {
-        final maxScan = (i + 300000).clamp(0, bytes.length - 1);
-        for (int j = i + 100; j < maxScan; j++) {
-          if (bytes[j] == 0xFF && bytes[j + 1] == 0xD9) {
-            final candidate = bytes.sublist(i, j + 2);
-            if (candidate.length >= 1024) {
-              final decoded = img.decodeJpg(candidate);
-              if (decoded != null && decoded.width >= 50 && decoded.height >= 50) {
-                return _isolateProcessImage(candidate);
+    try {
+      final int searchLimit = bytes.length > 500000 ? 500000 : bytes.length;
+      for (int i = 0; i < searchLimit - 4; i++) {
+        if (bytes[i] == 0xFF && bytes[i + 1] == 0xD8 && bytes[i + 2] == 0xFF) {
+          final maxScan = (i + 300000).clamp(0, bytes.length - 1);
+          for (int j = i + 100; j < maxScan; j++) {
+            if (bytes[j] == 0xFF && bytes[j + 1] == 0xD9) {
+              final candidate = bytes.sublist(i, j + 2);
+              if (candidate.length >= 1024) {
+                final decoded = img.decodeJpg(candidate);
+                if (decoded != null &&
+                    decoded.width >= 50 &&
+                    decoded.height >= 50) {
+                  return _isolateProcessImage(candidate);
+                }
               }
             }
           }
         }
       }
-    }
-  } catch (_) {}
-  return null;
-}
+    } catch (_) {}
+    return null;
+  }
 
   /// Generates image thumbnail scaled proportionally to max 400px preserving original aspect ratio.
   static Future<Uint8List?> generateImageThumbnail(Uint8List bytes) async {
@@ -221,12 +249,14 @@ class ThumbnailGenerator {
       if (byteData != null) {
         final decoded = img.decodeImage(byteData.buffer.asUint8List());
         if (decoded != null) {
-          final encoded = Uint8List.fromList(img.encodeJpg(decoded, quality: quality));
+          final encoded =
+              Uint8List.fromList(img.encodeJpg(decoded, quality: quality));
           return compressUnder50KB(encoded);
         }
       }
     } catch (e) {
-      AppLogger.d('Native image codec fallback failed: $e', tag: 'ThumbnailGenerator');
+      AppLogger.d('Native image codec fallback failed: $e',
+          tag: 'ThumbnailGenerator');
     }
     return null;
   }
@@ -247,7 +277,8 @@ class ThumbnailGenerator {
       );
       return compressUnder50KB(uint8list);
     } catch (e) {
-      AppLogger.d('Video thumbnail extraction skipped: $e', tag: 'ThumbnailGenerator');
+      AppLogger.d('Video thumbnail extraction skipped: $e',
+          tag: 'ThumbnailGenerator');
       return null;
     } finally {
       ThumbnailHelper.cleanVideoSource(sourcePath);
@@ -269,11 +300,13 @@ class ThumbnailGenerator {
       if (pageImage == null) return null;
       final decoded = img.decodeImage(pageImage.bytes);
       if (decoded != null) {
-        final encoded = Uint8List.fromList(img.encodeJpg(decoded, quality: quality));
+        final encoded =
+            Uint8List.fromList(img.encodeJpg(decoded, quality: quality));
         return compressUnder50KB(encoded);
       }
     } catch (e) {
-      AppLogger.d('PDF thumbnail generation skipped: $e', tag: 'ThumbnailGenerator');
+      AppLogger.d('PDF thumbnail generation skipped: $e',
+          tag: 'ThumbnailGenerator');
     }
     return null;
   }
@@ -292,16 +325,21 @@ class ThumbnailGenerator {
           if (path.contains('mipmap-xxxhdpi') && path.contains('ic_launcher')) {
             bestIcon = file;
             bestRank = 5;
-          } else if (path.contains('mipmap-xxhdpi') && path.contains('ic_launcher') && bestRank < 4) {
+          } else if (path.contains('mipmap-xxhdpi') &&
+              path.contains('ic_launcher') &&
+              bestRank < 4) {
             bestIcon = file;
             bestRank = 4;
-          } else if (path.contains('mipmap-xhdpi') && path.contains('ic_launcher') && bestRank < 3) {
+          } else if (path.contains('mipmap-xhdpi') &&
+              path.contains('ic_launcher') &&
+              bestRank < 3) {
             bestIcon = file;
             bestRank = 3;
           } else if (path.contains('ic_launcher') && bestRank < 2) {
             bestIcon = file;
             bestRank = 2;
-          } else if ((path.contains('icon') || path.contains('logo')) && bestRank < 1) {
+          } else if ((path.contains('icon') || path.contains('logo')) &&
+              bestRank < 1) {
             bestIcon = file;
             bestRank = 1;
           }
@@ -326,7 +364,8 @@ class ThumbnailGenerator {
     try {
       if (textBytes.isEmpty) return null;
       final maxLen = textBytes.length > 2048 ? 2048 : textBytes.length;
-      final rawStr = utf8.decode(textBytes.sublist(0, maxLen), allowMalformed: true);
+      final rawStr =
+          utf8.decode(textBytes.sublist(0, maxLen), allowMalformed: true);
       final lines = rawStr.split('\n').take(12).toList();
       if (lines.isEmpty || lines.every((l) => l.trim().isEmpty)) return null;
 
@@ -336,29 +375,38 @@ class ThumbnailGenerator {
       // Background Card
       final bgPaint = Paint()..color = AppColors.codeCanvasBg;
       canvas.drawRRect(
-        RRect.fromRectAndRadius(const Rect.fromLTWH(0, 0, 400, 400), const Radius.circular(28)),
+        RRect.fromRectAndRadius(
+            const Rect.fromLTWH(0, 0, 400, 400), const Radius.circular(28)),
         bgPaint,
       );
 
       // Header Bar
       final headerPaint = Paint()..color = AppColors.codeCanvasHeader;
       canvas.drawRRect(
-        RRect.fromRectAndRadius(const Rect.fromLTWH(0, 0, 400, 48), const Radius.circular(28)),
+        RRect.fromRectAndRadius(
+            const Rect.fromLTWH(0, 0, 400, 48), const Radius.circular(28)),
         headerPaint,
       );
 
       // Mac-like traffic dots
-      canvas.drawCircle(const Offset(24, 24), 5, Paint()..color = AppColors.codeCanvasDotRed);
-      canvas.drawCircle(const Offset(40, 24), 5, Paint()..color = AppColors.codeCanvasDotYellow);
-      canvas.drawCircle(const Offset(56, 24), 5, Paint()..color = AppColors.codeCanvasDotGreen);
+      canvas.drawCircle(
+          const Offset(24, 24), 5, Paint()..color = AppColors.codeCanvasDotRed);
+      canvas.drawCircle(const Offset(40, 24), 5,
+          Paint()..color = AppColors.codeCanvasDotYellow);
+      canvas.drawCircle(const Offset(56, 24), 5,
+          Paint()..color = AppColors.codeCanvasDotGreen);
 
       // Header Filename
       final titleBuilder = ui.ParagraphBuilder(
-        ui.ParagraphStyle(textAlign: TextAlign.right, fontSize: 13, maxLines: 1),
+        ui.ParagraphStyle(
+            textAlign: TextAlign.right, fontSize: 13, maxLines: 1),
       )
-        ..pushStyle(ui.TextStyle(color: AppColors.codeCanvasTextSecondary, fontWeight: FontWeight.bold))
+        ..pushStyle(ui.TextStyle(
+            color: AppColors.codeCanvasTextSecondary,
+            fontWeight: FontWeight.bold))
         ..addText(filename);
-      final titleParagraph = titleBuilder.build()..layout(const ui.ParagraphConstraints(width: 300));
+      final titleParagraph = titleBuilder.build()
+        ..layout(const ui.ParagraphConstraints(width: 300));
       canvas.drawParagraph(titleParagraph, const Offset(80, 16));
 
       // Code Lines with Line Numbers
@@ -374,19 +422,22 @@ class ThumbnailGenerator {
           ..pushStyle(ui.TextStyle(color: AppColors.codeCanvasTextPrimary))
           ..addText(line.length > 35 ? '${line.substring(0, 35)}…' : line);
 
-        final lineParagraph = lineBuilder.build()..layout(const ui.ParagraphConstraints(width: 360));
+        final lineParagraph = lineBuilder.build()
+          ..layout(const ui.ParagraphConstraints(width: 360));
         canvas.drawParagraph(lineParagraph, Offset(18, yOffset));
         yOffset += 24;
       }
 
       final picture = recorder.endRecording();
       final renderedImage = await picture.toImage(400, 400);
-      final byteData = await renderedImage.toByteData(format: ui.ImageByteFormat.png);
+      final byteData =
+          await renderedImage.toByteData(format: ui.ImageByteFormat.png);
       if (byteData == null) return null;
 
       final decoded = img.decodeImage(byteData.buffer.asUint8List());
       if (decoded != null) {
-        final encoded = Uint8List.fromList(img.encodeJpg(decoded, quality: quality));
+        final encoded =
+            Uint8List.fromList(img.encodeJpg(decoded, quality: quality));
         return compressUnder50KB(encoded);
       }
     } catch (e) {

@@ -11,7 +11,8 @@ import 'package:telstorage/core/services/folder_traversal_service.dart';
 void main() {
   final now = DateTime(2026, 8, 27);
 
-  FileRecord makeFile(String id, String name, String? folderId, [double size = 1.0]) {
+  FileRecord makeFile(String id, String name, String? folderId,
+      [double size = 1.0]) {
     return FileRecord(
       fileId: id,
       name: name,
@@ -26,10 +27,14 @@ void main() {
   }
 
   group('FolderTraversalService Edge Cases & Resilience Tests', () {
-    test('EC-01: Circular reference in folder tree does not cause infinite loop', () {
+    test(
+        'EC-01: Circular reference in folder tree does not cause infinite loop',
+        () {
       // Simulates corrupted tree: folderA -> folderB -> folderA
-      final folderA = FolderRecord(id: 'fa', name: 'FolderA', parentId: 'fb', createdAt: now);
-      final folderB = FolderRecord(id: 'fb', name: 'FolderB', parentId: 'fa', createdAt: now);
+      final folderA = FolderRecord(
+          id: 'fa', name: 'FolderA', parentId: 'fb', createdAt: now);
+      final folderB = FolderRecord(
+          id: 'fb', name: 'FolderB', parentId: 'fa', createdAt: now);
       final fileA = makeFile('f1', 'fileA.txt', 'fa');
       final fileB = makeFile('f2', 'fileB.txt', 'fb');
 
@@ -47,7 +52,8 @@ void main() {
     });
 
     test('EC-02: Empty folder returns empty list without error', () {
-      final emptyFolder = FolderRecord(id: 'empty', name: 'EmptyFolder', parentId: null, createdAt: now);
+      final emptyFolder = FolderRecord(
+          id: 'empty', name: 'EmptyFolder', parentId: null, createdAt: now);
 
       final items = FolderTraversalService.resolveDescendants(
         targetFolderId: 'empty',
@@ -71,8 +77,11 @@ void main() {
       expect(items, isEmpty);
     });
 
-    test('EC-04: Path traversal sequences (..) in folder and file names are sanitized', () {
-      final folder = FolderRecord(id: 'f1', name: '../../EvilFolder', parentId: null, createdAt: now);
+    test(
+        'EC-04: Path traversal sequences (..) in folder and file names are sanitized',
+        () {
+      final folder = FolderRecord(
+          id: 'f1', name: '../../EvilFolder', parentId: null, createdAt: now);
       final file = makeFile('doc1', '../../etc/passwd.txt', 'f1');
 
       final items = FolderTraversalService.resolveDescendants(
@@ -89,7 +98,11 @@ void main() {
     });
 
     test('EC-05: Illegal OS characters are sanitized from path segments', () {
-      final folder = FolderRecord(id: 'f1', name: 'Work:Project*2026?|', parentId: null, createdAt: now);
+      final folder = FolderRecord(
+          id: 'f1',
+          name: 'Work:Project*2026?|',
+          parentId: null,
+          createdAt: now);
       final file = makeFile('doc1', 'report<draft>v1".pdf', 'f1');
 
       final items = FolderTraversalService.resolveDescendants(
@@ -100,10 +113,13 @@ void main() {
 
       expect(items.length, equals(1));
       expect(items.first.subpath, equals('Work_Project_2026'));
-      expect(items.first.relativePath, equals('Work_Project_2026/report_draft_v1_.pdf'));
+      expect(items.first.relativePath,
+          equals('Work_Project_2026/report_draft_v1_.pdf'));
     });
 
-    test('EC-06: Deeply nested folder hierarchy (> 10 levels) resolves accurately', () {
+    test(
+        'EC-06: Deeply nested folder hierarchy (> 10 levels) resolves accurately',
+        () {
       final folders = <FolderRecord>[];
       const depth = 12;
       for (var i = 0; i < depth; i++) {
@@ -124,14 +140,20 @@ void main() {
       );
 
       expect(items.length, equals(1));
-      expect(items.first.relativePath, equals('L0/L1/L2/L3/L4/L5/L6/L7/L8/L9/L10/L11/leaf.txt'));
-      expect(items.first.subpath, equals('L0/L1/L2/L3/L4/L5/L6/L7/L8/L9/L10/L11'));
+      expect(items.first.relativePath,
+          equals('L0/L1/L2/L3/L4/L5/L6/L7/L8/L9/L10/L11/leaf.txt'));
+      expect(
+          items.first.subpath, equals('L0/L1/L2/L3/L4/L5/L6/L7/L8/L9/L10/L11'));
       expect(items.first.file.sizeMb, equals(3.5));
     });
 
-    test('EC-07: Multi-selection deduplicates when parent, child, and direct file are all selected', () {
-      final parentFolder = FolderRecord(id: 'p1', name: 'Parent', parentId: null, createdAt: now);
-      final childFolder = FolderRecord(id: 'c1', name: 'Child', parentId: 'p1', createdAt: now);
+    test(
+        'EC-07: Multi-selection deduplicates when parent, child, and direct file are all selected',
+        () {
+      final parentFolder = FolderRecord(
+          id: 'p1', name: 'Parent', parentId: null, createdAt: now);
+      final childFolder =
+          FolderRecord(id: 'c1', name: 'Child', parentId: 'p1', createdAt: now);
       final fileInChild = makeFile('f_child', 'nested.pdf', 'c1', 2.0);
 
       final items = FolderTraversalService.resolveMultiSelection(

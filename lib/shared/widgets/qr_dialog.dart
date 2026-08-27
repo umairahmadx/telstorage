@@ -27,7 +27,9 @@ class QrDialog extends StatelessWidget {
       title: Text(
         title,
         style: TextStyle(
-            color: colors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
+            color: colors.textPrimary,
+            fontSize: 18,
+            fontWeight: FontWeight.bold),
         textAlign: TextAlign.center,
       ),
       content: Column(
@@ -59,8 +61,8 @@ class QrDialog extends StatelessWidget {
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: Text('Close',
-              style:
-                  TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold)),
+              style: TextStyle(
+                  color: colors.textPrimary, fontWeight: FontWeight.bold)),
         ),
       ],
     );

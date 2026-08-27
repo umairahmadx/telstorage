@@ -19,4 +19,3 @@ bool checkLocalFileExists(String path) {
     return false;
   }
 }
-

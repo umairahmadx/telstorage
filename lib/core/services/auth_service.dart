@@ -60,8 +60,7 @@ class AuthService {
       );
       if (res.data['success'] == true) {
         await _storage.write(key: AppConstants.keyBotToken, value: botToken);
-        await _storage.write(
-            key: AppConstants.keyChannelId, value: channelId);
+        await _storage.write(key: AppConstants.keyChannelId, value: channelId);
         await _storage.write(key: AppConstants.keyEmail, value: email);
       }
       return res.data as Map<String, dynamic>;
@@ -84,6 +83,5 @@ class AuthService {
       _storage.read(key: AppConstants.keyBotToken);
   Future<String?> getChannelId() async =>
       _storage.read(key: AppConstants.keyChannelId);
-  Future<String?> getEmail() async =>
-      _storage.read(key: AppConstants.keyEmail);
+  Future<String?> getEmail() async => _storage.read(key: AppConstants.keyEmail);
 }

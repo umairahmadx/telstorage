@@ -125,7 +125,8 @@ class AppSortFilterSheet extends StatelessWidget {
               ),
             ),
             ListTile(
-              title: Text('Folders First', style: TextStyle(color: colors.textPrimary)),
+              title: Text('Folders First',
+                  style: TextStyle(color: colors.textPrimary)),
               trailing: currentGroup == BrowserGroupOption.foldersFirst
                   ? Icon(Icons.check_rounded, color: colors.accentPrimary)
                   : null,

@@ -28,7 +28,8 @@ void main() {
   );
 
   group('FileDetailSheet Downloaded & Open Button Tests', () {
-    testWidgets('TC-01: Displays Download button when file is NOT downloaded', (tester) async {
+    testWidgets('TC-01: Displays Download button when file is NOT downloaded',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.dark(),
@@ -50,7 +51,9 @@ void main() {
       expect(find.text('Open'), findsNothing);
     });
 
-    testWidgets('TC-02: Displays Downloaded and Open buttons when file is downloaded', (tester) async {
+    testWidgets(
+        'TC-02: Displays Downloaded and Open buttons when file is downloaded',
+        (tester) async {
       bool openPressed = false;
 
       await tester.pumpWidget(

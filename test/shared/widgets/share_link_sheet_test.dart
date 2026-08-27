@@ -30,7 +30,9 @@ void main() {
   );
 
   group('ShareLinkSheet Dynamic State & Thumbnail Tests', () {
-    testWidgets('TC-01: Displays "Get URL" and hides QR button when no active share exists', (tester) async {
+    testWidgets(
+        'TC-01: Displays "Get URL" and hides QR button when no active share exists',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.dark(),
@@ -56,7 +58,9 @@ void main() {
       expect(find.byIcon(AppIcons.qrCode), findsNothing);
     });
 
-    testWidgets('TC-02: Displays "Copy Link" and shows QR button when active share exists', (tester) async {
+    testWidgets(
+        'TC-02: Displays "Copy Link" and shows QR button when active share exists',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.dark(),

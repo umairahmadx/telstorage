@@ -134,8 +134,10 @@ abstract final class BrowserDialogs {
           children: [
             ListTile(
               leading: Icon(Icons.download_rounded, color: colors.textPrimary),
-              title: Text('Download Folder', style: TextStyle(color: colors.textPrimary)),
-              subtitle: Text('Download folder with all subfolders', style: TextStyle(color: colors.textSecondary, fontSize: 12)),
+              title: Text('Download Folder',
+                  style: TextStyle(color: colors.textPrimary)),
+              subtitle: Text('Download folder with all subfolders',
+                  style: TextStyle(color: colors.textSecondary, fontSize: 12)),
               onTap: () {
                 HapticFeedback.selectionClick();
                 Navigator.pop(ctx);
@@ -144,8 +146,10 @@ abstract final class BrowserDialogs {
             ),
             ListTile(
               leading: Icon(Icons.archive_outlined, color: colors.textPrimary),
-              title: Text('Export as ZIP', style: TextStyle(color: colors.textPrimary)),
-              subtitle: Text('Compress folder into a .zip file', style: TextStyle(color: colors.textSecondary, fontSize: 12)),
+              title: Text('Export as ZIP',
+                  style: TextStyle(color: colors.textPrimary)),
+              subtitle: Text('Compress folder into a .zip file',
+                  style: TextStyle(color: colors.textSecondary, fontSize: 12)),
               onTap: () {
                 HapticFeedback.selectionClick();
                 Navigator.pop(ctx);
@@ -153,8 +157,10 @@ abstract final class BrowserDialogs {
               },
             ),
             ListTile(
-              leading: Icon(Icons.drive_file_rename_outline_rounded, color: colors.textPrimary),
-              title: Text('Rename', style: TextStyle(color: colors.textPrimary)),
+              leading: Icon(Icons.drive_file_rename_outline_rounded,
+                  color: colors.textPrimary),
+              title:
+                  Text('Rename', style: TextStyle(color: colors.textPrimary)),
               onTap: () {
                 HapticFeedback.selectionClick();
                 Navigator.pop(ctx);
@@ -162,7 +168,8 @@ abstract final class BrowserDialogs {
               },
             ),
             ListTile(
-              leading: Icon(Icons.drive_file_move_outlined, color: colors.textPrimary),
+              leading: Icon(Icons.drive_file_move_outlined,
+                  color: colors.textPrimary),
               title: Text('Move', style: TextStyle(color: colors.textPrimary)),
               onTap: () {
                 HapticFeedback.selectionClick();
@@ -176,7 +183,8 @@ abstract final class BrowserDialogs {
               },
             ),
             ListTile(
-              leading: Icon(Icons.content_copy_rounded, color: colors.textPrimary),
+              leading:
+                  Icon(Icons.content_copy_rounded, color: colors.textPrimary),
               title: Text('Copy', style: TextStyle(color: colors.textPrimary)),
               onTap: () {
                 HapticFeedback.selectionClick();
@@ -205,7 +213,8 @@ abstract final class BrowserDialogs {
   }
 
   /// Displays the folder rename dialog.
-  static Future<void> renameFolder(BuildContext context, FolderRecord folder) async {
+  static Future<void> renameFolder(
+      BuildContext context, FolderRecord folder) async {
     final result = await AppDialogs.showInput(
       context,
       title: 'Rename Folder',
@@ -228,8 +237,8 @@ abstract final class BrowserDialogs {
     details.write('This folder contains ');
     final items = <String>[];
     if (stats.fileCount > 0) {
-      items.add(
-          '${stats.fileCount} ${stats.fileCount == 1 ? 'file' : 'files'}');
+      items
+          .add('${stats.fileCount} ${stats.fileCount == 1 ? 'file' : 'files'}');
     } else {
       items.add('0 files');
     }

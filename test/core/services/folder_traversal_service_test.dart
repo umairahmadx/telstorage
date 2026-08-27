@@ -95,7 +95,9 @@ void main() {
   });
 
   group('FolderTraversalService.resolveMultiSelection', () {
-    test('TC-03: Resolves combined direct files and folder selections without duplicate', () {
+    test(
+        'TC-03: Resolves combined direct files and folder selections without duplicate',
+        () {
       final items = FolderTraversalService.resolveMultiSelection(
         folderIds: {'f1'},
         fileIds: {'img1', 'doc2'}, // doc2 is inside f1, should not duplicate

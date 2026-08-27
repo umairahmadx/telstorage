@@ -14,6 +14,7 @@ import 'core/models/download_job.dart';
 import 'core/models/file_record.dart';
 import 'core/models/folder_record.dart';
 import 'core/models/pending_action.dart';
+import 'core/services/hive_service.dart';
 import 'core/services/theme_service.dart';
 
 /// Top-level callback dispatcher for Workmanager background sync execution.
@@ -38,8 +39,8 @@ void callbackDispatcher() {
         Hive.registerAdapter(PendingActionAdapter());
       }
 
-      final pendingBox = await Hive.openBox<PendingAction>(
-          AppConstants.pendingActionsBox);
+      final pendingBox =
+          await Hive.openBox<PendingAction>(AppConstants.pendingActionsBox);
 
       if (pendingBox.isEmpty) {
         debugPrint("WorkManager: no pending actions — skipping sync.");
@@ -87,12 +88,15 @@ Future<void> main() async {
   if (!Hive.isAdapterRegistered(3)) {
     Hive.registerAdapter(PendingActionAdapter());
   }
-  await Hive.openBox<FileRecord>(AppConstants.filesBox);
-  await Hive.openBox<FolderRecord>(AppConstants.foldersBox);
-  await Hive.openBox<DownloadJob>(AppConstants.downloadsBox);
-  await Hive.openBox<PendingAction>(AppConstants.pendingActionsBox);
-  await Hive.openBox(AppConstants.webSharesBox);
-  await Hive.openBox(AppConstants.uploadChunksBox);
+  await HiveService.openBoxDefensively<FileRecord>(AppConstants.filesBox);
+  await HiveService.openBoxDefensively<FolderRecord>(AppConstants.foldersBox);
+  await HiveService.openBoxDefensively<DownloadJob>(AppConstants.downloadsBox);
+  await HiveService.openBoxDefensively<PendingAction>(
+    AppConstants.pendingActionsBox,
+    preserveQuarantine: true,
+  );
+  await HiveService.openBoxDefensively(AppConstants.webSharesBox);
+  await HiveService.openBoxDefensively(AppConstants.uploadChunksBox);
 
   // Initialize Theme Service
   await ThemeService.instance.init();

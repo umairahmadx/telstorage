@@ -73,16 +73,19 @@ class StorageDetailsScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
                         color: colors.bgSurfaceInset,
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: colors.borderSubtle, width: 1),
+                        border:
+                            Border.all(color: colors.borderSubtle, width: 1),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.all_inclusive_rounded, size: 16, color: colors.accentPrimary),
+                          Icon(Icons.all_inclusive_rounded,
+                              size: 16, color: colors.accentPrimary),
                           const SizedBox(width: 6),
                           Text(
                             'Unlimited Cloud Storage Active',

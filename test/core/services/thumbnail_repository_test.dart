@@ -16,13 +16,15 @@ class FakeTelegramService implements TelegramService {
   Future<Map<String, dynamic>> uploadBytesWithFileId(
     Uint8List bytes,
     String filename,
-  ) async => {'file_id': 'mock_file_id', 'message_id': 1};
+  ) async =>
+      {'file_id': 'mock_file_id', 'message_id': 1};
 
   @override
   Future<Uint8List> downloadByFileId(
     String fileId, {
     void Function(double progress)? onProgress,
-  }) async => Uint8List(10);
+  }) async =>
+      Uint8List(10);
 
   @override
   Future<void> deleteMessage(int messageId) async {}
@@ -53,7 +55,8 @@ void main() {
   });
 
   group('ThumbnailRepository LRU Memory Cache Tests', () {
-    test('TC-01: Synchronously caches and retrieves binary thumbnail bytes', () {
+    test('TC-01: Synchronously caches and retrieves binary thumbnail bytes',
+        () {
       final bytes = Uint8List.fromList([1, 2, 3, 4, 5]);
       repository.addToMemoryCache('file_123', bytes);
 
@@ -68,7 +71,8 @@ void main() {
       expect(cached, isNull);
     });
 
-    test('TC-03: Evicts oldest entry when maxMemoryCacheSize (200) is exceeded', () {
+    test('TC-03: Evicts oldest entry when maxMemoryCacheSize (200) is exceeded',
+        () {
       // Add 200 items (file_0 to file_199)
       for (int i = 0; i < ThumbnailRepository.maxMemoryCacheSize; i++) {
         repository.addToMemoryCache('file_$i', Uint8List.fromList([i]));
@@ -104,8 +108,10 @@ void main() {
       // Add one more to evict oldest (file_B)
       repository.addToMemoryCache('overflow', Uint8List.fromList([99]));
 
-      expect(repository.getMemoryCachedBytes('file_B'), isNull, reason: 'file_B was oldest and should be evicted');
-      expect(repository.getMemoryCachedBytes('file_A'), isNotNull, reason: 'file_A was promoted and should survive');
+      expect(repository.getMemoryCachedBytes('file_B'), isNull,
+          reason: 'file_B was oldest and should be evicted');
+      expect(repository.getMemoryCachedBytes('file_A'), isNotNull,
+          reason: 'file_A was promoted and should survive');
       expect(repository.getMemoryCachedBytes('file_C'), isNotNull);
     });
 

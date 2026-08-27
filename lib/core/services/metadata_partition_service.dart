@@ -83,7 +83,8 @@ class MetadataPartitionService {
 
     LruFolderCacheService.instance.put(
       folderId,
-      FolderPartition(folderId: folderId, messageId: msgId, files: updatedFiles),
+      FolderPartition(
+          folderId: folderId, messageId: msgId, files: updatedFiles),
     );
     meta.folderPartitionsMap[folderId] = msgId;
 

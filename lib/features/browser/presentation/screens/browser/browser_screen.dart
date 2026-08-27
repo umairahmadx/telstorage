@@ -172,20 +172,19 @@ class _BrowserScreenState extends State<BrowserScreen> {
                         final isAllSelected = totalVisible > 0 &&
                             visibleFolderIds
                                 .every(state.selectedFolderIds.contains) &&
-                            visibleFileIds.every(state.selectedFileIds.contains);
+                            visibleFileIds
+                                .every(state.selectedFileIds.contains);
                         final selectedCount = state.selectedFolderIds.length +
                             state.selectedFileIds.length;
 
                         return AppBatchActionBar(
                           selectedCount: selectedCount,
                           isAllSelected: isAllSelected,
-                          onClearSelection: () => context
-                              .read<BrowserBloc>()
-                              .add(ClearSelection()),
+                          onClearSelection: () =>
+                              context.read<BrowserBloc>().add(ClearSelection()),
                           onToggleSelectAll: () => context
                               .read<BrowserBloc>()
-                              .add(ToggleSelectAll(
-                                  selectAll: !isAllSelected)),
+                              .add(ToggleSelectAll(selectAll: !isAllSelected)),
                           onDownload: () =>
                               _handleBatchDownload(context, state),
                           onDelete: () =>

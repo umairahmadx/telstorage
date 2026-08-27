@@ -23,7 +23,8 @@ class WebShareOnlyFake implements WebShareEnqueuer {
     String? password,
     int? expiryDays,
     String? vanitySlug,
-  }) async => const Success(null);
+  }) async =>
+      const Success(null);
 }
 
 void main() {

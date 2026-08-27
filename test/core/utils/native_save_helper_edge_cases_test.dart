@@ -25,7 +25,9 @@ void main() {
       );
     });
 
-    test('EC-07: resolveSafeFilename sanitizes illegal characters and delimiters', () {
+    test(
+        'EC-07: resolveSafeFilename sanitizes illegal characters and delimiters',
+        () {
       expect(
         resolveSafeFilename('report:draft*2026?.pdf'),
         equals('report_draft_2026.pdf'),
@@ -47,7 +49,8 @@ void main() {
       );
     });
 
-    test('EC-10: saveNative saves safely in test environment without throwing', () async {
+    test('EC-10: saveNative saves safely in test environment without throwing',
+        () async {
       final sampleData = Uint8List.fromList([10, 20, 30, 40]);
       final result = await saveNative(
         sampleData,

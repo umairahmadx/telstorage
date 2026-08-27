@@ -133,8 +133,8 @@ class _SyncScreenState extends State<SyncScreen> {
   }
 
   /// Builds connection and pending items status banner.
-  Widget _buildStatusCard(AppColorsExtension colors,
-      SyncQueueService syncQueue, int pendingCount) {
+  Widget _buildStatusCard(
+      AppColorsExtension colors, SyncQueueService syncQueue, int pendingCount) {
     final statusText = !_isDeviceOnline
         ? 'Offline — Changes Queued'
         : (pendingCount > 0
@@ -207,8 +207,7 @@ class _SyncScreenState extends State<SyncScreen> {
                 await _checkConnection();
                 syncQueue.processQueue();
               },
-              icon: Icon(Icons.sync_rounded,
-                  size: 18, color: colors.bgPrimary),
+              icon: Icon(Icons.sync_rounded, size: 18, color: colors.bgPrimary),
               label: Text(
                 'Sync Now',
                 style: TextStyle(

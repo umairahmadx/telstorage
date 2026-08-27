@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../../core/routing/app_router.dart';
-import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_theme.dart';
 import '../../viewmodels/auth_view_model.dart';
 
@@ -277,10 +276,13 @@ class _LoginScreenState extends State<LoginScreen>
                     ),
                   ),
                 ),
-                GestureDetector(
-                  onTap: () => setState(() => _errorMessage = null),
-                  child: Icon(Icons.close_rounded,
-                      color: colors.error, size: 18),
+                IconButton(
+                  icon:
+                      Icon(Icons.close_rounded, color: colors.error, size: 18),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  splashRadius: 16,
+                  onPressed: () => setState(() => _errorMessage = null),
                 ),
               ],
             ),

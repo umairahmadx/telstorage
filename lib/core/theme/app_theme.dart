@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
 import 'app_colors_extension.dart';
 
+export 'app_colors.dart';
 export 'app_colors_extension.dart';
 
 /// TelStorage Design System — Pure Dark & Clean Light UI.

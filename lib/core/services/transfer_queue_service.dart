@@ -233,7 +233,9 @@ class TransferQueueService {
             progress: j.progress,
             status: j.isDownloading
                 ? TransferStatus.downloading
-                : (j.isUploading ? TransferStatus.sharing : TransferStatus.pending),
+                : (j.isUploading
+                    ? TransferStatus.sharing
+                    : TransferStatus.pending),
             addedAt: j.addedAt,
           ));
         }

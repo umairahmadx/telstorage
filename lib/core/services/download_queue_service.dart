@@ -13,6 +13,7 @@ import '../utils/app_logger.dart';
 import '../utils/connectivity.dart';
 import 'download_service.dart';
 import 'notification_service.dart';
+import 'transfer_concurrency_coordinator.dart';
 import 'transfer_queue_service.dart';
 import 'service_locator.dart';
 import '../models/transfer_task.dart';
@@ -67,7 +68,6 @@ class DownloadQueueService {
 
   /// Clears all completed download job records.
   Future<void> clearCompleted() async {
-
     final completed = completedJobs;
     for (final job in completed) {
       await _box.delete(job.fileId);
@@ -252,15 +252,17 @@ class DownloadQueueService {
     await _box.put(file.fileId, job);
   }
 
-  /// Process the queue managing concurrency limit (max 3 concurrent downloads)
+  /// Process the queue managing concurrency limit across global coordinator
   void _processQueue() {
-    if (_runningFileIds.length >= 3) return;
+    final available = TransferConcurrencyCoordinator.instance.maxConcurrent -
+        TransferConcurrencyCoordinator.instance.activeCount;
+    if (available <= 0) return;
 
     final queuedJobs = _box.values.where((j) => j.status == 'queued').toList()
       ..sort((a, b) => a.addedAt.compareTo(b.addedAt));
 
     for (final job in queuedJobs) {
-      if (_runningFileIds.length >= 3) break;
+      if (_runningFileIds.length >= available) break;
 
       final fileId = job.fileId;
       _runningFileIds.add(fileId);
@@ -312,109 +314,111 @@ class DownloadQueueService {
       return;
     }
 
-    try {
-      final bytes = await _downloadService.downloadFile(fileRecord,
-          (progress, status) async {
+    await TransferConcurrencyCoordinator.instance.runGuarded(() async {
+      try {
+        final bytes = await _downloadService.downloadFile(fileRecord,
+            (progress, status) async {
+          if (_isCancelled(fileId)) {
+            throw Exception('Cancelled');
+          }
+          if (isPaused(fileId)) {
+            throw Exception('Paused');
+          }
+          job.progress = progress;
+          await job.save();
+
+          TransferQueueService.instance.updateTask(fileId,
+              progress: progress, currentStage: 'Downloading…');
+        });
+
         if (_isCancelled(fileId)) {
           throw Exception('Cancelled');
         }
         if (isPaused(fileId)) {
           throw Exception('Paused');
         }
-        job.progress = progress;
+
+        job.progress = 0.95;
         await job.save();
+        TransferQueueService.instance
+            .updateTask(fileId, progress: 0.95, currentStage: 'Finalizing…');
 
-        TransferQueueService.instance.updateTask(fileId,
-            progress: progress, currentStage: 'Downloading…');
-      });
+        final saveResult = await _downloadService.saveAndOpen(
+          bytes,
+          job.name,
+          subpath: job.subpath,
+        );
 
-      if (_isCancelled(fileId)) {
-        throw Exception('Cancelled');
-      }
-      if (isPaused(fileId)) {
-        throw Exception('Paused');
-      }
+        if (saveResult.success) {
+          job.status = 'completed';
+          job.progress = 1.0;
+          job.localPath = saveResult.savedPath;
+          job.completedAt = DateTime.now();
+          await job.save();
 
-      job.progress = 0.95;
-      await job.save();
-      TransferQueueService.instance
-          .updateTask(fileId, progress: 0.95, currentStage: 'Finalizing…');
+          TransferQueueService.instance.updateTask(fileId,
+              status: TransferStatus.completed, progress: 1.0);
 
-      final saveResult = await _downloadService.saveAndOpen(
-        bytes,
-        job.name,
-        subpath: job.subpath,
-      );
-
-      if (saveResult.success) {
-        job.status = 'completed';
-        job.progress = 1.0;
-        job.localPath = saveResult.savedPath;
-        job.completedAt = DateTime.now();
-        await job.save();
-
-        TransferQueueService.instance.updateTask(fileId,
-            status: TransferStatus.completed, progress: 1.0);
-
-        await NotificationService.instance.showCompletionNotification(
-          title: 'Download Complete',
-          body: '${job.name} has been successfully downloaded.',
-          payload: 'transfer_download',
-          actions: [
-            if (saveResult.savedPath != null)
-              AndroidNotificationAction(
-                'open_path:${saveResult.savedPath}',
-                'Open File',
+          await NotificationService.instance.showCompletionNotification(
+            title: 'Download Complete',
+            body: '${job.name} has been successfully downloaded.',
+            payload: 'transfer_download',
+            actions: [
+              if (saveResult.savedPath != null)
+                AndroidNotificationAction(
+                  'open_path:${saveResult.savedPath}',
+                  'Open File',
+                  showsUserInterface: true,
+                ),
+              const AndroidNotificationAction(
+                'view_downloads',
+                'View Downloads',
                 showsUserInterface: true,
               ),
-            const AndroidNotificationAction(
-              'view_downloads',
-              'View Downloads',
-              showsUserInterface: true,
-            ),
-          ],
-        );
-      } else {
-        job.status = 'failed';
-        job.error = saveResult.message;
+            ],
+          );
+        } else {
+          job.status = 'failed';
+          job.error = saveResult.message;
+          await job.save();
+
+          TransferQueueService.instance.updateTask(fileId,
+              status: TransferStatus.failed, error: saveResult.message);
+
+          await NotificationService.instance.showCompletionNotification(
+            title: 'Download Failed',
+            body: 'Failed to download ${job.name}: ${saveResult.message}',
+            payload: 'transfer_download',
+          );
+        }
+      } catch (e) {
+        if (_isCancelled(fileId)) {
+          job.status = 'cancelled';
+          TransferQueueService.instance
+              .updateTask(fileId, status: TransferStatus.cancelled);
+        } else if (isPaused(fileId) || e.toString().contains('Paused')) {
+          job.status = 'paused';
+          TransferQueueService.instance.updateTask(fileId,
+              status: TransferStatus.paused, currentStage: 'Paused');
+        } else {
+          job.status = 'failed';
+          job.error = e.toString();
+          TransferQueueService.instance.updateTask(fileId,
+              status: TransferStatus.failed, error: e.toString());
+
+          await NotificationService.instance.showCompletionNotification(
+            title: 'Download Failed',
+            body: 'Failed to download ${job.name}: $e',
+            payload: 'transfer_download',
+          );
+        }
         await job.save();
-
-        TransferQueueService.instance.updateTask(fileId,
-            status: TransferStatus.failed, error: saveResult.message);
-
-        await NotificationService.instance.showCompletionNotification(
-          title: 'Download Failed',
-          body: 'Failed to download ${job.name}: ${saveResult.message}',
-          payload: 'transfer_download',
-        );
+      } finally {
+        _runningFileIds.remove(fileId);
+        _activeCancellationTokens.remove(fileId);
+        _activePauseTokens.remove(fileId);
+        _processQueue();
       }
-    } catch (e) {
-      if (_isCancelled(fileId)) {
-        job.status = 'cancelled';
-        TransferQueueService.instance
-            .updateTask(fileId, status: TransferStatus.cancelled);
-      } else if (isPaused(fileId) || e.toString().contains('Paused')) {
-        job.status = 'paused';
-        TransferQueueService.instance
-            .updateTask(fileId, status: TransferStatus.paused, currentStage: 'Paused');
-      } else {
-        job.status = 'failed';
-        job.error = e.toString();
-        TransferQueueService.instance.updateTask(fileId,
-            status: TransferStatus.failed, error: e.toString());
-
-        await NotificationService.instance.showCompletionNotification(
-          title: 'Download Failed',
-          body: 'Failed to download ${job.name}: $e',
-          payload: 'transfer_download',
-        );
-      }
-      await job.save();
-    } finally {
-      _runningFileIds.remove(fileId);
-      _activeCancellationTokens.remove(fileId);
-      _activePauseTokens.remove(fileId);
-      _processQueue();
-    }
+    });
   }
 }

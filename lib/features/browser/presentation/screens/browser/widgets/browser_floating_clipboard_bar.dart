@@ -37,7 +37,7 @@ class BrowserFloatingClipboardBar extends StatelessWidget {
       color: colors.bgSurface,
       borderRadius: BorderRadius.circular(20),
       elevation: 10,
-      shadowColor: Colors.black.withValues(alpha: 0.5),
+      shadowColor: AppColors.black.withValues(alpha: 0.5),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(

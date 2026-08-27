@@ -185,8 +185,8 @@ class NotificationService {
       playSound: true,
     );
 
-    final androidPlugin = _notificationsPlugin
-        .resolvePlatformSpecificImplementation<
+    final androidPlugin =
+        _notificationsPlugin.resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>();
     await androidPlugin?.createNotificationChannel(activeChannel);
     await androidPlugin?.createNotificationChannel(completionChannel);
@@ -204,8 +204,8 @@ class NotificationService {
         await WakelockPlus.enable();
       } catch (_) {}
 
-      final androidPlugin = _notificationsPlugin
-          .resolvePlatformSpecificImplementation<
+      final androidPlugin =
+          _notificationsPlugin.resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>();
 
       const androidDetails = AndroidNotificationDetails(
@@ -253,8 +253,8 @@ class NotificationService {
         await WakelockPlus.disable();
       } catch (_) {}
 
-      final androidPlugin = _notificationsPlugin
-          .resolvePlatformSpecificImplementation<
+      final androidPlugin =
+          _notificationsPlugin.resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>();
       await androidPlugin?.stopForegroundService();
       await _notificationsPlugin.cancel(id: 999);
@@ -368,8 +368,8 @@ class NotificationService {
         actions: actions,
       );
 
-      final androidPlugin = _notificationsPlugin
-          .resolvePlatformSpecificImplementation<
+      final androidPlugin =
+          _notificationsPlugin.resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>();
 
       if (androidPlugin != null) {

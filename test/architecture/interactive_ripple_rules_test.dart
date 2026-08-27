@@ -21,7 +21,9 @@ void main() {
           reason: 'AGENTS.md must index interactive_ripple_rules.md');
     });
 
-    test('Zero instances of InkWell directly wrapping an opaque background Container in lib/shared/widgets/', () {
+    test(
+        'Zero instances of InkWell directly wrapping an opaque background Container in lib/shared/widgets/',
+        () {
       final sharedDir = Directory('lib/shared/widgets');
       final files = sharedDir
           .listSync(recursive: true)
@@ -30,13 +32,18 @@ void main() {
           .toList();
 
       // Check for InkWell wrapping a Container that specifies its own background color (directly or via BoxDecoration color)
-      final directColorPattern = RegExp(r'InkWell\s*\([^)]*child:\s*Container\s*\([^)]*(?<!Border\.all\()color\s*:\s*colors\.', dotAll: true);
-      final boxDecorationColorPattern = RegExp(r'InkWell\s*\([^)]*child:\s*Container\s*\([^)]*decoration:\s*BoxDecoration\s*\([^)]*color\s*:\s*colors\.', dotAll: true);
+      final directColorPattern = RegExp(
+          r'InkWell\s*\([^)]*child:\s*Container\s*\([^)]*(?<!Border\.all\()color\s*:\s*colors\.',
+          dotAll: true);
+      final boxDecorationColorPattern = RegExp(
+          r'InkWell\s*\([^)]*child:\s*Container\s*\([^)]*decoration:\s*BoxDecoration\s*\([^)]*color\s*:\s*colors\.',
+          dotAll: true);
 
       for (final file in files) {
         final content = file.readAsStringSync();
         final hasDirectColor = directColorPattern.hasMatch(content);
-        final hasBoxDecorationColor = boxDecorationColorPattern.hasMatch(content);
+        final hasBoxDecorationColor =
+            boxDecorationColorPattern.hasMatch(content);
 
         expect(
           hasDirectColor || hasBoxDecorationColor,

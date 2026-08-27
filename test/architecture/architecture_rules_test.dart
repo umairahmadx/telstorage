@@ -41,7 +41,9 @@ void main() {
       expect(oversizedFiles, isEmpty);
     });
 
-    test('Rule 2: Every .dart file in lib/ must have a top-level multiline header comment', () {
+    test(
+        'Rule 2: Every .dart file in lib/ must have a top-level multiline header comment',
+        () {
       final dartFiles = libDir
           .listSync(recursive: true)
           .whereType<File>()
@@ -59,13 +61,16 @@ void main() {
       }
 
       if (missingHeaderFiles.isNotEmpty) {
-        fail('The following files are missing a top-level doc header comment:\n${missingHeaderFiles.join('\n')}');
+        fail(
+            'The following files are missing a top-level doc header comment:\n${missingHeaderFiles.join('\n')}');
       }
 
       expect(missingHeaderFiles, isEmpty);
     });
 
-    test('Rule 3: No hardcoded raw Color(0x...) in UI widget files (centralized colors rule)', () {
+    test(
+        'Rule 3: No hardcoded raw Color(0x...) in UI widget files (centralized colors rule)',
+        () {
       final dartFiles = libDir
           .listSync(recursive: true)
           .whereType<File>()
@@ -83,7 +88,9 @@ void main() {
         final lines = file.readAsLinesSync();
         for (int i = 0; i < lines.length; i++) {
           final line = lines[i];
-          if (line.trim().startsWith('//') || line.trim().startsWith('*')) continue;
+          if (line.trim().startsWith('//') || line.trim().startsWith('*')) {
+            continue;
+          }
           if (rawColorRegex.hasMatch(line)) {
             violations.add('${file.path}:${i + 1} -> ${line.trim()}');
           }
@@ -91,23 +98,29 @@ void main() {
       }
 
       if (violations.isNotEmpty) {
-        fail('Hardcoded color violations found (use AppColors instead):\n${violations.join('\n')}');
+        fail(
+            'Hardcoded color violations found (use AppColors instead):\n${violations.join('\n')}');
       }
 
       expect(violations, isEmpty);
     });
 
-    test('Rule 4: Every feature screen has its own dedicated directory under presentation/screens/', () {
+    test(
+        'Rule 4: Every feature screen has its own dedicated directory under presentation/screens/',
+        () {
       final featuresDir = Directory('lib/features');
       expect(featuresDir.existsSync(), isTrue);
 
-      final featureDirs = featuresDir.listSync().whereType<Directory>().toList();
+      final featureDirs =
+          featuresDir.listSync().whereType<Directory>().toList();
       for (final feature in featureDirs) {
         final screensDir = Directory('${feature.path}/presentation/screens');
         if (screensDir.existsSync()) {
-          final screenDirs = screensDir.listSync().whereType<Directory>().toList();
+          final screenDirs =
+              screensDir.listSync().whereType<Directory>().toList();
           expect(screenDirs, isNotEmpty,
-              reason: 'Feature ${feature.path} should contain subfolders for each screen');
+              reason:
+                  'Feature ${feature.path} should contain subfolders for each screen');
         }
       }
     });

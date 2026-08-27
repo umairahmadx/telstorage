@@ -11,7 +11,6 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../../core/routing/app_router.dart';
 import '../../../../../core/services/auth_service.dart';
 import '../../../../../core/services/service_locator.dart';
-import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_theme.dart';
 
 /// Screen component shown during initial app boot.

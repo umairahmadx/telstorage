@@ -3,12 +3,14 @@
  * Description: Browser connectivity adapter with test mock override.
  */
 
+import 'package:flutter/foundation.dart';
 import 'package:web/web.dart' as web;
 
 /// Browser connectivity is advisory: the actual request still determines
 /// whether the current network can reach the service.
 class Connectivity {
   /// Test override hook for deterministic connectivity simulation.
+  @visibleForTesting
   static bool? mockConnectionStatus;
 
   static Future<bool> hasConnection() async {

@@ -10,7 +10,8 @@ import '../utils/app_logger.dart';
 
 /// LRU Cache Manager for folder metadata partitions with configurable capacity cap
 class LruFolderCacheService {
-  static final LruFolderCacheService instance = LruFolderCacheService._internal();
+  static final LruFolderCacheService instance =
+      LruFolderCacheService._internal();
 
   static const int maxCapacity = AppConstants.lruFolderCacheCapacity;
   final LinkedHashMap<String, FolderPartition> _cache = LinkedHashMap();

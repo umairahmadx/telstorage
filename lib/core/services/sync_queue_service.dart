@@ -38,7 +38,8 @@ class SyncQueueService {
   DateTime? _firstUnflushedAt;
   Timer? _periodicTimer;
   final ValueNotifier<int> pendingCountNotifier = ValueNotifier<int>(0);
-  final ValueNotifier<List<SyncLogItem>> logsNotifier = ValueNotifier<List<SyncLogItem>>([]);
+  final ValueNotifier<List<SyncLogItem>> logsNotifier =
+      ValueNotifier<List<SyncLogItem>>([]);
 
   SyncQueueService(this._fileManager) {
     _updatePendingCount();
@@ -77,8 +78,10 @@ class SyncQueueService {
     _firstUnflushedAt ??= DateTime.now();
 
     // Check 60-second hard ceiling
-    if (DateTime.now().difference(_firstUnflushedAt!) >= const Duration(seconds: 60)) {
-      AppLogger.i('60s max-wait flush ceiling reached — forcing immediate sync flush',
+    if (DateTime.now().difference(_firstUnflushedAt!) >=
+        const Duration(seconds: 60)) {
+      AppLogger.i(
+          '60s max-wait flush ceiling reached — forcing immediate sync flush',
           tag: 'SyncQueue');
       _debounceTimer?.cancel();
       processQueue();
@@ -106,20 +109,24 @@ class SyncQueueService {
     if (pendingCount == 0) return;
 
     if (!await Connectivity.hasConnection()) {
-      AppLogger.d('SyncQueue: cannot process, device is offline.', tag: 'SyncQueue');
+      AppLogger.d('SyncQueue: cannot process, device is offline.',
+          tag: 'SyncQueue');
       return;
     }
 
     _isFlushing = true;
     _isProcessing = true;
-    AppLogger.i('SyncQueue: starting processing of $pendingCount actions...', tag: 'SyncQueue');
+    AppLogger.i('SyncQueue: starting processing of $pendingCount actions...',
+        tag: 'SyncQueue');
 
     try {
       final actions = _pendingBox.values.toList()
         ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
       for (final action in actions) {
-        AppLogger.d('SyncQueue: processing action ${action.actionType} (${action.id})', tag: 'SyncQueue');
+        AppLogger.d(
+            'SyncQueue: processing action ${action.actionType} (${action.id})',
+            tag: 'SyncQueue');
         final desc = _getActionDescription(action);
 
         final syncingLog = SyncLogItem(
@@ -129,7 +136,10 @@ class SyncQueueService {
           timestamp: DateTime.now(),
           status: 'syncing',
         );
-        logsNotifier.value = [syncingLog, ...logsNotifier.value.where((l) => l.id != action.id)];
+        logsNotifier.value = [
+          syncingLog,
+          ...logsNotifier.value.where((l) => l.id != action.id)
+        ];
 
         try {
           await _executeAction(action);
@@ -143,11 +153,17 @@ class SyncQueueService {
             timestamp: DateTime.now(),
             status: 'completed',
           );
-          logsNotifier.value = [completedLog, ...logsNotifier.value.where((l) => l.id != action.id)];
+          logsNotifier.value = [
+            completedLog,
+            ...logsNotifier.value.where((l) => l.id != action.id)
+          ];
 
-          AppLogger.d('SyncQueue: successfully processed & deleted action ${action.id}', tag: 'SyncQueue');
+          AppLogger.d(
+              'SyncQueue: successfully processed & deleted action ${action.id}',
+              tag: 'SyncQueue');
         } catch (e) {
-          AppLogger.e('SyncQueue: failed to process action ${action.id}: $e', tag: 'SyncQueue', error: e);
+          AppLogger.e('SyncQueue: failed to process action ${action.id}: $e',
+              tag: 'SyncQueue', error: e);
           final failedLog = SyncLogItem(
             id: action.id,
             actionType: action.actionType,
@@ -156,9 +172,13 @@ class SyncQueueService {
             status: 'failed',
             error: e.toString(),
           );
-          logsNotifier.value = [failedLog, ...logsNotifier.value.where((l) => l.id != action.id)];
+          logsNotifier.value = [
+            failedLog,
+            ...logsNotifier.value.where((l) => l.id != action.id)
+          ];
 
-          if (e.toString().contains('not empty') || e.toString().contains('FolderNotEmptyException')) {
+          if (e.toString().contains('not empty') ||
+              e.toString().contains('FolderNotEmptyException')) {
             await _pendingBox.delete(action.id);
             _updatePendingCount();
           }
@@ -194,7 +214,9 @@ class SyncQueueService {
       case AppConstants.actionDeleteFile:
         return 'Deleted file';
       case AppConstants.actionAddFileMeta:
-        final name = (payload['fileMeta'] is Map) ? (payload['fileMeta']['name'] ?? '') : '';
+        final name = (payload['fileMeta'] is Map)
+            ? (payload['fileMeta']['name'] ?? '')
+            : '';
         return 'Synced metadata for "$name"';
       default:
         return action.actionType;
@@ -259,7 +281,8 @@ class SyncQueueService {
         break;
 
       case AppConstants.actionCopyFile:
-        final originalFileId = (payload['originalFileId'] ?? payload['fileId']) as String;
+        final originalFileId =
+            (payload['originalFileId'] ?? payload['fileId']) as String;
         final newFileId = payload['newFileId'] as String?;
         final newName = payload['newName'] as String?;
         final targetFolderId = payload['targetFolderId'] as String?;
@@ -278,7 +301,8 @@ class SyncQueueService {
         final metadataMessageId = payload['metadataMessageId'] as int?;
         final metadataFileId = payload['metadataFileId'] as String?;
         final sizeMb = (payload['sizeMb'] as num?)?.toDouble() ?? 0.0;
-        final mimeType = (payload['mimeType'] as String?) ?? 'application/octet-stream';
+        final mimeType =
+            (payload['mimeType'] as String?) ?? 'application/octet-stream';
         final folderId = payload['folderId'] as String?;
         await _fileManager.deleteFileRemoteOnly(
           fileId: fileId,

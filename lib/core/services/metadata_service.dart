@@ -20,7 +20,7 @@ class MetadataService {
   final TelegramService _telegram;
   late final MetadataPartitionService _partitionService;
   static const _storage = FlutterSecureStorage();
-  
+
   // Mutex lock to prevent parallel upload race conditions on metadata index
   Future<void>? _activeLock;
 
@@ -51,7 +51,8 @@ class MetadataService {
     AppLogger.d('Fetching metadata...', tag: 'MetadataService');
 
     // Fast path: we already know the file_id from a previous session
-    final cachedFileId = await _storage.read(key: AppConstants.keyMetadataFileId);
+    final cachedFileId =
+        await _storage.read(key: AppConstants.keyMetadataFileId);
     if (cachedFileId != null) {
       AppLogger.d('Using cached file_id: $cachedFileId',
           tag: 'MetadataService');
@@ -79,10 +80,12 @@ class MetadataService {
       // No pinned message → first-time setup for this channel
       AppLogger.d('No pinned message — first-time setup',
           tag: 'MetadataService');
-      final email = await _storage.read(key: AppConstants.keyEmail) ?? 'unknown@user.com';
+      final email =
+          await _storage.read(key: AppConstants.keyEmail) ?? 'unknown@user.com';
       await initMetadata(email);
 
-      final newFileId = await _storage.read(key: AppConstants.keyMetadataFileId);
+      final newFileId =
+          await _storage.read(key: AppConstants.keyMetadataFileId);
       return _downloadMeta(newFileId!);
     }
   }
@@ -94,8 +97,8 @@ class MetadataService {
 
     AppLogger.d('Uploading updated metadata...', tag: 'MetadataService');
     final bytes = Uint8List.fromList(utf8.encode(jsonEncode(meta.toJson())));
-    final result =
-        await _telegram.uploadBytesWithFileId(bytes, AppConstants.metadataFileName);
+    final result = await _telegram.uploadBytesWithFileId(
+        bytes, AppConstants.metadataFileName);
     final newMsgId = result['message_id'] as int;
     final newFileId = result['file_id'] as String;
     AppLogger.d('Uploaded → message_id: $newMsgId, file_id: $newFileId',
@@ -160,7 +163,8 @@ class MetadataService {
         final fId = ref.folderId ?? AppConstants.rootFolderPartitionId;
         await _partitionService.saveFileRefsToPartition(latestMeta, fId, [ref]);
 
-        latestMeta.recentFiles.removeWhere((f) => f.fileId == fileData['file_id']);
+        latestMeta.recentFiles
+            .removeWhere((f) => f.fileId == fileData['file_id']);
         latestMeta.recentFiles.insert(0, ref);
         if (latestMeta.recentFiles.length > 20) {
           latestMeta.recentFiles = latestMeta.recentFiles.take(20).toList();
@@ -210,14 +214,16 @@ class MetadataService {
           final fId = ref.folderId ?? 'root';
           partitionBatch.putIfAbsent(fId, () => []).add(ref);
 
-          latestMeta.recentFiles.removeWhere((f) => f.fileId == fileData['file_id']);
+          latestMeta.recentFiles
+              .removeWhere((f) => f.fileId == fileData['file_id']);
           latestMeta.recentFiles.insert(0, ref);
         }
       }
 
       if (partitionBatch.isNotEmpty) {
         for (final entry in partitionBatch.entries) {
-          await _partitionService.saveFileRefsToPartition(latestMeta, entry.key, entry.value);
+          await _partitionService.saveFileRefsToPartition(
+              latestMeta, entry.key, entry.value);
         }
       }
 
@@ -241,12 +247,15 @@ class MetadataService {
         if (oldPartition != null) {
           final oldFiles = List<FileRef>.from(oldPartition.files)
             ..removeWhere((f) => f.fileId == ref.fileId);
-          await _partitionService.saveFileRefsToPartition(latestMeta, previousFolderId, oldFiles);
+          await _partitionService.saveFileRefsToPartition(
+              latestMeta, previousFolderId, oldFiles);
         }
       }
-      await _partitionService.saveFileRefsToPartition(latestMeta, newFolderId, [ref]);
+      await _partitionService
+          .saveFileRefsToPartition(latestMeta, newFolderId, [ref]);
 
-      final idx = latestMeta.recentFiles.indexWhere((f) => f.fileId == ref.fileId);
+      final idx =
+          latestMeta.recentFiles.indexWhere((f) => f.fileId == ref.fileId);
       if (idx != -1) {
         latestMeta.recentFiles[idx] = ref;
       }
@@ -353,7 +362,8 @@ class MetadataService {
       final srcPartition = await fetchFolderPartition(srcFolderId);
       final fileRef = srcPartition?.files.firstWhere(
         (f) => f.fileId == fileId,
-        orElse: () => throw Exception('File $fileId not found in source partition $srcFolderId'),
+        orElse: () => throw Exception(
+            'File $fileId not found in source partition $srcFolderId'),
       );
 
       if (fileRef == null) return;
@@ -366,16 +376,19 @@ class MetadataService {
         ..add(fileRef);
 
       final appMeta = await fetch();
-      await _partitionService.saveFileRefsToPartition(appMeta, destFolderId, updatedDestFiles);
+      await _partitionService.saveFileRefsToPartition(
+          appMeta, destFolderId, updatedDestFiles);
 
       if (srcPartition != null) {
         final updatedSrcFiles = List<FileRef>.from(srcPartition.files)
           ..removeWhere((f) => f.fileId == fileId);
-        await _partitionService.saveFileRefsToPartition(appMeta, srcFolderId, updatedSrcFiles);
+        await _partitionService.saveFileRefsToPartition(
+            appMeta, srcFolderId, updatedSrcFiles);
       }
 
       await update(appMeta);
-      AppLogger.i('Safely moved file $fileId from $srcFolderId to $destFolderId',
+      AppLogger.i(
+          'Safely moved file $fileId from $srcFolderId to $destFolderId',
           tag: 'MetadataService');
     });
   }
@@ -391,15 +404,20 @@ class MetadataService {
       if (pinnedMsgId > 0) {
         final existingFileId = await _telegram.getFileIdOfMessage(pinnedMsgId);
         if (existingFileId.isNotEmpty) {
-          AppLogger.i('Found existing pinned metadata message ($pinnedMsgId), adopting file_id: $existingFileId',
+          AppLogger.i(
+              'Found existing pinned metadata message ($pinnedMsgId), adopting file_id: $existingFileId',
               tag: 'MetadataService');
-          await _storage.write(key: AppConstants.keyMetadataMessageId, value: pinnedMsgId.toString());
-          await _storage.write(key: AppConstants.keyMetadataFileId, value: existingFileId);
+          await _storage.write(
+              key: AppConstants.keyMetadataMessageId,
+              value: pinnedMsgId.toString());
+          await _storage.write(
+              key: AppConstants.keyMetadataFileId, value: existingFileId);
           return;
         }
       }
     } catch (e) {
-      AppLogger.d('No existing pinned message found ($e), proceeding with fresh metadata init...',
+      AppLogger.d(
+          'No existing pinned message found ($e), proceeding with fresh metadata init...',
           tag: 'MetadataService');
     }
 
@@ -419,8 +437,8 @@ class MetadataService {
     );
 
     final bytes = Uint8List.fromList(utf8.encode(jsonEncode(meta.toJson())));
-    final result =
-        await _telegram.uploadBytesWithFileId(bytes, AppConstants.metadataFileName);
+    final result = await _telegram.uploadBytesWithFileId(
+        bytes, AppConstants.metadataFileName);
     final msgId = result['message_id'] as int;
     final fileId = result['file_id'] as String;
 
@@ -428,7 +446,8 @@ class MetadataService {
     await _telegram.unpinAllMessages();
     await _telegram.pinMessage(msgId);
 
-    await _storage.write(key: AppConstants.keyMetadataMessageId, value: msgId.toString());
+    await _storage.write(
+        key: AppConstants.keyMetadataMessageId, value: msgId.toString());
     await _storage.write(key: AppConstants.keyMetadataFileId, value: fileId);
     AppLogger.i('Initialized — message_id: $msgId, file_id: $fileId',
         tag: 'MetadataService');

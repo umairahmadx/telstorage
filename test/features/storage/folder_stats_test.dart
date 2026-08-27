@@ -54,7 +54,9 @@ void main() {
   });
 
   group('Recursive Folder Tree & Statistics Logic', () {
-    test('TC-05: Recursively computes file counts, subfolders, and size across nested hierarchy', () {
+    test(
+        'TC-05: Recursively computes file counts, subfolders, and size across nested hierarchy',
+        () {
       // Mock hierarchy:
       // Root Folder (id: 'f1')
       //   ├── File 1 (10 MB, folderId: 'f1')
@@ -67,10 +69,14 @@ void main() {
 
       final folders = [
         FolderRecord(id: 'f1', name: 'Root', createdAt: DateTime.now()),
-        FolderRecord(id: 'f2', name: 'Sub 1', parentId: 'f1', createdAt: DateTime.now()),
-        FolderRecord(id: 'f3', name: 'Sub 2', parentId: 'f2', createdAt: DateTime.now()),
-        FolderRecord(id: 'f4', name: 'Sub 3', parentId: 'f1', createdAt: DateTime.now()),
-        FolderRecord(id: 'f5_unrelated', name: 'Other', createdAt: DateTime.now()),
+        FolderRecord(
+            id: 'f2', name: 'Sub 1', parentId: 'f1', createdAt: DateTime.now()),
+        FolderRecord(
+            id: 'f3', name: 'Sub 2', parentId: 'f2', createdAt: DateTime.now()),
+        FolderRecord(
+            id: 'f4', name: 'Sub 3', parentId: 'f1', createdAt: DateTime.now()),
+        FolderRecord(
+            id: 'f5_unrelated', name: 'Other', createdAt: DateTime.now()),
       ];
 
       final files = [
@@ -144,15 +150,18 @@ void main() {
             collect(child.id);
           }
         }
+
         collect(folderId);
         return ids;
       }
 
       FolderStats calculateStats(String folderId) {
         final treeIds = folderTreeIds(folderId);
-        final containedFiles = files.where((f) => treeIds.contains(f.folderId)).toList();
+        final containedFiles =
+            files.where((f) => treeIds.contains(f.folderId)).toList();
         final subfolderCount = treeIds.length - 1;
-        final totalSizeMb = containedFiles.fold<double>(0.0, (sum, f) => sum + f.sizeMb);
+        final totalSizeMb =
+            containedFiles.fold<double>(0.0, (sum, f) => sum + f.sizeMb);
         return FolderStats(
           fileCount: containedFiles.length,
           subfolderCount: subfolderCount > 0 ? subfolderCount : 0,

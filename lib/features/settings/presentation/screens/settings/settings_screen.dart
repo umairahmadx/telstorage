@@ -118,8 +118,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           context: context,
           builder: (ctx) => AlertDialog(
             backgroundColor: colors.bgSurface,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: Text(
               'Sign Out',
               style: TextStyle(
@@ -143,8 +143,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10)),
                 ),
-                child: Text('Sign Out',
-                    style: TextStyle(color: colors.bgPrimary)),
+                child:
+                    Text('Sign Out', style: TextStyle(color: colors.bgPrimary)),
               ),
             ],
           ),
@@ -154,8 +154,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           await AuthService.instance.logout();
           if (mounted) {
             Navigator.of(context, rootNavigator: true)
-                .pushNamedAndRemoveUntil(
-                    AppRouter.login, (route) => false);
+                .pushNamedAndRemoveUntil(AppRouter.login, (route) => false);
           }
         }
       },

@@ -1,18 +1,133 @@
 /*
  * File: hive_service.dart
- * Description: Component and logic definition for hive_service.dart in TelStorage.
+ * Description: Local cache management and defensive box initialization with quarantine preservation for corrupted storage states.
  */
 
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../constants/app_constants.dart';
+import '../events/domain_event_bus.dart';
 import '../models/file_record.dart';
 import '../models/folder_record.dart';
+import '../utils/app_logger.dart';
 
 /// Local cache management using Hive
 class HiveService {
   static final HiveService instance = HiveService._();
   HiveService._();
+
+  /// Defensively opens a Hive box, catching corrupted disk writes,
+  /// preserving quarantine backups for critical state (e.g. pending_actions),
+  /// and recreating a clean box without crashing the app on startup.
+  static Future<Box<T>> openBoxDefensively<T>(
+    String boxName, {
+    bool preserveQuarantine = false,
+    String? directory,
+  }) async {
+    Uint8List? preOpenBytes;
+
+    if (directory != null) {
+      final boxFilePath = '$directory/$boxName.hive';
+      final file = File(boxFilePath);
+      try {
+        if (await file.exists() && await file.length() > 0) {
+          preOpenBytes = await file.readAsBytes();
+        }
+      } catch (_) {}
+    }
+
+    try {
+      if (Hive.isBoxOpen(boxName)) {
+        return Hive.box<T>(boxName);
+      }
+
+      final box = await Hive.openBox<T>(boxName);
+
+      // Detect if Hive silently truncated corrupted frames to empty
+      if (preOpenBytes != null && preOpenBytes.isNotEmpty && box.isEmpty) {
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        String? quarantinedPath;
+
+        if (preserveQuarantine) {
+          quarantinedPath = '$directory/$boxName.hive.corrupted_$timestamp';
+          try {
+            await File(quarantinedPath).writeAsBytes(preOpenBytes, flush: true);
+          } catch (e) {
+            AppLogger.e(
+              'Failed to save quarantine file: $e',
+              tag: 'HiveService',
+            );
+          }
+
+          AppLogger.w(
+            'Critical box "$boxName" contained data on disk but was recovered empty. Quarantined original to $quarantinedPath',
+            tag: 'HiveService',
+          );
+
+          DomainEventBus.instance.fire(
+            CriticalBoxCorruptedEvent(
+              boxName: boxName,
+              quarantinedPath: quarantinedPath,
+            ),
+          );
+        } else {
+          AppLogger.w(
+            'Cache box "$boxName" was corrupted and reset to empty state.',
+            tag: 'HiveService',
+          );
+          DomainEventBus.instance.fire(
+            PartitionCacheCorruptedEvent(boxName: boxName),
+          );
+        }
+      }
+
+      return box;
+    } catch (e, stack) {
+      AppLogger.e(
+        'Hive box "$boxName" failed to open (fatal disk corruption): $e',
+        tag: 'HiveService',
+        error: e,
+        stackTrace: stack,
+      );
+
+      String? quarantinedPath;
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+
+      if (preserveQuarantine &&
+          preOpenBytes != null &&
+          preOpenBytes.isNotEmpty) {
+        quarantinedPath = '$directory/$boxName.hive.corrupted_$timestamp';
+        try {
+          await File(quarantinedPath).writeAsBytes(preOpenBytes, flush: true);
+        } catch (_) {}
+
+        DomainEventBus.instance.fire(
+          CriticalBoxCorruptedEvent(
+            boxName: boxName,
+            quarantinedPath: quarantinedPath,
+          ),
+        );
+      } else {
+        DomainEventBus.instance.fire(
+          PartitionCacheCorruptedEvent(boxName: boxName),
+        );
+      }
+
+      final recoveryDir =
+          directory != null ? '$directory/recovered_$timestamp' : null;
+      if (recoveryDir != null) {
+        try {
+          await Directory(recoveryDir).create(recursive: true);
+        } catch (_) {}
+      }
+
+      return await Hive.openBox<T>(
+        boxName,
+        path: recoveryDir,
+      );
+    }
+  }
 
   Box<FileRecord> get _files => Hive.box<FileRecord>(AppConstants.filesBox);
   Box<FolderRecord> get _folders =>

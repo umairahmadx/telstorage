@@ -39,7 +39,8 @@ void main() {
       }
 
       // The total cached count should never exceed maxCapacity (30)
-      expect(cache.cachedFolderCount, equals(LruFolderCacheService.maxCapacity));
+      expect(
+          cache.cachedFolderCount, equals(LruFolderCacheService.maxCapacity));
 
       // The oldest 5 entries (folder_0 through folder_4) should be evicted
       expect(cache.get('folder_0'), isNull);

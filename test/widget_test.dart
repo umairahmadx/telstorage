@@ -42,7 +42,8 @@ void main() {
     expect(find.text('3 items'), findsOneWidget);
   });
 
-  testWidgets('AppFolderTile renders singular item label for count of 1', (tester) async {
+  testWidgets('AppFolderTile renders singular item label for count of 1',
+      (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.dark(),
@@ -88,7 +89,8 @@ void main() {
     expect(find.text('5 items'), findsOneWidget);
   });
 
-  testWidgets('AppFileTile renders file name and formatted size', (tester) async {
+  testWidgets('AppFileTile renders file name and formatted size',
+      (tester) async {
     final file = FileRecord(
       fileId: 'file-101',
       metadataMessageId: 1,

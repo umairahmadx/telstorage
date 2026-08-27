@@ -22,11 +22,13 @@ class NetworkFailure extends StorageFailure {
 }
 
 class HashMismatchFailure extends StorageFailure {
-  const HashMismatchFailure([super.message = 'File integrity check failed: SHA-256 hash mismatch']);
+  const HashMismatchFailure(
+      [super.message = 'File integrity check failed: SHA-256 hash mismatch']);
 }
 
 class QuotaExceededFailure extends StorageFailure {
-  const QuotaExceededFailure([super.message = 'Bandwidth or storage quota exceeded']);
+  const QuotaExceededFailure(
+      [super.message = 'Bandwidth or storage quota exceeded']);
 }
 
 class CancelledFailure extends StorageFailure {

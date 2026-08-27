@@ -65,15 +65,14 @@ void main() {
       expect(find.text('Enter your password'), findsOneWidget);
 
       // Enter invalid email and short password (< 6 chars)
-      await tester.enterText(
-          find.byType(TextFormField).first, 'invalid-email');
-      await tester.enterText(
-          find.byType(TextFormField).last, '12345');
+      await tester.enterText(find.byType(TextFormField).first, 'invalid-email');
+      await tester.enterText(find.byType(TextFormField).last, '12345');
       await tester.tap(find.text('Sign in'));
       await tester.pumpAndSettle();
 
       expect(find.text('Enter a valid email'), findsOneWidget);
-      expect(find.text('Password must be at least 6 characters'), findsOneWidget);
+      expect(
+          find.text('Password must be at least 6 characters'), findsOneWidget);
     });
 
     testWidgets('TC-03: Displays error banner and SnackBar on AuthError',
@@ -107,7 +106,8 @@ void main() {
       await tester.tap(find.byType(TextFormField).first);
       await tester.pumpAndSettle();
       expect(
-        FocusScope.of(tester.element(find.byType(TextFormField).first)).hasFocus,
+        FocusScope.of(tester.element(find.byType(TextFormField).first))
+            .hasFocus,
         isTrue,
       );
 
@@ -116,7 +116,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        FocusScope.of(tester.element(find.byType(TextFormField).first)).hasFocus,
+        FocusScope.of(tester.element(find.byType(TextFormField).first))
+            .hasFocus,
         isFalse,
       );
     });

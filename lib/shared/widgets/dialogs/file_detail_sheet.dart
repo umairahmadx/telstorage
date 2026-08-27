@@ -69,7 +69,8 @@ class FileDetailSheet extends StatelessWidget {
     bool downloaded = isDownloaded ?? false;
 
     if (ServiceLocator.instance.isInitialized && !downloaded) {
-      final completedPath = ServiceLocator.instance.downloadQueue.getCompletedPath(file.fileId);
+      final completedPath =
+          ServiceLocator.instance.downloadQueue.getCompletedPath(file.fileId);
       if (completedPath != null) {
         downloaded = true;
         resolvedPath ??= completedPath;
@@ -231,12 +232,12 @@ class FileDetailSheet extends StatelessWidget {
           const Divider(height: 1),
           const SizedBox(height: 20),
 
-
           // Detailed Metadata List
           _DetailRow(label: 'Type', value: file.mimeType),
           _DetailRow(label: 'Size', value: file.formattedSize),
           _DetailRow(label: 'Date Uploaded', value: dateStr),
-          _DetailRow(label: 'Message ID', value: file.metadataMessageId.toString()),
+          _DetailRow(
+              label: 'Message ID', value: file.metadataMessageId.toString()),
           if (file.sha256Hash.isNotEmpty)
             _DetailRow(label: 'SHA-256', value: file.sha256Hash),
 
@@ -317,7 +318,6 @@ class _ActionButton extends StatelessWidget {
     );
   }
 }
-
 
 class _DetailRow extends StatelessWidget {
   final String label;

@@ -261,9 +261,7 @@ class HomeCubit extends Cubit<HomeState> {
       {String? password, int? expiryDays, String? vanitySlug}) async {
     try {
       await _repository.enqueueWebShare(file,
-          password: password,
-          expiryDays: expiryDays,
-          vanitySlug: vanitySlug);
+          password: password, expiryDays: expiryDays, vanitySlug: vanitySlug);
     } catch (e) {
       emit(state.copyWith(errorMessage: 'Failed to start sharing: $e'));
     }

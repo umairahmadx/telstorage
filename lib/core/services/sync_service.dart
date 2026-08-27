@@ -106,8 +106,7 @@ class SyncService {
           }
         }
       } catch (e) {
-        AppLogger.w(
-            'Could not read pending actions box during sync: $e',
+        AppLogger.w('Could not read pending actions box during sync: $e',
             tag: 'SyncService');
       }
 

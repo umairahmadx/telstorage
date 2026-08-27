@@ -8,9 +8,7 @@ import 'package:telstorage/core/events/domain_event_bus.dart';
 
 void main() {
   test('event bus emits events reactively to typed subscribers', () async {
-    final eventFuture = DomainEventBus.instance
-        .on<FileDeletedEvent>()
-        .first;
+    final eventFuture = DomainEventBus.instance.on<FileDeletedEvent>().first;
 
     DomainEventBus.instance.fire(FileDeletedEvent('file-1'));
 
@@ -19,9 +17,8 @@ void main() {
 
   test('typed subscribers ignore unrelated events', () async {
     final received = <FileDeletedEvent>[];
-    final subscription = DomainEventBus.instance
-        .on<FileDeletedEvent>()
-        .listen(received.add);
+    final subscription =
+        DomainEventBus.instance.on<FileDeletedEvent>().listen(received.add);
 
     DomainEventBus.instance.fire(FolderDeletedEvent('folder-1'));
     DomainEventBus.instance.fire(FileDeletedEvent('file-1'));

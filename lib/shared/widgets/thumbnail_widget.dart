@@ -29,7 +29,8 @@ class SmartBadgeInfo {
   });
 
   /// Resolves the smart badge info based on filename and mimeType.
-  static SmartBadgeInfo resolve(String filename, String mimeType, AppColorsExtension colors) {
+  static SmartBadgeInfo resolve(
+      String filename, String mimeType, AppColorsExtension colors) {
     final mime = mimeType.toLowerCase();
     String badgeLabel = '';
     IconData iconData = AppIcons.fileGeneric;
@@ -52,11 +53,15 @@ class SmartBadgeInfo {
         badgeLabel = 'DOCKER';
         iconData = Icons.developer_board_rounded;
         iconColor = colors.accentPrimary;
-      } else if (upperName == 'MAKEFILE' || upperName == 'CMAKE' || upperName == 'GEMFILE') {
+      } else if (upperName == 'MAKEFILE' ||
+          upperName == 'CMAKE' ||
+          upperName == 'GEMFILE') {
         badgeLabel = 'MAKE';
         iconData = Icons.build_rounded;
         iconColor = colors.fileZip;
-      } else if (upperName == 'LICENSE' || upperName == 'README' || upperName.startsWith('README.')) {
+      } else if (upperName == 'LICENSE' ||
+          upperName == 'README' ||
+          upperName.startsWith('README.')) {
         badgeLabel = 'DOC';
         iconData = AppIcons.fileGeneric;
         iconColor = colors.textPrimary;
@@ -87,31 +92,51 @@ class SmartBadgeInfo {
         iconData = AppIcons.filePdf;
         iconColor = colors.filePdf;
         iconBg = colors.filePdfBg;
-      } else if ({'MP4', 'MKV', 'MOV', 'AVI', 'WEBM', 'FLV', '3GP', 'M4V'}.contains(badgeLabel)) {
+      } else if ({'MP4', 'MKV', 'MOV', 'AVI', 'WEBM', 'FLV', '3GP', 'M4V'}
+          .contains(badgeLabel)) {
         iconData = AppIcons.fileVideo;
         iconColor = colors.fileVideo;
         iconBg = colors.fileVideoBg;
-      } else if ({'PNG', 'JPG', 'JPEG', 'WEBP', 'GIF', 'SVG', 'BMP', 'HEIC'}.contains(badgeLabel)) {
+      } else if ({'PNG', 'JPG', 'JPEG', 'WEBP', 'GIF', 'SVG', 'BMP', 'HEIC'}
+          .contains(badgeLabel)) {
         iconData = AppIcons.fileImage;
         iconColor = colors.accentPrimary;
         iconBg = colors.bgSurfaceInset;
-      } else if ({'ZIP', 'RAR', '7Z', 'TAR', 'GZ', 'BZ2', 'XZ'}.contains(badgeLabel)) {
+      } else if ({'ZIP', 'RAR', '7Z', 'TAR', 'GZ', 'BZ2', 'XZ'}
+          .contains(badgeLabel)) {
         iconData = AppIcons.fileArchive;
         iconColor = colors.fileZip;
         iconBg = colors.bgSurfaceInset;
-      } else if ({'MP3', 'FLAC', 'WAV', 'AAC', 'M4A', 'OGG', 'OPUS'}.contains(badgeLabel)) {
+      } else if ({'MP3', 'FLAC', 'WAV', 'AAC', 'M4A', 'OGG', 'OPUS'}
+          .contains(badgeLabel)) {
         iconData = Icons.music_note_rounded;
         iconColor = colors.fileVideo;
         iconBg = colors.bgSurfaceInset;
-      } else if ({'APK', 'AAB', 'EXE', 'DMG', 'DEB', 'RPM', 'MSI'}.contains(badgeLabel)) {
+      } else if ({'APK', 'AAB', 'EXE', 'DMG', 'DEB', 'RPM', 'MSI'}
+          .contains(badgeLabel)) {
         iconData = Icons.android_rounded;
         iconColor = colors.success;
         iconBg = colors.bgSurfaceInset;
-      } else if ({'DART', 'JS', 'TS', 'PY', 'JSON', 'HTML', 'CSS', 'CPP', 'JAVA', 'KT', 'RS', 'GO', 'SH'}.contains(badgeLabel)) {
+      } else if ({
+        'DART',
+        'JS',
+        'TS',
+        'PY',
+        'JSON',
+        'HTML',
+        'CSS',
+        'CPP',
+        'JAVA',
+        'KT',
+        'RS',
+        'GO',
+        'SH'
+      }.contains(badgeLabel)) {
         iconData = Icons.code_rounded;
         iconColor = colors.accentPrimary;
         iconBg = colors.bgSurfaceInset;
-      } else if ({'DOCX', 'DOC', 'XLSX', 'XLS', 'PPTX', 'PPT', 'CSV'}.contains(badgeLabel)) {
+      } else if ({'DOCX', 'DOC', 'XLSX', 'XLS', 'PPTX', 'PPT', 'CSV'}
+          .contains(badgeLabel)) {
         iconData = Icons.description_outlined;
         iconColor = colors.textPrimary;
         iconBg = colors.bgSurfaceInset;
@@ -223,7 +248,9 @@ class _ThumbnailWidgetState extends State<ThumbnailWidget> {
             } else if (data is String) {
               final nativeProvider =
                   ThumbnailHelper.imageProviderFromPath(data);
-              if (nativeProvider == null) return _buildThumbnailerFallback(colors);
+              if (nativeProvider == null) {
+                return _buildThumbnailerFallback(colors);
+              }
               imageProvider = nativeProvider;
             } else if (data is Uint8List) {
               imageProvider = MemoryImage(data);
@@ -268,7 +295,8 @@ class _ThumbnailWidgetState extends State<ThumbnailWidget> {
   }
 
   Widget _buildThumbnailerFallback(AppColorsExtension colors) {
-    final badge = SmartBadgeInfo.resolve(widget.file.name, widget.file.mimeType, colors);
+    final badge =
+        SmartBadgeInfo.resolve(widget.file.name, widget.file.mimeType, colors);
 
     return Container(
       width: widget.width,

@@ -14,6 +14,7 @@ import '../utils/native_save_helper.dart';
 import 'download_service_contract.dart';
 import 'folder_traversal_service.dart';
 import 'notification_service.dart';
+import 'transfer_concurrency_coordinator.dart';
 import 'transfer_queue_service.dart';
 
 /// Entry representing a physical file and its path in the zip archive.
@@ -94,8 +95,7 @@ abstract final class ZipArchiveService {
     required DownloadServiceContract downloadService,
   }) async {
     final taskId = 'zip_${folder.id}_${DateTime.now().millisecondsSinceEpoch}';
-    final cleanFolderName =
-        FolderTraversalService.sanitizeSegment(folder.name);
+    final cleanFolderName = FolderTraversalService.sanitizeSegment(folder.name);
     final zipName = '$cleanFolderName.zip';
     final stats = FolderTraversalService.calculateStats(items);
 
@@ -124,146 +124,150 @@ abstract final class ZipArchiveService {
       currentStage: 'Preparing archive…',
     ));
 
-    Directory? tempDir;
-    try {
-      tempDir =
-          await Directory.systemTemp.createTemp('telstorage_zip_${folder.id}_');
-      final zipEntries = <ZipEntry>[];
-      final usedArchivePaths = <String>{};
-      final total = items.length;
+    return await TransferConcurrencyCoordinator.instance.runGuarded(() async {
+      Directory? tempDir;
+      try {
+        tempDir = await Directory.systemTemp
+            .createTemp('telstorage_zip_${folder.id}_');
+        final zipEntries = <ZipEntry>[];
+        final usedArchivePaths = <String>{};
+        final total = items.length;
 
-      for (var i = 0; i < total; i++) {
-        // EC-13: Cancellation check before downloading each file
+        for (var i = 0; i < total; i++) {
+          // EC-13: Cancellation check before downloading each file
+          if (isTaskCancelled(taskId)) {
+            AppLogger.i('ZIP export cancelled for "${folder.name}"',
+                tag: 'ZipArchive');
+            return null;
+          }
+
+          final item = items[i];
+          final itemProgressBase = i / (total > 0 ? total : 1);
+          final itemProgressStep = 1.0 / (total > 0 ? total : 1);
+
+          TransferQueueService.instance.updateTask(
+            taskId,
+            progress: itemProgressBase * 0.8,
+            currentStage: 'Downloading ${i + 1}/$total: ${item.file.name}',
+          );
+
+          final bytes = await downloadService.downloadFile(
+            item.file,
+            (chunkProgress, _) {
+              final overall =
+                  (itemProgressBase + (chunkProgress * itemProgressStep)) * 0.8;
+              TransferQueueService.instance
+                  .updateTask(taskId, progress: overall);
+            },
+          );
+
+          // EC-14: Disambiguate duplicate archive paths
+          final safeArchivePath =
+              disambiguateArchivePath(item.relativePath, usedArchivePaths);
+          final targetFile = File('${tempDir.path}/$safeArchivePath');
+          await targetFile.parent.create(recursive: true);
+          await targetFile.writeAsBytes(bytes);
+
+          zipEntries
+              .add(ZipEntry(file: targetFile, archivePath: safeArchivePath));
+        }
+
         if (isTaskCancelled(taskId)) {
-          AppLogger.i('ZIP export cancelled for "${folder.name}"',
-              tag: 'ZipArchive');
           return null;
         }
 
-        final item = items[i];
-        final itemProgressBase = i / (total > 0 ? total : 1);
-        final itemProgressStep = 1.0 / (total > 0 ? total : 1);
-
         TransferQueueService.instance.updateTask(
           taskId,
-          progress: itemProgressBase * 0.8,
-          currentStage: 'Downloading ${i + 1}/$total: ${item.file.name}',
+          progress: 0.85,
+          currentStage: 'Compressing archive…',
         );
 
-        final bytes = await downloadService.downloadFile(
-          item.file,
-          (chunkProgress, _) {
-            final overall =
-                (itemProgressBase + (chunkProgress * itemProgressStep)) * 0.8;
-            TransferQueueService.instance.updateTask(taskId, progress: overall);
+        final stagedZipFile = File('${tempDir.path}/$zipName');
+        await createZipFromFiles(
+          destinationZip: stagedZipFile,
+          entries: zipEntries,
+          onProgress: (p, status) {
+            TransferQueueService.instance.updateTask(
+              taskId,
+              progress: 0.85 + (p * 0.1),
+              currentStage: status,
+            );
           },
         );
 
-        // EC-14: Disambiguate duplicate archive paths
-        final safeArchivePath =
-            disambiguateArchivePath(item.relativePath, usedArchivePaths);
-        final targetFile = File('${tempDir.path}/$safeArchivePath');
-        await targetFile.parent.create(recursive: true);
-        await targetFile.writeAsBytes(bytes);
+        if (isTaskCancelled(taskId)) {
+          return null;
+        }
 
-        zipEntries.add(ZipEntry(file: targetFile, archivePath: safeArchivePath));
-      }
-
-      if (isTaskCancelled(taskId)) {
-        return null;
-      }
-
-      TransferQueueService.instance.updateTask(
-        taskId,
-        progress: 0.85,
-        currentStage: 'Compressing archive…',
-      );
-
-      final stagedZipFile = File('${tempDir.path}/$zipName');
-      await createZipFromFiles(
-        destinationZip: stagedZipFile,
-        entries: zipEntries,
-        onProgress: (p, status) {
-          TransferQueueService.instance.updateTask(
-            taskId,
-            progress: 0.85 + (p * 0.1),
-            currentStage: status,
-          );
-        },
-      );
-
-      if (isTaskCancelled(taskId)) {
-        return null;
-      }
-
-      TransferQueueService.instance.updateTask(
-        taskId,
-        progress: 0.95,
-        currentStage: 'Saving to Downloads…',
-      );
-
-      final zipBytes = await stagedZipFile.readAsBytes();
-      final saveResult = await saveNative(
-        zipBytes,
-        zipName,
-        subpath: 'zip',
-      );
-
-      if (saveResult.success) {
         TransferQueueService.instance.updateTask(
           taskId,
-          status: TransferStatus.completed,
-          progress: 1.0,
-          currentStage: 'Export completed',
+          progress: 0.95,
+          currentStage: 'Saving to Downloads…',
         );
 
-        await NotificationService.instance.showCompletionNotification(
-          title: 'Folder ZIP Exported',
-          body: '$zipName has been created and saved to Downloads.',
-          payload: 'transfer_download',
-          actions: [
-            if (saveResult.savedPath != null)
-              AndroidNotificationAction(
-                'open_path:${saveResult.savedPath}',
-                'Open ZIP',
+        final zipBytes = await stagedZipFile.readAsBytes();
+        final saveResult = await saveNative(
+          zipBytes,
+          zipName,
+          subpath: 'zip',
+        );
+
+        if (saveResult.success) {
+          TransferQueueService.instance.updateTask(
+            taskId,
+            status: TransferStatus.completed,
+            progress: 1.0,
+            currentStage: 'Export completed',
+          );
+
+          await NotificationService.instance.showCompletionNotification(
+            title: 'Folder ZIP Exported',
+            body: '$zipName has been created and saved to Downloads.',
+            payload: 'transfer_download',
+            actions: [
+              if (saveResult.savedPath != null)
+                AndroidNotificationAction(
+                  'open_path:${saveResult.savedPath}',
+                  'Open ZIP',
+                  showsUserInterface: true,
+                ),
+              const AndroidNotificationAction(
+                'view_downloads',
+                'View Downloads',
                 showsUserInterface: true,
               ),
-            const AndroidNotificationAction(
-              'view_downloads',
-              'View Downloads',
-              showsUserInterface: true,
-            ),
-          ],
-        );
+            ],
+          );
 
-        return saveResult.savedPath;
-      } else {
-        throw Exception(saveResult.message);
-      }
-    } catch (e, st) {
-      if (isTaskCancelled(taskId)) {
+          return saveResult.savedPath;
+        } else {
+          throw Exception(saveResult.message);
+        }
+      } catch (e, st) {
+        if (isTaskCancelled(taskId)) {
+          return null;
+        }
+        AppLogger.e('ZIP export failed for "${folder.name}": $e',
+            error: e, stackTrace: st, tag: 'ZipArchive');
+        TransferQueueService.instance.updateTask(
+          taskId,
+          status: TransferStatus.failed,
+          error: e.toString(),
+          currentStage: 'Export failed: $e',
+        );
+        await NotificationService.instance.showCompletionNotification(
+          title: 'ZIP Export Failed',
+          body: 'Failed to export ${folder.name}.zip: $e',
+          payload: 'transfer_download',
+        );
         return null;
+      } finally {
+        if (tempDir != null && tempDir.existsSync()) {
+          try {
+            await tempDir.delete(recursive: true);
+          } catch (_) {}
+        }
       }
-      AppLogger.e('ZIP export failed for "${folder.name}": $e',
-          error: e, stackTrace: st, tag: 'ZipArchive');
-      TransferQueueService.instance.updateTask(
-        taskId,
-        status: TransferStatus.failed,
-        error: e.toString(),
-        currentStage: 'Export failed: $e',
-      );
-      await NotificationService.instance.showCompletionNotification(
-        title: 'ZIP Export Failed',
-        body: 'Failed to export ${folder.name}.zip: $e',
-        payload: 'transfer_download',
-      );
-      return null;
-    } finally {
-      if (tempDir != null && tempDir.existsSync()) {
-        try {
-          await tempDir.delete(recursive: true);
-        } catch (_) {}
-      }
-    }
+    });
   }
 }

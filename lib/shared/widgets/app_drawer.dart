@@ -10,7 +10,6 @@ import '../../core/services/service_locator.dart';
 import '../../core/theme/app_icons.dart';
 import '../../core/theme/app_theme.dart';
 
-
 /// Navigation drawer widget providing primary application destinations.
 class AppDrawer extends StatelessWidget {
   /// Currently active tab index.

@@ -59,18 +59,23 @@ void main() {
   setUp(() {
     GoogleFonts.config.allowRuntimeFetching = false;
     Animate.defaultDuration = Duration.zero;
-    ServiceLocator.instance.setStorageRepositoryForTesting(_MockEmptyStorageRepository());
+    ServiceLocator.instance
+        .setStorageRepositoryForTesting(_MockEmptyStorageRepository());
   });
 
   group('Notification Action & Screen Routing Tests', () {
-    testWidgets('TC-01: payload transfer_download navigates to Downloads tab', (tester) async {
-      await tester.pumpWidget(_buildTestApp(const MobileShell(initialIndex: 0)));
+    testWidgets('TC-01: payload transfer_download navigates to Downloads tab',
+        (tester) async {
+      await tester
+          .pumpWidget(_buildTestApp(const MobileShell(initialIndex: 0)));
       await tester.pump(const Duration(milliseconds: 100));
 
-      final shellState = tester.state<MobileShellState>(find.byType(MobileShell));
+      final shellState =
+          tester.state<MobileShellState>(find.byType(MobileShell));
       shellState.handleNotificationResponse(
         const NotificationResponse(
-          notificationResponseType: NotificationResponseType.selectedNotification,
+          notificationResponseType:
+              NotificationResponseType.selectedNotification,
           payload: 'transfer_download',
         ),
       );
@@ -85,14 +90,18 @@ void main() {
       await tester.pump(const Duration(seconds: 4));
     });
 
-    testWidgets('TC-02: payload transfer_upload navigates to Uploads tab', (tester) async {
-      await tester.pumpWidget(_buildTestApp(const MobileShell(initialIndex: 0)));
+    testWidgets('TC-02: payload transfer_upload navigates to Uploads tab',
+        (tester) async {
+      await tester
+          .pumpWidget(_buildTestApp(const MobileShell(initialIndex: 0)));
       await tester.pump(const Duration(milliseconds: 100));
 
-      final shellState = tester.state<MobileShellState>(find.byType(MobileShell));
+      final shellState =
+          tester.state<MobileShellState>(find.byType(MobileShell));
       shellState.handleNotificationResponse(
         const NotificationResponse(
-          notificationResponseType: NotificationResponseType.selectedNotification,
+          notificationResponseType:
+              NotificationResponseType.selectedNotification,
           payload: 'transfer_upload',
         ),
       );
@@ -107,14 +116,18 @@ void main() {
       await tester.pump(const Duration(seconds: 4));
     });
 
-    testWidgets('TC-03: payload transfer_share navigates to Shared tab', (tester) async {
-      await tester.pumpWidget(_buildTestApp(const MobileShell(initialIndex: 0)));
+    testWidgets('TC-03: payload transfer_share navigates to Shared tab',
+        (tester) async {
+      await tester
+          .pumpWidget(_buildTestApp(const MobileShell(initialIndex: 0)));
       await tester.pump(const Duration(milliseconds: 100));
 
-      final shellState = tester.state<MobileShellState>(find.byType(MobileShell));
+      final shellState =
+          tester.state<MobileShellState>(find.byType(MobileShell));
       shellState.handleNotificationResponse(
         const NotificationResponse(
-          notificationResponseType: NotificationResponseType.selectedNotification,
+          notificationResponseType:
+              NotificationResponseType.selectedNotification,
           payload: 'transfer_share',
         ),
       );
@@ -129,10 +142,13 @@ void main() {
       await tester.pump(const Duration(seconds: 4));
     });
 
-    testWidgets('TC-04: action copy_url:... copies link to clipboard with feedback', (tester) async {
+    testWidgets(
+        'TC-04: action copy_url:... copies link to clipboard with feedback',
+        (tester) async {
       String? clipboardData;
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(SystemChannels.platform, (methodCall) async {
+          .setMockMethodCallHandler(SystemChannels.platform,
+              (methodCall) async {
         if (methodCall.method == 'Clipboard.setData') {
           clipboardData = (methodCall.arguments as Map)['text'] as String?;
           return null;
@@ -140,32 +156,42 @@ void main() {
         return null;
       });
 
-      await tester.pumpWidget(_buildTestApp(const MobileShell(initialIndex: 0)));
+      await tester
+          .pumpWidget(_buildTestApp(const MobileShell(initialIndex: 0)));
       await tester.pump(const Duration(milliseconds: 100));
 
-      final shellState = tester.state<MobileShellState>(find.byType(MobileShell));
+      final shellState =
+          tester.state<MobileShellState>(find.byType(MobileShell));
       shellState.handleNotificationResponse(
         const NotificationResponse(
-          notificationResponseType: NotificationResponseType.selectedNotificationAction,
+          notificationResponseType:
+              NotificationResponseType.selectedNotificationAction,
           actionId: 'copy_url:https://telstorage.io/share/demo123',
         ),
       );
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(clipboardData, equals('https://telstorage.io/share/demo123'));
-      expect(find.text('Share link copied: https://telstorage.io/share/demo123'), findsOneWidget);
+      expect(
+          find.text('Share link copied: https://telstorage.io/share/demo123'),
+          findsOneWidget);
 
       await tester.pump(const Duration(seconds: 4));
     });
 
-    testWidgets('TC-05: action view_all and payload transfer_active navigate to active transfers', (tester) async {
-      await tester.pumpWidget(_buildTestApp(const MobileShell(initialIndex: 0)));
+    testWidgets(
+        'TC-05: action view_all and payload transfer_active navigate to active transfers',
+        (tester) async {
+      await tester
+          .pumpWidget(_buildTestApp(const MobileShell(initialIndex: 0)));
       await tester.pump(const Duration(milliseconds: 100));
 
-      final shellState = tester.state<MobileShellState>(find.byType(MobileShell));
+      final shellState =
+          tester.state<MobileShellState>(find.byType(MobileShell));
       shellState.handleNotificationResponse(
         const NotificationResponse(
-          notificationResponseType: NotificationResponseType.selectedNotificationAction,
+          notificationResponseType:
+              NotificationResponseType.selectedNotificationAction,
           actionId: 'view_all',
         ),
       );
@@ -178,7 +204,9 @@ void main() {
       await tester.pump(const Duration(seconds: 4));
     });
 
-    testWidgets('TC-06: queue control actions pause, resume, cancel delegate to TransferQueueService', (tester) async {
+    testWidgets(
+        'TC-06: queue control actions pause, resume, cancel delegate to TransferQueueService',
+        (tester) async {
       final queue = TransferQueueService.instance;
       queue.addTask(
         TransferTask(
@@ -190,15 +218,18 @@ void main() {
         ),
       );
 
-      await tester.pumpWidget(_buildTestApp(const MobileShell(initialIndex: 0)));
+      await tester
+          .pumpWidget(_buildTestApp(const MobileShell(initialIndex: 0)));
       await tester.pump(const Duration(milliseconds: 100));
 
-      final shellState = tester.state<MobileShellState>(find.byType(MobileShell));
+      final shellState =
+          tester.state<MobileShellState>(find.byType(MobileShell));
 
       // Test Pause
       shellState.handleNotificationResponse(
         const NotificationResponse(
-          notificationResponseType: NotificationResponseType.selectedNotificationAction,
+          notificationResponseType:
+              NotificationResponseType.selectedNotificationAction,
           actionId: 'pause_test_task_1',
         ),
       );
@@ -207,7 +238,8 @@ void main() {
       // Test Resume
       shellState.handleNotificationResponse(
         const NotificationResponse(
-          notificationResponseType: NotificationResponseType.selectedNotificationAction,
+          notificationResponseType:
+              NotificationResponseType.selectedNotificationAction,
           actionId: 'resume_test_task_1',
         ),
       );
@@ -216,7 +248,8 @@ void main() {
       // Test Cancel
       shellState.handleNotificationResponse(
         const NotificationResponse(
-          notificationResponseType: NotificationResponseType.selectedNotificationAction,
+          notificationResponseType:
+              NotificationResponseType.selectedNotificationAction,
           actionId: 'cancel_test_task_1',
         ),
       );
@@ -225,56 +258,75 @@ void main() {
       await tester.pump(const Duration(seconds: 4));
     });
 
-    testWidgets('TC-07: action view_downloads, view_uploads, view_shared navigate to respective tabs', (tester) async {
-      await tester.pumpWidget(_buildTestApp(const MobileShell(initialIndex: 0)));
+    testWidgets(
+        'TC-07: action view_downloads, view_uploads, view_shared navigate to respective tabs',
+        (tester) async {
+      await tester
+          .pumpWidget(_buildTestApp(const MobileShell(initialIndex: 0)));
       await tester.pump(const Duration(milliseconds: 100));
 
-      final shellState = tester.state<MobileShellState>(find.byType(MobileShell));
+      final shellState =
+          tester.state<MobileShellState>(find.byType(MobileShell));
 
       // Test view_downloads
       shellState.handleNotificationResponse(
         const NotificationResponse(
-          notificationResponseType: NotificationResponseType.selectedNotificationAction,
+          notificationResponseType:
+              NotificationResponseType.selectedNotificationAction,
           actionId: 'view_downloads',
         ),
       );
       await tester.pump(const Duration(milliseconds: 100));
-      expect(ServiceLocator.instance.navigation.intentNotifier.value?.destination, equals(AppDestination.transferDownloads));
+      expect(
+          ServiceLocator.instance.navigation.intentNotifier.value?.destination,
+          equals(AppDestination.transferDownloads));
 
       // Test view_uploads
       shellState.handleNotificationResponse(
         const NotificationResponse(
-          notificationResponseType: NotificationResponseType.selectedNotificationAction,
+          notificationResponseType:
+              NotificationResponseType.selectedNotificationAction,
           actionId: 'view_uploads',
         ),
       );
       await tester.pump(const Duration(milliseconds: 100));
-      expect(ServiceLocator.instance.navigation.intentNotifier.value?.destination, equals(AppDestination.transferUploads));
+      expect(
+          ServiceLocator.instance.navigation.intentNotifier.value?.destination,
+          equals(AppDestination.transferUploads));
 
       // Test view_shared
       shellState.handleNotificationResponse(
         const NotificationResponse(
-          notificationResponseType: NotificationResponseType.selectedNotificationAction,
+          notificationResponseType:
+              NotificationResponseType.selectedNotificationAction,
           actionId: 'view_shared',
         ),
       );
       await tester.pump(const Duration(milliseconds: 100));
-      expect(ServiceLocator.instance.navigation.intentNotifier.value?.destination, equals(AppDestination.transferShared));
+      expect(
+          ServiceLocator.instance.navigation.intentNotifier.value?.destination,
+          equals(AppDestination.transferShared));
 
       await tester.pump(const Duration(seconds: 4));
     });
 
-    testWidgets('TC-08: action open_path:... executes safely and invokes FileOpenerHelper', (tester) async {
-      await tester.pumpWidget(_buildTestApp(const MobileShell(initialIndex: 0)));
+    testWidgets(
+        'TC-08: action open_path:... executes safely and invokes FileOpenerHelper',
+        (tester) async {
+      await tester
+          .pumpWidget(_buildTestApp(const MobileShell(initialIndex: 0)));
       await tester.pump(const Duration(milliseconds: 100));
 
-      final shellState = tester.state<MobileShellState>(find.byType(MobileShell));
+      final shellState =
+          tester.state<MobileShellState>(find.byType(MobileShell));
 
       // Invoke open_path on non-existent path in headless test environment - safely handled without crashing
       shellState.handleNotificationResponse(
         const NotificationResponse(
-          notificationResponseType: NotificationResponseType.selectedNotificationAction,
-          actionId: 'open_path:/storage/emulated/0/Download/TelStorage/sample.pdf',
+          notificationResponseType:
+              NotificationResponseType.selectedNotificationAction,
+          actionId:
+              'open_path:/storage/emulated/0/Download/TelStorage/sample.pdf',
         ),
       );
       await tester.pump(const Duration(milliseconds: 100));
@@ -282,7 +334,9 @@ void main() {
       await tester.pump(const Duration(seconds: 4));
     });
 
-    test('TC-09: updateTransferNotification handles active and empty task lists safely', () async {
+    test(
+        'TC-09: updateTransferNotification handles active and empty task lists safely',
+        () async {
       final notifService = NotificationService.instance;
       // Active tasks should not throw
       await notifService.updateTransferNotification([
@@ -300,7 +354,9 @@ void main() {
       await notifService.updateTransferNotification([]);
     });
 
-    test('TC-10: startTransferSession and stopTransferSession manage FGS state cleanly', () async {
+    test(
+        'TC-10: startTransferSession and stopTransferSession manage FGS state cleanly',
+        () async {
       final notifService = NotificationService.instance;
 
       await notifService.startTransferSession(

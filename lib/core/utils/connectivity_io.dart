@@ -4,10 +4,12 @@
  */
 
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 /// Lightweight connectivity check for native platforms.
 class Connectivity {
   /// Test override hook for deterministic connectivity simulation.
+  @visibleForTesting
   static bool? mockConnectionStatus;
 
   static Future<bool> hasConnection() async {

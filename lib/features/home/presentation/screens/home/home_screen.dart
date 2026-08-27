@@ -65,7 +65,8 @@ class _HomeScreenState extends State<HomeScreen> {
         final confirm = await AppDialogs.showConfirm(
           context,
           title: 'Delete File',
-          message: 'Are you sure you want to delete "${file.name}"? This action cannot be undone.',
+          message:
+              'Are you sure you want to delete "${file.name}"? This action cannot be undone.',
           confirmText: 'Delete',
           isDestructive: true,
         );

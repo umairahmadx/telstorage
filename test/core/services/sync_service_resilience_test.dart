@@ -50,13 +50,20 @@ void main() {
     tempDir = await Directory.systemTemp.createTemp('telstorage_sync_test_');
     Hive.init(tempDir.path);
 
-    if (!Hive.isAdapterRegistered(0)) Hive.registerAdapter(FileRecordAdapter());
-    if (!Hive.isAdapterRegistered(1)) Hive.registerAdapter(FolderRecordAdapter());
-    if (!Hive.isAdapterRegistered(3)) Hive.registerAdapter(PendingActionAdapter());
+    if (!Hive.isAdapterRegistered(0)) {
+      Hive.registerAdapter(FileRecordAdapter());
+    }
+    if (!Hive.isAdapterRegistered(1)) {
+      Hive.registerAdapter(FolderRecordAdapter());
+    }
+    if (!Hive.isAdapterRegistered(3)) {
+      Hive.registerAdapter(PendingActionAdapter());
+    }
 
     filesBox = await Hive.openBox<FileRecord>(AppConstants.filesBox);
     foldersBox = await Hive.openBox<FolderRecord>(AppConstants.foldersBox);
-    pendingBox = await Hive.openBox<PendingAction>(AppConstants.pendingActionsBox);
+    pendingBox =
+        await Hive.openBox<PendingAction>(AppConstants.pendingActionsBox);
 
     await filesBox.clear();
     await foldersBox.clear();
@@ -76,7 +83,9 @@ void main() {
   });
 
   group('SyncService Anti-Reversion & State Resilience Tests', () {
-    test('TC-01: syncFromTelegram does NOT restore deleted files when actionDeleteFile is pending in queue', () async {
+    test(
+        'TC-01: syncFromTelegram does NOT restore deleted files when actionDeleteFile is pending in queue',
+        () async {
       // Remote Telegram still has 'file_001' in 'root' partition
       final remoteRef = FileRef(
         fileId: 'file_001',
@@ -126,7 +135,9 @@ void main() {
       expect(hiveService.getFile('file_001'), isNull);
     });
 
-    test('TC-02: syncFromTelegram does NOT restore deleted folders when actionDeleteFolder is pending in queue', () async {
+    test(
+        'TC-02: syncFromTelegram does NOT restore deleted folders when actionDeleteFolder is pending in queue',
+        () async {
       final remoteFolder = Folder(
         id: 'folder_vacation',
         name: 'Vacation Photos',
@@ -168,7 +179,9 @@ void main() {
       expect(hiveService.getFolder('folder_vacation'), isNull);
     });
 
-    test('TC-03: syncFromTelegram preserves local optimistic file rename when remote partition has old name', () async {
+    test(
+        'TC-03: syncFromTelegram preserves local optimistic file rename when remote partition has old name',
+        () async {
       // Remote Telegram has 'document_old.pdf'
       final remoteRef = FileRef(
         fileId: 'file_002',
@@ -233,7 +246,9 @@ void main() {
       expect(fileInHive!.name, 'document_NEW.pdf');
     });
 
-    test('TC-04: syncFromTelegram preserves local optimistic file move when remote partition has old folderId', () async {
+    test(
+        'TC-04: syncFromTelegram preserves local optimistic file move when remote partition has old folderId',
+        () async {
       // Remote Telegram has file in 'root' (null folderId)
       final remoteRef = FileRef(
         fileId: 'file_003',

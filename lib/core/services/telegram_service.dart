@@ -8,20 +8,36 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../constants/app_constants.dart';
+import '../events/domain_event_bus.dart';
 import '../utils/app_logger.dart';
 import 'telegram_rate_limiter.dart';
+
+/// Exception thrown when Telegram returns HTTP 401 Unauthorized (token revoked/invalid).
+class TelegramAuthException implements Exception {
+  final String message;
+  TelegramAuthException(
+      [this.message =
+          'Telegram bot token is invalid or has been revoked (HTTP 401).']);
+
+  @override
+  String toString() => 'TelegramAuthException: $message';
+}
 
 /// All raw Telegram Bot API calls with media extraction and proxy support.
 class TelegramService {
   late final String _token;
   late final String _channelId;
-  final _dio = Dio(
-    BaseOptions(
-      connectTimeout: const Duration(seconds: 30),
-      sendTimeout: const Duration(seconds: 120),
-      receiveTimeout: const Duration(seconds: 60),
-    ),
-  );
+  final Dio _dio;
+
+  TelegramService({Dio? dio})
+      : _dio = dio ??
+            Dio(
+              BaseOptions(
+                connectTimeout: const Duration(seconds: 30),
+                sendTimeout: const Duration(seconds: 120),
+                receiveTimeout: const Duration(seconds: 60),
+              ),
+            );
 
   String get _base => '${AppConstants.telegramApiBase}$_token';
   String get _fileBase => '${AppConstants.telegramFileBase}$_token';
@@ -44,6 +60,15 @@ class TelegramService {
       try {
         return await action();
       } on DioException catch (e) {
+        if (e.response?.statusCode == 401) {
+          AppLogger.e(
+            'Telegram bot token invalid/revoked (HTTP 401). Failing fast.',
+            tag: 'TelegramService',
+          );
+          DomainEventBus.instance.fire(AuthTokenRevokedEvent());
+          throw TelegramAuthException();
+        }
+
         if (e.response?.statusCode == 429) {
           final retryAfter =
               e.response?.data?['parameters']?['retry_after'] as int? ?? 5;
@@ -145,14 +170,8 @@ class TelegramService {
           'message_id': messageId,
           'file_id': fileId,
         };
-      } on DioException catch (e) {
-        if (e.response?.statusCode == 429) {
-          final retryAfter =
-              e.response?.data?['parameters']?['retry_after'] as int? ?? 5;
-          TelegramRateLimiter.instance.report429(retryAfter);
-        }
-        AppLogger.e('Upload failed: $e', tag: 'TelegramService', error: e);
-        throw Exception('Failed to upload file: $e');
+      } on DioException {
+        rethrow;
       } catch (e) {
         AppLogger.e('Upload failed: $e', tag: 'TelegramService', error: e);
         throw Exception('Failed to upload file: $e');
@@ -168,8 +187,9 @@ class TelegramService {
         AppLogger.d('Downloading file with file_id: $fileId',
             tag: 'TelegramService');
 
-        final workerUrl = dotenv.env['WORKER_URL'] ??
-            'https://telstorage-proxy.umair-ahmed-64422.workers.dev';
+        final workerUrl =
+            (dotenv.isInitialized ? dotenv.env['WORKER_URL'] : null) ??
+                'https://telstorage-proxy.umair-ahmed-64422.workers.dev';
 
         // Step 1: Get file path using file_id
         AppLogger.d('Getting file path...', tag: 'TelegramService');
@@ -203,6 +223,8 @@ class TelegramService {
         final bytes = Uint8List.fromList(fileRes.data as List<int>);
         AppLogger.d('Downloaded ${bytes.length} bytes', tag: 'TelegramService');
         return bytes;
+      } on DioException {
+        rethrow;
       } catch (e) {
         AppLogger.e('Download failed: $e', tag: 'TelegramService', error: e);
         throw Exception('Failed to download file: $e');
@@ -279,6 +301,8 @@ class TelegramService {
 
         AppLogger.d('Got file_id: $fileId', tag: 'TelegramService');
         return fileId;
+      } on DioException {
+        rethrow;
       } catch (e) {
         AppLogger.e('getFileIdOfMessage failed: $e',
             tag: 'TelegramService', error: e);

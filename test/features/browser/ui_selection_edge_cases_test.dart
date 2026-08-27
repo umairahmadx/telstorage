@@ -24,7 +24,8 @@ class _MockStorageRepo implements StorageRepository {
 void main() {
   final now = DateTime(2026, 8, 27);
 
-  final folder1 = FolderRecord(id: 'f1', name: 'Work', parentId: null, createdAt: now);
+  final folder1 =
+      FolderRecord(id: 'f1', name: 'Work', parentId: null, createdAt: now);
 
   final file1 = FileRecord(
     fileId: 'file_inv_1',
@@ -38,7 +39,8 @@ void main() {
   );
 
   group('UI Selection & Batch Edge Cases (EC-16, EC-17, EC-18)', () {
-    test('EC-16: executeBatchDownload returns 0 when no items are selected', () async {
+    test('EC-16: executeBatchDownload returns 0 when no items are selected',
+        () async {
       final state = BrowserState(
         selectedFolderIds: {},
         selectedFileIds: {},
@@ -69,9 +71,11 @@ void main() {
       );
 
       expect(selectAllRes.folderIds, contains('f1'));
-      expect(selectAllRes.folderIds, isNot(contains('f2'))); // hidden folder not selected
+      expect(selectAllRes.folderIds,
+          isNot(contains('f2'))); // hidden folder not selected
       expect(selectAllRes.fileIds, contains('file_inv_1'));
-      expect(selectAllRes.fileIds, isNot(contains('file_photo_1'))); // hidden file not selected
+      expect(selectAllRes.fileIds,
+          isNot(contains('file_photo_1'))); // hidden file not selected
 
       // Deselect All on filtered view
       final deselectState = filteredState.copyWith(
@@ -88,7 +92,9 @@ void main() {
       expect(deselectRes.fileIds, isEmpty);
     });
 
-    test('EC-17: toggleSelectAll preserves existing selection outside current view when selecting', () {
+    test(
+        'EC-17: toggleSelectAll preserves existing selection outside current view when selecting',
+        () {
       // Suppose item 'f3' was previously selected, and now visible items are [f1] and [file1]
       final stateWithExisting = BrowserState(
         folders: [folder1],

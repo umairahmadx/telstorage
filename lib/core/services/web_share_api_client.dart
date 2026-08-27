@@ -207,7 +207,8 @@ class WebShareApiClient {
     );
   }
 
-  Future<bool> setPasswordRemote(String storageToId, String ownerToken, String password) async {
+  Future<bool> setPasswordRemote(
+      String storageToId, String ownerToken, String password) async {
     final res = await _dio.post(
       '/file/$storageToId/password',
       data: {'password': password},
@@ -219,7 +220,8 @@ class WebShareApiClient {
     return res.data['success'] == true;
   }
 
-  Future<bool> setExpiryRemote(String storageToId, String ownerToken, int days) async {
+  Future<bool> setExpiryRemote(
+      String storageToId, String ownerToken, int days) async {
     final res = await _dio.post(
       '/file/$storageToId/expiry',
       data: {'days': days},
@@ -231,7 +233,8 @@ class WebShareApiClient {
     return res.data['success'] == true;
   }
 
-  Future<bool> setMaxDownloadsRemote(String storageToId, String ownerToken, int? maxDownloads) async {
+  Future<bool> setMaxDownloadsRemote(
+      String storageToId, String ownerToken, int? maxDownloads) async {
     final res = await _dio.post(
       '/file/$storageToId/max-downloads',
       data: {'max_downloads': maxDownloads},
@@ -243,7 +246,8 @@ class WebShareApiClient {
     return res.data['success'] == true;
   }
 
-  Future<bool> setVanitySlugRemote(String storageToId, String ownerToken, String vanitySlug) async {
+  Future<bool> setVanitySlugRemote(
+      String storageToId, String ownerToken, String vanitySlug) async {
     final res = await _dio.post(
       '/file/$storageToId/alias',
       data: {'alias': vanitySlug},
@@ -255,7 +259,8 @@ class WebShareApiClient {
     return res.data['success'] == true;
   }
 
-  Future<void> uploadThumbnailRemote(String storageToId, String ownerToken, Uint8List imageBytes) async {
+  Future<void> uploadThumbnailRemote(
+      String storageToId, String ownerToken, Uint8List imageBytes) async {
     final formData = FormData.fromMap({
       'thumbnail': MultipartFile.fromBytes(imageBytes, filename: 'thumb.jpg'),
     });
@@ -274,7 +279,8 @@ class WebShareApiClient {
     }
   }
 
-  Future<Map<String, dynamic>> getBandwidthStatusRemote(String visitorToken) async {
+  Future<Map<String, dynamic>> getBandwidthStatusRemote(
+      String visitorToken) async {
     final res = await _dio.get(
       '/bandwidth/status',
       options: Options(headers: {'X-Visitor-Token': visitorToken}),

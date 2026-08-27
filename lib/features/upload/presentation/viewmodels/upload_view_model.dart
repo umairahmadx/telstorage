@@ -5,6 +5,7 @@
 
 import 'dart:typed_data';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/errors/result.dart';
 import '../../../../core/services/notification_service.dart';
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/utils/connectivity.dart';
@@ -305,53 +306,53 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
       totalCount: _totalCount,
     ));
 
-    try {
-      final isBatch = _totalCount > 1;
-      final fileMeta = await ServiceLocator.instance.uploadService.uploadFile(
-        task.bytes,
-        task.name,
-        task.folderId,
-        (progress, status) {
-          add(UploadProgressUpdated(
-            progress,
-            'Uploading ${task.name} (${_completedCount + 1}/$_totalCount)…',
-          ));
-        },
-        skipGlobalMetadataUpdate: isBatch,
-      );
+    final isBatch = _totalCount > 1;
+    final result = await ServiceLocator.instance.uploadService.uploadFile(
+      task.bytes,
+      task.name,
+      task.folderId,
+      (progress, status) {
+        add(UploadProgressUpdated(
+          progress,
+          'Uploading ${task.name} (${_completedCount + 1}/$_totalCount)…',
+        ));
+      },
+      skipGlobalMetadataUpdate: isBatch,
+    );
 
-      if (isBatch && fileMeta.isNotEmpty) {
-        _completedBatchMeta.add(fileMeta);
-      }
+    switch (result) {
+      case Success(:final data):
+        if (isBatch && data.isNotEmpty) {
+          _completedBatchMeta.add(data);
+        }
+        add(UploadCompleted());
+      case Failure(:final failure):
+        if (_completedBatchMeta.isNotEmpty) {
+          try {
+            await ServiceLocator.instance.uploadService
+                .commitUploadBatch(List.from(_completedBatchMeta));
+            _completedBatchMeta.clear();
+          } catch (_) {}
+        }
 
-      add(UploadCompleted());
-    } catch (e) {
-      if (_completedBatchMeta.isNotEmpty) {
-        try {
-          await ServiceLocator.instance.uploadService
-              .commitUploadBatch(List.from(_completedBatchMeta));
-          _completedBatchMeta.clear();
-        } catch (_) {}
-      }
+        final isOnline = await Connectivity.hasConnection();
+        final isNetworkError = !isOnline ||
+            failure is NetworkFailure ||
+            failure.message.contains('OfflineException') ||
+            failure.message.contains('DioException') ||
+            failure.message.contains('XMLHttpRequest') ||
+            failure.message.contains('SocketException') ||
+            failure.message.contains('Failed host lookup');
 
-      final isOnline = await Connectivity.hasConnection();
-      final isNetworkError = !isOnline ||
-          e is OfflineException ||
-          e.toString().contains('OfflineException') ||
-          e.toString().contains('DioException') ||
-          e.toString().contains('XMLHttpRequest') ||
-          e.toString().contains('SocketException') ||
-          e.toString().contains('Failed host lookup');
-
-      if (isNetworkError) {
-        _isWaitingForNetwork = true;
-        _activeWorkers--;
-        _queue.insert(0, task);
-        emit(UploadWaitingForNetwork(task.name));
-        _retryWhenOnline();
-      } else {
-        add(UploadFailed(e.toString(), fileName: task.name));
-      }
+        if (isNetworkError) {
+          _isWaitingForNetwork = true;
+          _activeWorkers--;
+          _queue.insert(0, task);
+          emit(UploadWaitingForNetwork(task.name));
+          _retryWhenOnline();
+        } else {
+          add(UploadFailed(failure.message, fileName: task.name));
+        }
     }
   }
 

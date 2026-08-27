@@ -201,8 +201,7 @@ class TransferCubit extends Cubit<TransferState> {
   /// Deletes downloaded file on device storage and clears queue record.
   Future<void> deleteDownloadedFile(String fileId) async {
     try {
-      await ServiceLocator.instance.downloadQueue
-          .deleteJobAndLocalFile(fileId);
+      await ServiceLocator.instance.downloadQueue.deleteJobAndLocalFile(fileId);
     } catch (e) {
       emit(state.copyWith(errorMessage: e.toString()));
     }

@@ -16,7 +16,9 @@ void main() {
   });
 
   group('Interactive Ripple & Curved Surface Tests', () {
-    testWidgets('AppSurfaceCard with onTap renders Material with Clip.antiAlias and InkWell', (tester) async {
+    testWidgets(
+        'AppSurfaceCard with onTap renders Material with Clip.antiAlias and InkWell',
+        (tester) async {
       bool tapped = false;
 
       await tester.pumpWidget(
@@ -33,20 +35,26 @@ void main() {
       );
 
       final materialFinder = find.byWidgetPredicate(
-        (w) => w is Material && w.clipBehavior == Clip.antiAlias && w.borderRadius == BorderRadius.circular(20),
+        (w) =>
+            w is Material &&
+            w.clipBehavior == Clip.antiAlias &&
+            w.borderRadius == BorderRadius.circular(20),
       );
       expect(materialFinder, findsOneWidget,
-          reason: 'AppSurfaceCard must use Material with Clip.antiAlias and matching borderRadius');
+          reason:
+              'AppSurfaceCard must use Material with Clip.antiAlias and matching borderRadius');
 
       final inkWellFinder = find.byType(InkWell);
       expect(inkWellFinder, findsOneWidget,
-          reason: 'AppSurfaceCard with onTap must render an InkWell for ripple feedback');
+          reason:
+              'AppSurfaceCard with onTap must render an InkWell for ripple feedback');
 
       await tester.tap(find.text('Interactive Card'));
       expect(tapped, isTrue);
     });
 
-    testWidgets('AppActionCard delegates to curved interactive surface', (tester) async {
+    testWidgets('AppActionCard delegates to curved interactive surface',
+        (tester) async {
       bool tapped = false;
 
       await tester.pumpWidget(
@@ -67,13 +75,15 @@ void main() {
       expect(tapped, isTrue);
     });
 
-    testWidgets('AppSurfaceCard supports top-only directional border radius', (tester) async {
+    testWidgets('AppSurfaceCard supports top-only directional border radius',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.dark(),
           home: Scaffold(
             body: AppSurfaceCard(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(16)),
               onTap: () {},
               child: const Text('Top Only Curved Item'),
             ),
@@ -82,12 +92,17 @@ void main() {
       );
 
       final materialFinder = find.byWidgetPredicate(
-        (w) => w is Material && w.borderRadius == const BorderRadius.vertical(top: Radius.circular(16)),
+        (w) =>
+            w is Material &&
+            w.borderRadius ==
+                const BorderRadius.vertical(top: Radius.circular(16)),
       );
       expect(materialFinder, findsOneWidget);
     });
 
-    testWidgets('AppSurfaceCard supports zero border radius for flat middle items', (tester) async {
+    testWidgets(
+        'AppSurfaceCard supports zero border radius for flat middle items',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.dark(),

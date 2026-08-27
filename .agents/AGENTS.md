@@ -32,3 +32,23 @@ Welcome to the TelStorage project rules repository. These rules govern code arch
    - Foreground surface ink ripples with `Clip.antiAlias`.
    - Matching `borderRadius` and `CircleBorder` on curved and circular buttons/cards.
    - Proper shaping for widgets with built-in ripples (`ListTile`, `ElevatedButton`, `FilledButton`, `IconButton`).
+
+7. [**Verification, Reporting & Claim Integrity Rules**](file:///c:/Users/umair-dell/StudioProjects/telstorage/.agents/rules/verification_reporting_rules.md)
+   - 4-Level Claim Integrity framework (Planned, Reasoned, Executed Non-Adversarial, Executed Adversarial Shown).
+   - Mandatory Red-before-Green discipline through actual caller entry points.
+   - Delegation verification (UI preflight vs. ViewModel execution).
+   - Repo-wide search scope evidence with literal commands.
+   - Full test suite execution and ban on absolute language.
+   - Explicit 3-state closure reports (`Holds up`, `Holds up with a named residual risk`, `Not done yet`).
+
+8. [**Security, Data Integrity & Telegram Architecture Rules**](file:///c:/Users/umair-dell/StudioProjects/telstorage/.agents/rules/security_data_integrity_rules.md)
+   - Zero secret/payload logging and `.gitignore` credential hygiene.
+   - Handling Telegram backend failure modes (token revocation, flood waits/429, invalid message IDs).
+   - Chunk manifest verification passes and SHA-256 digest validation.
+
+9. [**Performance, Concurrency & Observability Rules**](file:///c:/Users/umair-dell/StudioProjects/telstorage/.agents/rules/performance_observability_rules.md)
+   - Bounded transfer concurrency limits (uploads + downloads combined).
+   - Streaming memory ceiling vs. full file RAM buffering for chunking/zipping pipelines.
+   - Background queue worker inspectable state (active task, stage, last error, progress) and diagnostics.
+
+

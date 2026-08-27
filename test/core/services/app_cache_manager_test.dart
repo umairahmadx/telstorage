@@ -58,7 +58,8 @@ void main() {
     });
 
     test('Supported limits contains expected steps', () {
-      expect(AppCacheManager.supportedLimitsMb, containsAll([50, 100, 250, 500, 1024, 2048]));
+      expect(AppCacheManager.supportedLimitsMb,
+          containsAll([50, 100, 250, 500, 1024, 2048]));
     });
   });
 }

@@ -29,7 +29,8 @@ class _SettingsCacheCardState extends State<SettingsCacheCard> {
   }
 
   Future<void> _loadStats() async {
-    final stats = await ServiceLocator.instance.cacheManager.getPartitionStats();
+    final stats =
+        await ServiceLocator.instance.cacheManager.getPartitionStats();
     if (mounted) {
       setState(() => _stats = stats);
     }

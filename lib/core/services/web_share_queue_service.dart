@@ -63,7 +63,10 @@ class WebShareQueueService {
 
   /// Enqueue a file to be shared publicly on storage.to
   Future<void> enqueueShare(FileRecord file,
-      {String? password, int? maxDownloads, int? expiryDays, String? vanitySlug}) async {
+      {String? password,
+      int? maxDownloads,
+      int? expiryDays,
+      String? vanitySlug}) async {
     final existingMap = _box.get(file.fileId);
     if (existingMap != null) {
       final existingJob =
@@ -71,10 +74,18 @@ class WebShareQueueService {
       if (existingJob.isComplete) {
         AppLogger.i('Web share already completed for: ${file.name}',
             tag: 'WebShareQueue');
-        if (password != null) await setPassword(file.fileId, password);
-        if (maxDownloads != null) await setMaxDownloads(file.fileId, maxDownloads);
-        if (expiryDays != null) await setExpiry(file.fileId, expiryDays);
-        if (vanitySlug != null) await setVanitySlug(file.fileId, vanitySlug);
+        if (password != null) {
+          await setPassword(file.fileId, password);
+        }
+        if (maxDownloads != null) {
+          await setMaxDownloads(file.fileId, maxDownloads);
+        }
+        if (expiryDays != null) {
+          await setExpiry(file.fileId, expiryDays);
+        }
+        if (vanitySlug != null) {
+          await setVanitySlug(file.fileId, vanitySlug);
+        }
         return;
       }
       if (existingJob.status == 'queued' ||
@@ -134,7 +145,9 @@ class WebShareQueueService {
       if (job.status == 'downloading' || job.status == 'uploading') {
         await _box.put(
           job.fileId,
-          job.copyWith(status: 'queued', progress: 0.0, clearError: true).toMap(),
+          job
+              .copyWith(status: 'queued', progress: 0.0, clearError: true)
+              .toMap(),
         );
       }
     }
@@ -287,7 +300,8 @@ class WebShareQueueService {
             }
           }
         } catch (e) {
-          AppLogger.w('Failed to upload web thumbnail: $e', tag: 'WebShareQueue');
+          AppLogger.w('Failed to upload web thumbnail: $e',
+              tag: 'WebShareQueue');
         }
       }
 
@@ -415,7 +429,8 @@ class WebShareQueueService {
 
     if (job.storageToId == null || job.ownerToken == null) return;
 
-    final formattedSlug = vanitySlug.toLowerCase().replaceAll(RegExp(r'[^a-z0-9\-]'), '-');
+    final formattedSlug =
+        vanitySlug.toLowerCase().replaceAll(RegExp(r'[^a-z0-9\-]'), '-');
     final success = await _apiClient.setVanitySlugRemote(
         job.storageToId!, job.ownerToken!, formattedSlug);
     if (success) {

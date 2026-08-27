@@ -28,14 +28,17 @@ class _MockEmptyStorageRepository implements StorageRepository {
 void main() {
   setUp(() {
     Connectivity.mockConnectionStatus = true;
-    ServiceLocator.instance.setStorageRepositoryForTesting(_MockEmptyStorageRepository());
+    ServiceLocator.instance
+        .setStorageRepositoryForTesting(_MockEmptyStorageRepository());
   });
 
   tearDown(() {
     Connectivity.mockConnectionStatus = null;
   });
 
-  testWidgets('AppDialogs.showInfo renders title, message, and dismisses cleanly', (tester) async {
+  testWidgets(
+      'AppDialogs.showInfo renders title, message, and dismisses cleanly',
+      (tester) async {
     await tester.pumpWidget(MaterialApp(
       theme: AppTheme.dark(),
       home: Builder(builder: (context) {
@@ -67,7 +70,9 @@ void main() {
     expect(find.text('Notice Title'), findsNothing);
   });
 
-  testWidgets('BrowserDialogs.downloadFolder shows Empty alert for 0 files when online', (tester) async {
+  testWidgets(
+      'BrowserDialogs.downloadFolder shows Empty alert for 0 files when online',
+      (tester) async {
     final emptyFolder = FolderRecord(
       id: 'f_empty',
       name: 'Empty Folder',
@@ -93,7 +98,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Folder is Empty'), findsOneWidget);
-    expect(find.text('"Empty Folder" contains no files to download.'), findsOneWidget);
+    expect(find.text('"Empty Folder" contains no files to download.'),
+        findsOneWidget);
 
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
@@ -101,7 +107,9 @@ void main() {
     expect(find.text('Folder is Empty'), findsNothing);
   });
 
-  testWidgets('BrowserDialogs.exportFolderAsZip shows Empty alert for 0 files when online', (tester) async {
+  testWidgets(
+      'BrowserDialogs.exportFolderAsZip shows Empty alert for 0 files when online',
+      (tester) async {
     final emptyFolder = FolderRecord(
       id: 'f_empty_zip',
       name: 'Archive Empty',
@@ -127,7 +135,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Folder is Empty'), findsOneWidget);
-    expect(find.text('"Archive Empty" contains no files to export.'), findsOneWidget);
+    expect(find.text('"Archive Empty" contains no files to export.'),
+        findsOneWidget);
 
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
@@ -135,7 +144,9 @@ void main() {
     expect(find.text('Folder is Empty'), findsNothing);
   });
 
-  testWidgets('EC-18: BrowserDialogs.downloadFolder shows Offline alert when device is offline', (tester) async {
+  testWidgets(
+      'EC-18: BrowserDialogs.downloadFolder shows Offline alert when device is offline',
+      (tester) async {
     Connectivity.mockConnectionStatus = false;
     final folder = FolderRecord(
       id: 'f_offline',
@@ -162,7 +173,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Offline'), findsOneWidget);
-    expect(find.text('You are currently offline. Please check your internet connection to download folders.'), findsOneWidget);
+    expect(
+        find.text(
+            'You are currently offline. Please check your internet connection to download folders.'),
+        findsOneWidget);
 
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();

@@ -9,7 +9,9 @@ import 'package:telstorage/core/theme/app_theme.dart';
 import 'package:telstorage/shared/widgets/bars/app_batch_action_bar.dart';
 
 void main() {
-  testWidgets('TC-01: AppBatchActionBar renders Select All and Download buttons correctly', (tester) async {
+  testWidgets(
+      'TC-01: AppBatchActionBar renders Select All and Download buttons correctly',
+      (tester) async {
     bool downloadTriggered = false;
     bool selectAllTriggered = false;
 
@@ -37,7 +39,9 @@ void main() {
     expect(selectAllTriggered, isTrue);
   });
 
-  testWidgets('TC-02: AppBatchActionBar renders Deselect icon when isAllSelected is true', (tester) async {
+  testWidgets(
+      'TC-02: AppBatchActionBar renders Deselect icon when isAllSelected is true',
+      (tester) async {
     await tester.pumpWidget(MaterialApp(
       theme: AppTheme.dark(),
       home: Scaffold(

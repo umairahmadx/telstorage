@@ -47,3 +47,29 @@ Future<Result<List<FileRecord>>> getFiles(String? folderId) async {
   - Exponential backoff / retry attempts for transient network failures.
   - Rate limiting compliance (e.g. Telegram API rate limiters).
   - Persistence across app restarts using Hive storage.
+
+---
+
+## 5. Defensive Read Paths for Persistent State
+
+- Every persistent-state read (Hive boxes, SQLite, disk cache, JSON preferences) must assume a prior write could have been interrupted mid-record.
+- Design read paths to degrade gracefully with fallbacks or auto-recovery rather than throwing unhandled schema or serialization errors.
+
+---
+
+## 6. Network Timeouts & Explicit Failure Behavior
+
+- Every network operation must specify an explicit timeout (`.timeout(...)`).
+- Define explicit behavior on failure: determine whether an operation should retry with exponential backoff, be enqueued into an offline queue, or immediately surface to the user.
+- Every `await` touching network or disk must have a clear answer to *"what happens if this throws?"* rather than relying on default unhandled exception bubbling.
+
+---
+
+## 7. Offline-First by Design
+
+- Design any new remote-writing or remote-modifying feature with offline resilience at the architectural level:
+  - Cache mutations locally first (e.g. Hive state, `PendingAction` queues).
+  - Sync to Telegram when connectivity is re-established.
+  - Never bolt offline support onto a finished feature as an afterthought.
+
+

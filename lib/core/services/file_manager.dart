@@ -32,7 +32,8 @@ class FileManagerService {
 
   // ── Folder Operations ───────────────────────────────────────
 
-  Future<void> createFolder(String name, {String? parentId, String? folderId}) async {
+  Future<void> createFolder(String name,
+      {String? parentId, String? folderId}) async {
     final meta = await _meta.fetch();
     final folder = Folder(
       id: folderId ?? const Uuid().v4(),
@@ -119,7 +120,8 @@ class FileManagerService {
       final bytes = await _telegram.downloadByFileId(fileId);
       return jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
     }
-    throw StateError('Cannot fetch remote metadata: file has no remote metadataFileId.');
+    throw StateError(
+        'Cannot fetch remote metadata: file has no remote metadataFileId.');
   }
 
   Future<void> renameFile(String fileId, String newName) async {
@@ -220,8 +222,7 @@ class FileManagerService {
           record.metadataFileId,
         );
       } catch (e) {
-        AppLogger.w(
-            'Could not fetch remote chunk metadata for $fileId: $e',
+        AppLogger.w('Could not fetch remote chunk metadata for $fileId: $e',
             tag: 'FileManager');
       }
     }
@@ -251,8 +252,7 @@ class FileManagerService {
         folderId: record.folderId,
       );
     } catch (e) {
-      AppLogger.w(
-          'Could not remove file $fileId from remote partition: $e',
+      AppLogger.w('Could not remove file $fileId from remote partition: $e',
           tag: 'FileManager');
     }
 
@@ -270,7 +270,8 @@ class FileManagerService {
   }) async {
     if (metadataMessageId != null && metadataMessageId > 0) {
       try {
-        final fileMeta = await _fetchFileMeta(metadataMessageId, metadataFileId);
+        final fileMeta =
+            await _fetchFileMeta(metadataMessageId, metadataFileId);
         final chunks = fileMeta['chunks'] as List? ?? [];
         for (final chunk in chunks) {
           try {
@@ -287,10 +288,14 @@ class FileManagerService {
 
     try {
       final meta = await _meta.fetch();
-      await _meta.removeFile(meta, fileId, sizeMb, mimeType, folderId: folderId);
-      AppLogger.i('File $fileId deleted from remote metadata index successfully', tag: 'FileManager');
+      await _meta.removeFile(meta, fileId, sizeMb, mimeType,
+          folderId: folderId);
+      AppLogger.i(
+          'File $fileId deleted from remote metadata index successfully',
+          tag: 'FileManager');
     } catch (e) {
-      AppLogger.e('Failed to remove $fileId from global metadata: $e', tag: 'FileManager');
+      AppLogger.e('Failed to remove $fileId from global metadata: $e',
+          tag: 'FileManager');
       rethrow;
     }
   }

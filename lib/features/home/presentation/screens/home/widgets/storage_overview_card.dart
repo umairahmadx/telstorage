@@ -57,7 +57,9 @@ class StorageOverviewCard extends StatelessWidget {
                 TextSpan(
                   text: usedText,
                   style: TextStyle(
-                      color: colors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
+                      color: colors.textPrimary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16),
                 ),
                 const TextSpan(text: ' total cloud storage used'),
               ],

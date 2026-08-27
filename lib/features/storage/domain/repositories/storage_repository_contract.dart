@@ -50,4 +50,8 @@ abstract interface class WebShareEnqueuer {
 /// Composite contract retained for the concrete repository and legacy callers.
 /// Domain clients should depend on the smallest capability they need.
 abstract interface class StorageRepositoryContract
-    implements StorageReader, StorageWriter, DownloadEnqueuer, WebShareEnqueuer {}
+    implements
+        StorageReader,
+        StorageWriter,
+        DownloadEnqueuer,
+        WebShareEnqueuer {}

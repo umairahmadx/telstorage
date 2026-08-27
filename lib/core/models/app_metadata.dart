@@ -25,10 +25,11 @@ class AppMetadata {
         folderPartitionsMap = folderPartitionsMap ?? {};
 
   factory AppMetadata.fromJson(Map<String, dynamic> json) {
-    final partitionsMap = (json['folder_partitions'] as Map<String, dynamic>?)?.map(
-          (k, v) => MapEntry(k, (v as num).toInt()),
-        ) ??
-        {};
+    final partitionsMap =
+        (json['folder_partitions'] as Map<String, dynamic>?)?.map(
+              (k, v) => MapEntry(k, (v as num).toInt()),
+            ) ??
+            {};
     return AppMetadata(
       owner: json['owner'] as String,
       storageUsedMb: (json['storage_used_mb'] as num?)?.toDouble() ?? 0.0,
@@ -62,7 +63,8 @@ class AppMetadata {
         defaults.addAll(loaded);
         return defaults;
       }(),
-      lastSynced: DateTime.parse(json['last_synced'] as String? ?? DateTime.now().toIso8601String()),
+      lastSynced: DateTime.parse(
+          json['last_synced'] as String? ?? DateTime.now().toIso8601String()),
     );
   }
 

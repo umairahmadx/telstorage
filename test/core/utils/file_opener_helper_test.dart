@@ -16,7 +16,8 @@ void main() {
       expect(mime, equals('image/png'));
     });
 
-    test('TC-02: Ignores application/octet-stream and resolves by filename', () {
+    test('TC-02: Ignores application/octet-stream and resolves by filename',
+        () {
       final mime = FileOpenerHelper.resolveMimeType(
         mimeType: 'application/octet-stream',
         fileName: 'document.pdf',
@@ -101,7 +102,8 @@ void main() {
       expect(mime, equals('*/*'));
     });
 
-    test('TC-08: Falls back to wildcard "*/*" when no information is provided', () {
+    test('TC-08: Falls back to wildcard "*/*" when no information is provided',
+        () {
       final mime = FileOpenerHelper.resolveMimeType();
       expect(mime, equals('*/*'));
     });
@@ -113,7 +115,8 @@ void main() {
       expect(result, isFalse);
     });
 
-    test('TC-10: Returns false and handles missing file without throwing', () async {
+    test('TC-10: Returns false and handles missing file without throwing',
+        () async {
       final result = await FileOpenerHelper.openFile(
         null,
         filePath: '/non/existent/path/to/missing_file.jpg',

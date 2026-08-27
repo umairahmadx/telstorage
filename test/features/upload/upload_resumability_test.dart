@@ -15,7 +15,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Upload Resumability & Chunk Persistence Tests', () {
-    test('TC-01: ChunkInfo serialization and deserialization works correctly', () {
+    test('TC-01: ChunkInfo serialization and deserialization works correctly',
+        () {
       final chunk = ChunkInfo(
         index: 3,
         messageId: 1042,
@@ -34,12 +35,15 @@ void main() {
       expect(restored.partName, equals('sample.zip.003'));
     });
 
-    test('TC-02: BatteryOptimizationHelper returns true in non-Android/test environment', () async {
+    test(
+        'TC-02: BatteryOptimizationHelper returns true in non-Android/test environment',
+        () async {
       final isExempt = await BatteryOptimizationHelper.isOptimizationDisabled();
       expect(isExempt, isTrue);
     });
 
-    test('TC-03: UploadBloc triggers proactive transfer session lifecycle', () async {
+    test('TC-03: UploadBloc triggers proactive transfer session lifecycle',
+        () async {
       final notifService = NotificationService.instance;
       final bloc = UploadBloc();
 
@@ -65,7 +69,9 @@ void main() {
       await bloc.close();
     });
 
-    test('TC-04: Simulated kill-9 mid-chunk upload resumes from uncompleted chunk without corrupting', () {
+    test(
+        'TC-04: Simulated kill-9 mid-chunk upload resumes from uncompleted chunk without corrupting',
+        () {
       // Setup state where chunks 1 to 7 succeeded, but chunk 8 was killed mid-flight (not in persistent cache)
       final simulatedBoxData = <dynamic, dynamic>{};
       for (int i = 1; i <= 7; i++) {
@@ -89,7 +95,8 @@ void main() {
 
       expect(existingChunks.length, equals(7));
       expect(existingChunks.containsKey(7), isTrue);
-      expect(existingChunks.containsKey(8), isFalse); // Chunk 8 was in-flight, so NOT in box
+      expect(existingChunks.containsKey(8),
+          isFalse); // Chunk 8 was in-flight, so NOT in box
 
       // Simulate loop over 10 parts
       final List<int> partsToUpload = [];
@@ -107,7 +114,8 @@ void main() {
             messageId: 200 + chunkIndex,
             fileId: 'tg_chunk_file_$chunkIndex',
             sizeMb: 19.0,
-            partName: 'large_archive.zip.${chunkIndex.toString().padLeft(3, '0')}',
+            partName:
+                'large_archive.zip.${chunkIndex.toString().padLeft(3, '0')}',
           ));
         }
       }
@@ -119,7 +127,9 @@ void main() {
       expect(completedInfos.last.fileId, equals('tg_chunk_file_10'));
     });
 
-    test('TC-05: Thumbnail cache key thumb_hash allows instant thumbnail reuse on resume', () {
+    test(
+        'TC-05: Thumbnail cache key thumb_hash allows instant thumbnail reuse on resume',
+        () {
       final Map<String, dynamic> cache = {
         'thumb_abc123': 'tg_thumb_file_id_999',
       };
@@ -128,7 +138,9 @@ void main() {
       expect(cachedThumbId, equals('tg_thumb_file_id_999'));
     });
 
-    test('TC-06: ChunkResumeService handles unopened box and null lookups gracefully', () async {
+    test(
+        'TC-06: ChunkResumeService handles unopened box and null lookups gracefully',
+        () async {
       final service = ChunkResumeService.instance;
       final chunks = service.getUploadedChunks('non_existent_hash');
       expect(chunks, isEmpty);

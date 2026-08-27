@@ -13,7 +13,8 @@ class PendingAction extends HiveObject {
   final String id;
 
   @HiveField(1)
-  final String actionType; // 'createFolder' | 'renameFolder' | 'deleteFolder' | 'renameFile' | 'moveFile' | 'deleteFile'
+  final String
+      actionType; // 'createFolder' | 'renameFolder' | 'deleteFolder' | 'renameFile' | 'moveFile' | 'deleteFile'
 
   @HiveField(2)
   final Map<String, dynamic> payload;

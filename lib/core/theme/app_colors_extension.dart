@@ -201,7 +201,8 @@ class AppColorsExtension extends ThemeExtension<AppColorsExtension> {
       heroGradient: other.heroGradient,
       primaryGradient: other.primaryGradient,
       selectionColor: Color.lerp(selectionColor, other.selectionColor, t)!,
-      selectionColorAlt: Color.lerp(selectionColorAlt, other.selectionColorAlt, t)!,
+      selectionColorAlt:
+          Color.lerp(selectionColorAlt, other.selectionColorAlt, t)!,
       success: Color.lerp(success, other.success, t)!,
       error: Color.lerp(error, other.error, t)!,
       warning: Color.lerp(warning, other.warning, t)!,

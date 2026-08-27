@@ -85,8 +85,7 @@ class _FakeStorageRepository implements StorageRepositoryContract {
       const Success(null);
 
   @override
-  Future<Result<void>> deleteFile(String fileId) async =>
-      const Success(null);
+  Future<Result<void>> deleteFile(String fileId) async => const Success(null);
 
   @override
   Future<Result<void>> enqueueDownload(FileRecord file) async =>
@@ -107,7 +106,9 @@ void main() {
     GoogleFonts.config.allowRuntimeFetching = false;
   });
 
-  testWidgets('BrowserScreen wraps in PopScope to handle OS back gestures inside folders', (tester) async {
+  testWidgets(
+      'BrowserScreen wraps in PopScope to handle OS back gestures inside folders',
+      (tester) async {
     final fakeRepo = _FakeStorageRepository();
     final bloc = BrowserBloc(fakeRepo);
 
@@ -122,7 +123,8 @@ void main() {
     );
 
     // Initial root state -> PopScope exists
-    final popScopeFinder = find.byWidgetPredicate((widget) => widget is PopScope);
+    final popScopeFinder =
+        find.byWidgetPredicate((widget) => widget is PopScope);
     expect(popScopeFinder, findsOneWidget);
     var popScopeWidget = tester.widget<PopScope>(popScopeFinder);
     expect(popScopeWidget.canPop, isTrue);

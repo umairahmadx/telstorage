@@ -21,6 +21,7 @@ import 'sync_queue_service.dart';
 import 'thumbnail_repository.dart';
 import 'navigation_service.dart';
 import 'transfer_queue_service.dart';
+import 'transfer_concurrency_coordinator.dart';
 import 'app_cache_manager.dart';
 import 'lru_folder_cache_service.dart';
 import 'telegram_rate_limiter.dart';
@@ -85,10 +86,22 @@ class ServiceLocator {
   void setStorageRepositoryForTesting(StorageRepository repo) {
     _storageRepository = repo;
   }
+
+  /// Injects download queue service instance for test isolation.
+  void setDownloadQueueForTesting(DownloadQueueService queue) {
+    _downloadQueue = queue;
+  }
+
+  /// Injects download service instance for test isolation.
+  void setDownloadServiceForTesting(DownloadService service) {
+    _downloadService = service;
+  }
+
   ThumbnailRepository get thumbnailRepository => _thumbnailRepository;
   WebShareQueueService get webShareQueue => _webShareQueue;
   DownloadFileUseCase get downloadFileUseCase => _downloadFileUseCase;
-  GenerateWebShareUseCase get generateWebShareUseCase => _generateWebShareUseCase;
+  GenerateWebShareUseCase get generateWebShareUseCase =>
+      _generateWebShareUseCase;
   NavigationService get navigation => _navigation;
   TransferQueueService get transferQueue => _transferQueue;
   AppCacheManager get cacheManager => _cacheManager;
@@ -163,6 +176,7 @@ class ServiceLocator {
     AppLogger.i('Resetting ServiceLocator', tag: 'ServiceLocator');
     LruFolderCacheService.instance.clear();
     TelegramRateLimiter.instance.reset();
+    TransferConcurrencyCoordinator.instance.reset();
     TransferQueueService.instance.clear();
     if (_initialized) {
       _thumbnailRepository.clearWebCache();

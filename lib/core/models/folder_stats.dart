@@ -23,9 +23,15 @@ class FolderStats {
 
   /// Formatted storage size string with appropriate magnitude (KB, MB, GB).
   String get formattedSize {
-    if (totalSizeMb < 0.001) return '${(totalSizeMb * 1024).toStringAsFixed(1)} KB';
-    if (totalSizeMb < 1) return '${(totalSizeMb * 1024).toStringAsFixed(0)} KB';
-    if (totalSizeMb >= 1024) return '${(totalSizeMb / 1024).toStringAsFixed(2)} GB';
+    if (totalSizeMb < 0.001) {
+      return '${(totalSizeMb * 1024).toStringAsFixed(1)} KB';
+    }
+    if (totalSizeMb < 1) {
+      return '${(totalSizeMb * 1024).toStringAsFixed(0)} KB';
+    }
+    if (totalSizeMb >= 1024) {
+      return '${(totalSizeMb / 1024).toStringAsFixed(2)} GB';
+    }
     return '${totalSizeMb.toStringAsFixed(2)} MB';
   }
 }

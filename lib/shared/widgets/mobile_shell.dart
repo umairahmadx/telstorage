@@ -60,8 +60,7 @@ class MobileShellState extends State<MobileShell> {
     _currentIndex = widget.initialIndex;
     ServiceLocator.instance.navigation.intentNotifier
         .addListener(_onIntentChanged);
-    NotificationService.instance.onNotificationTap =
-        handleNotificationResponse;
+    NotificationService.instance.onNotificationTap = handleNotificationResponse;
 
     // Check if app was opened directly from a notification tap
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -95,8 +94,7 @@ class MobileShellState extends State<MobileShell> {
     final payload = details.payload;
     final actionId = details.actionId;
 
-    AppLogger.i(
-        'Notification response: actionId=$actionId, payload=$payload',
+    AppLogger.i('Notification response: actionId=$actionId, payload=$payload',
         tag: 'MobileShell');
 
     if (actionId != null && actionId.isNotEmpty) {
@@ -189,12 +187,12 @@ class MobileShellState extends State<MobileShell> {
     Clipboard.setData(ClipboardData(text: url));
     HapticFeedback.lightImpact();
     if (mounted) {
+      final colors = Theme.of(context).extension<AppColorsExtension>()!;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
             children: [
-              const Icon(Icons.check_circle_rounded,
-                  color: Colors.green, size: 20),
+              Icon(Icons.check_circle_rounded, color: colors.success, size: 20),
               const SizedBox(width: 8),
               Expanded(
                 child: Text('Share link copied: $url',
@@ -239,8 +237,7 @@ class MobileShellState extends State<MobileShell> {
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           color: colors.bgSurface,
-          borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(28)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -294,12 +291,11 @@ class MobileShellState extends State<MobileShell> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: colors.bgSurface,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
           'New Folder',
-          style: TextStyle(
-              color: colors.textPrimary, fontWeight: FontWeight.bold),
+          style:
+              TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold),
         ),
         content: TextField(
           controller: ctrl,

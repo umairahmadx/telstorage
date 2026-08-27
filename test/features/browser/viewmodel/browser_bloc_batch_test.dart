@@ -48,7 +48,8 @@ class _FakeStorageRepository implements StorageRepositoryContract {
 
 void main() {
   final now = DateTime(2026, 8, 27);
-  final folder1 = FolderRecord(id: 'f1', name: 'Docs', parentId: null, createdAt: now);
+  final folder1 =
+      FolderRecord(id: 'f1', name: 'Docs', parentId: null, createdAt: now);
   final file1 = FileRecord(
     fileId: 'file1',
     name: 'test.pdf',
@@ -74,12 +75,14 @@ void main() {
 
     bloc.add(const ToggleSelectAll(selectAll: true));
 
-    expect(bloc.stream, emitsInOrder([
-      predicate<BrowserState>((state) {
-        return state.selectedFolderIds.contains('f1') &&
-            state.selectedFileIds.contains('file1');
-      }),
-    ]));
+    expect(
+        bloc.stream,
+        emitsInOrder([
+          predicate<BrowserState>((state) {
+            return state.selectedFolderIds.contains('f1') &&
+                state.selectedFileIds.contains('file1');
+          }),
+        ]));
   });
 
   test('TC-02: ToggleSelectAll with false clears selection', () {
@@ -96,10 +99,13 @@ void main() {
 
     bloc.add(const ToggleSelectAll(selectAll: false));
 
-    expect(bloc.stream, emitsInOrder([
-      predicate<BrowserState>((state) {
-        return state.selectedFolderIds.isEmpty && state.selectedFileIds.isEmpty;
-      }),
-    ]));
+    expect(
+        bloc.stream,
+        emitsInOrder([
+          predicate<BrowserState>((state) {
+            return state.selectedFolderIds.isEmpty &&
+                state.selectedFileIds.isEmpty;
+          }),
+        ]));
   });
 }

@@ -32,10 +32,14 @@ String resolveSafeSubpath(String? subpath, String filename) {
   final segments = subpath
       .split(RegExp(r'[\\/]'))
       .map((s) => s.trim())
-      .map((s) => s.replaceAll('..', '').replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').replaceAll(RegExp(r'_+'), '_'))
+      .map((s) => s
+          .replaceAll('..', '')
+          .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
+          .replaceAll(RegExp(r'_+'), '_'))
       .map((s) {
         var str = s;
-        while (str.startsWith('_') || str.startsWith('.') || str.startsWith(' ')) {
+        while (
+            str.startsWith('_') || str.startsWith('.') || str.startsWith(' ')) {
           str = str.substring(1).trim();
         }
         while (str.endsWith('_') || str.endsWith('.') || str.endsWith(' ')) {

@@ -9,8 +9,10 @@ import 'package:telstorage/core/constants/app_constants.dart';
 void main() {
   group('AppConstants Validation Tests', () {
     test('TC-01: API & Base URLs are properly configured', () {
-      expect(AppConstants.telegramApiBase, equals('https://api.telegram.org/bot'));
-      expect(AppConstants.telegramFileBase, equals('https://api.telegram.org/file/bot'));
+      expect(
+          AppConstants.telegramApiBase, equals('https://api.telegram.org/bot'));
+      expect(AppConstants.telegramFileBase,
+          equals('https://api.telegram.org/file/bot'));
       expect(AppConstants.metadataFileName, equals('.metadata.json'));
       expect(AppConstants.partitionPrefix, equals('partition_'));
       expect(AppConstants.rootFolderPartitionId, equals('root'));
@@ -73,7 +75,9 @@ void main() {
       expect(AppConstants.lruFolderCacheCapacity, equals(30));
     });
 
-    test('TC-06: Thumbnail generator specifications adhere to 400px and 50KB constraints', () {
+    test(
+        'TC-06: Thumbnail generator specifications adhere to 400px and 50KB constraints',
+        () {
       expect(AppConstants.thumbnailMaxDimension, equals(400));
       expect(AppConstants.thumbnailQuality, equals(80));
       expect(AppConstants.thumbnailMaxByteSize, equals(50 * 1024));

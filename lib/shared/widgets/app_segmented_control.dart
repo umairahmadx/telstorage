@@ -53,20 +53,17 @@ class AppSegmentedControl<T> extends StatelessWidget {
                   onChanged(segment.value);
                 },
                 child: Container(
-
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: isSelected
-                        ? colors.accentPrimary
-                        : Colors.transparent,
+                    color:
+                        isSelected ? colors.accentPrimary : Colors.transparent,
                     borderRadius: BorderRadius.circular(radius),
                   ),
                   child: Text(
                     segment.label,
                     style: TextStyle(
-                      color: isSelected
-                          ? colors.bgPrimary
-                          : colors.textSecondary,
+                      color:
+                          isSelected ? colors.bgPrimary : colors.textSecondary,
                       fontWeight: FontWeight.w600,
                       fontSize: fontSize,
                     ),

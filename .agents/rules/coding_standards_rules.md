@@ -63,3 +63,20 @@ class BrowserViewModel extends Cubit<BrowserState> {
   1. `dart:...` packages
   2. `package:...` 3rd-party packages (Flutter, BLoC, etc.)
   3. `package:telstorage/...` internal packages
+
+---
+
+## 5. Proactive Refactoring & Dead Code Elimination
+
+- **Proactive Extraction**: If a change would push a file near the 500-line limit (e.g. >400 lines), extract sub-widgets, dialogs, or use-cases proactively—never wait to be forced under time pressure.
+- **Zero Dead Code**: When refactoring or replacing logic, completely remove the old implementation. Never leave legacy paths or commented-out code coexisting *"just in case"*.
+- **Confirm Scope with Grep**: Always run a repo-wide search (`grep` / `Select-String`) to confirm the old function or pattern is completely eradicated, not just superseded.
+
+---
+
+## 6. Guarded Test Injection Points
+
+- **Explicit Naming & Annotation**: Test-only injection points (fake setters, mock overrides) must be clearly named (e.g. `setServiceForTesting(...)`) or annotated with `@visibleForTesting`.
+- **Prevent Accidental Production Invocations**: Guard test helpers so they can never be called inadvertently from production runtime paths.
+
+

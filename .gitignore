@@ -13,6 +13,7 @@
 migrate_working_dir/
 Future.md
 TODO.md
+doc/
 # Environment files
 .env
 .env.production
@@ -57,3 +58,9 @@ graphify-out/
 
 # Git Worktrees
 .worktrees/
+
+# Keystore and Release Signing Credentials
+*.jks
+*.keystore
+key.properties
+local.properties

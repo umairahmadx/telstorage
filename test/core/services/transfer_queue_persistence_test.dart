@@ -81,7 +81,9 @@ void main() {
       expect(transferQueue.tasks.first.status, TransferStatus.downloading);
     });
 
-    test('TC-04: Cancellation marks task cancelled and removes from active tasks', () {
+    test(
+        'TC-04: Cancellation marks task cancelled and removes from active tasks',
+        () {
       final task = TransferTask(
         id: 'file_004',
         name: 'image.heic',
@@ -109,7 +111,8 @@ void main() {
       transferQueue.addTask(task);
       expect(transferQueue.activeTasks.length, 1);
 
-      transferQueue.updateTask('file_005', progress: 1.0, status: TransferStatus.completed);
+      transferQueue.updateTask('file_005',
+          progress: 1.0, status: TransferStatus.completed);
       expect(transferQueue.activeTasks, isEmpty);
       expect(transferQueue.tasks.length, 1);
       expect(transferQueue.tasks.first.status, TransferStatus.completed);

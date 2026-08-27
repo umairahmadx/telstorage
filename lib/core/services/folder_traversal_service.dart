@@ -35,7 +35,9 @@ abstract final class FolderTraversalService {
         .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
         .replaceAll(RegExp(r'_+'), '_');
 
-    while (clean.startsWith('_') || clean.startsWith('.') || clean.startsWith(' ')) {
+    while (clean.startsWith('_') ||
+        clean.startsWith('.') ||
+        clean.startsWith(' ')) {
       clean = clean.substring(1).trim();
     }
     while (clean.endsWith('_') || clean.endsWith('.') || clean.endsWith(' ')) {

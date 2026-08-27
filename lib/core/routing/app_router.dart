@@ -47,8 +47,7 @@ class AppRouter {
 
       case home:
         final initialTab = routeSettings.arguments as int? ?? 0;
-        return _pageRoute(
-            MobileShell(initialIndex: initialTab), routeSettings);
+        return _pageRoute(MobileShell(initialIndex: initialTab), routeSettings);
 
       case browser:
         String? folderId;
@@ -72,8 +71,7 @@ class AppRouter {
         return _pageRoute(const SettingsScreen(), routeSettings);
 
       default:
-        return _pageRoute(
-            const FallbackRedirectorScreen(), routeSettings);
+        return _pageRoute(const FallbackRedirectorScreen(), routeSettings);
     }
   }
 

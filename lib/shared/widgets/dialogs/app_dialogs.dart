@@ -33,15 +33,19 @@ abstract final class AppDialogs {
       builder: (ctx) => AlertDialog(
         backgroundColor: colors.bgSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(title, style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold)),
-        content: Text(message, style: TextStyle(color: colors.textSecondary, fontSize: 14)),
+        title: Text(title,
+            style: TextStyle(
+                color: colors.textPrimary, fontWeight: FontWeight.bold)),
+        content: Text(message,
+            style: TextStyle(color: colors.textSecondary, fontSize: 14)),
         actions: [
           TextButton(
             onPressed: () {
               HapticFeedback.selectionClick();
               Navigator.pop(ctx, false);
             },
-            child: Text(cancelText, style: TextStyle(color: colors.textSecondary)),
+            child:
+                Text(cancelText, style: TextStyle(color: colors.textSecondary)),
           ),
           FilledButton(
             onPressed: () {
@@ -53,11 +57,15 @@ abstract final class AppDialogs {
               Navigator.pop(ctx, true);
             },
             style: FilledButton.styleFrom(
-              backgroundColor: isDestructive ? colors.error : colors.accentPrimary,
-              foregroundColor: isDestructive ? colors.textPrimary : colors.bgPrimary,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              backgroundColor:
+                  isDestructive ? colors.error : colors.accentPrimary,
+              foregroundColor:
+                  isDestructive ? colors.textPrimary : colors.bgPrimary,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
             ),
-            child: Text(confirmText, style: const TextStyle(fontWeight: FontWeight.bold)),
+            child: Text(confirmText,
+                style: const TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -122,7 +130,9 @@ abstract final class AppDialogs {
       builder: (ctx) => AlertDialog(
         backgroundColor: colors.bgSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(title, style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold)),
+        title: Text(title,
+            style: TextStyle(
+                color: colors.textPrimary, fontWeight: FontWeight.bold)),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -144,7 +154,8 @@ abstract final class AppDialogs {
               HapticFeedback.selectionClick();
               Navigator.pop(ctx);
             },
-            child: Text(cancelText, style: TextStyle(color: colors.textSecondary)),
+            child:
+                Text(cancelText, style: TextStyle(color: colors.textSecondary)),
           ),
           FilledButton(
             onPressed: () {
@@ -157,9 +168,11 @@ abstract final class AppDialogs {
             style: FilledButton.styleFrom(
               backgroundColor: colors.accentPrimary,
               foregroundColor: colors.bgPrimary,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
             ),
-            child: Text(confirmText, style: const TextStyle(fontWeight: FontWeight.bold)),
+            child: Text(confirmText,
+                style: const TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -200,4 +213,3 @@ abstract final class AppDialogs {
     );
   }
 }
-

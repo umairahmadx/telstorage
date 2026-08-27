@@ -31,8 +31,10 @@ void main() {
   final now = DateTime(2026, 8, 27);
 
   group('ZipArchiveService Edge Cases', () {
-    test('EC-11: Empty folder export returns null and marks task failed', () async {
-      final folder = FolderRecord(id: 'empty_f', name: 'Empty', parentId: null, createdAt: now);
+    test('EC-11: Empty folder export returns null and marks task failed',
+        () async {
+      final folder = FolderRecord(
+          id: 'empty_f', name: 'Empty', parentId: null, createdAt: now);
 
       final result = await ZipArchiveService.exportFolderAsZip(
         folder: folder,
@@ -48,14 +50,20 @@ void main() {
       expect(matching.first.currentStage, equals('Folder is empty'));
     });
 
-    test('EC-14: disambiguateArchivePath disambiguates colliding file paths', () {
+    test('EC-14: disambiguateArchivePath disambiguates colliding file paths',
+        () {
       final usedPaths = <String>{};
 
-      final path1 = ZipArchiveService.disambiguateArchivePath('Work/invoice.pdf', usedPaths);
-      final path2 = ZipArchiveService.disambiguateArchivePath('Work/invoice.pdf', usedPaths);
-      final path3 = ZipArchiveService.disambiguateArchivePath('Work/invoice.pdf', usedPaths);
-      final rootDup1 = ZipArchiveService.disambiguateArchivePath('readme.txt', usedPaths);
-      final rootDup2 = ZipArchiveService.disambiguateArchivePath('readme.txt', usedPaths);
+      final path1 = ZipArchiveService.disambiguateArchivePath(
+          'Work/invoice.pdf', usedPaths);
+      final path2 = ZipArchiveService.disambiguateArchivePath(
+          'Work/invoice.pdf', usedPaths);
+      final path3 = ZipArchiveService.disambiguateArchivePath(
+          'Work/invoice.pdf', usedPaths);
+      final rootDup1 =
+          ZipArchiveService.disambiguateArchivePath('readme.txt', usedPaths);
+      final rootDup2 =
+          ZipArchiveService.disambiguateArchivePath('readme.txt', usedPaths);
 
       expect(path1, equals('Work/invoice.pdf'));
       expect(path2, equals('Work/invoice (1).pdf'));

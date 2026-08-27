@@ -41,8 +41,8 @@ class AppSearchField extends StatelessWidget {
           decoration: InputDecoration(
             hintText: hintText,
             hintStyle: TextStyle(color: colors.textTertiary, fontSize: 14),
-            prefixIcon:
-                Icon(Icons.search_rounded, color: colors.textTertiary, size: 20),
+            prefixIcon: Icon(Icons.search_rounded,
+                color: colors.textTertiary, size: 20),
             border: InputBorder.none,
             contentPadding: const EdgeInsets.symmetric(vertical: 14),
           ),

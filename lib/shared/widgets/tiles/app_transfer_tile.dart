@@ -105,8 +105,8 @@ class AppTransferTile extends StatelessWidget {
                     onPressed: onResume,
                   ),
                 IconButton(
-                  icon:
-                      Icon(Icons.cancel_outlined, color: colors.error, size: 22),
+                  icon: Icon(Icons.cancel_outlined,
+                      color: colors.error, size: 22),
                   onPressed: onCancel,
                 ),
               ],

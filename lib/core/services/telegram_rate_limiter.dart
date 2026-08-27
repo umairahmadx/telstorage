@@ -14,7 +14,8 @@ class TelegramRateLimiter {
 
   DateTime _lastRequestTime = DateTime.fromMillisecondsSinceEpoch(0);
   DateTime _pauseUntil = DateTime.fromMillisecondsSinceEpoch(0);
-  static const Duration _minInterval = Duration(milliseconds: 1000); // 1 request per second
+  static const Duration _minInterval =
+      Duration(milliseconds: 1000); // 1 request per second
 
   /// Wait for a slot before making an outbound Telegram API call
   Future<void> acquire() async {

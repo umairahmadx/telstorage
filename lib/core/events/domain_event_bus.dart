@@ -74,6 +74,27 @@ class SyncCompletedEvent extends DomainEvent {
   SyncCompletedEvent({this.filesAdded = 0, this.filesRemoved = 0});
 }
 
+// ── Auth Events ───────────────────────────────────────────────────────────────
+
+class AuthTokenRevokedEvent extends DomainEvent {
+  final String message;
+  AuthTokenRevokedEvent(
+      [this.message = 'Telegram bot token is invalid or has been revoked.']);
+}
+
+// ── Storage Resilience Events ─────────────────────────────────────────────────
+
+class CriticalBoxCorruptedEvent extends DomainEvent {
+  final String boxName;
+  final String? quarantinedPath;
+  CriticalBoxCorruptedEvent({required this.boxName, this.quarantinedPath});
+}
+
+class PartitionCacheCorruptedEvent extends DomainEvent {
+  final String boxName;
+  PartitionCacheCorruptedEvent({required this.boxName});
+}
+
 /// Decoupled event bus for cross-feature reactivity.
 ///
 /// Any service can fire events without knowing which features listen.

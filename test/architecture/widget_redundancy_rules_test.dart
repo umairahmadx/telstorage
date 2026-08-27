@@ -10,7 +10,9 @@ void main() {
   group('Widget Redundancy & Reuse Architecture Rules', () {
     final sharedWidgetsDir = Directory('lib/shared/widgets');
 
-    test('lib/shared/widgets directory must contain all master shared components', () {
+    test(
+        'lib/shared/widgets directory must contain all master shared components',
+        () {
       expect(sharedWidgetsDir.existsSync(), isTrue);
       final sharedFiles = sharedWidgetsDir
           .listSync(recursive: true)
@@ -41,12 +43,15 @@ void main() {
         expect(
           sharedFiles.any((f) => f.endsWith(comp)),
           isTrue,
-          reason: 'Expected master shared component "$comp" to exist in lib/shared/widgets/',
+          reason:
+              'Expected master shared component "$comp" to exist in lib/shared/widgets/',
         );
       }
     });
 
-    test('Zero duplicate file/folder tiles or local empty states in lib/features/', () {
+    test(
+        'Zero duplicate file/folder tiles or local empty states in lib/features/',
+        () {
       final featureFiles = Directory('lib/features')
           .listSync(recursive: true)
           .whereType<File>()
@@ -67,12 +72,14 @@ void main() {
         expect(
           featureFiles.any((f) => f.endsWith(forbidden)),
           isFalse,
-          reason: 'Duplicate widget file "$forbidden" should not exist in features; use lib/shared/widgets/ instead.',
+          reason:
+              'Duplicate widget file "$forbidden" should not exist in features; use lib/shared/widgets/ instead.',
         );
       }
     });
 
-    test('All shared widgets must follow top-level multiline header convention', () {
+    test('All shared widgets must follow top-level multiline header convention',
+        () {
       final sharedFiles = sharedWidgetsDir
           .listSync(recursive: true)
           .whereType<File>()
@@ -81,7 +88,8 @@ void main() {
 
       for (final file in sharedFiles) {
         final content = file.readAsStringSync().trimLeft();
-        final hasValidHeader = content.startsWith('/*') || content.startsWith('///');
+        final hasValidHeader =
+            content.startsWith('/*') || content.startsWith('///');
         expect(
           hasValidHeader,
           isTrue,

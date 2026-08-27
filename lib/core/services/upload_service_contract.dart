@@ -4,9 +4,10 @@
  */
 
 import 'dart:typed_data';
+import '../errors/result.dart';
 
 abstract class UploadServiceContract {
-  Future<Map<String, dynamic>> uploadFile(
+  Future<Result<Map<String, dynamic>>> uploadFile(
     Uint8List bytes,
     String name,
     String? folderId,

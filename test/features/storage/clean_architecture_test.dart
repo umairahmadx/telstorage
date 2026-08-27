@@ -76,12 +76,13 @@ class MockStorageRepository implements StorageRepositoryContract {
       const Success(null);
 
   @override
-  Future<Result<void>> deleteFile(String fileId) async =>
-      const Success(null);
+  Future<Result<void>> deleteFile(String fileId) async => const Success(null);
 
   @override
   Future<Result<void>> enqueueDownload(FileRecord file) async {
-    if (shouldFail) return const Failure(UnknownFailure('Download failed test'));
+    if (shouldFail) {
+      return const Failure(UnknownFailure('Download failed test'));
+    }
     downloadEnqueued = true;
     return const Success(null);
   }
@@ -186,7 +187,8 @@ void main() {
       expect(result.failureOrNull?.message, contains('Download failed test'));
     });
 
-    test('GenerateWebShareUseCase executes with vanitySlug params successfully', () async {
+    test('GenerateWebShareUseCase executes with vanitySlug params successfully',
+        () async {
       final useCase = GenerateWebShareUseCase(mockRepo);
       final result = await useCase(GenerateWebShareParams(
         file: dummyFile,
@@ -196,7 +198,8 @@ void main() {
       expect(mockRepo.shareEnqueued, true);
     });
 
-    test('use cases depend on segregated capabilities, not the full repository', () async {
+    test('use cases depend on segregated capabilities, not the full repository',
+        () async {
       final download = DownloadOnlyFake();
       final share = WebShareOnlyFake();
 
@@ -204,7 +207,8 @@ void main() {
       expect(
         (await GenerateWebShareUseCase(share)(
           GenerateWebShareParams(file: dummyFile, expiryDays: 7),
-        )).isSuccess,
+        ))
+            .isSuccess,
         true,
       );
       expect(download.called, true);
@@ -215,12 +219,13 @@ void main() {
   group('Sealed Result contract tests', () {
     test('all result branches are handled without exceptions', () {
       String describe(Result<int> result) => switch (result) {
-        Success<int>(data: final value) => 'value:$value',
-        Failure<int>(failure: final error) => 'error:${error.message}',
-      };
+            Success<int>(data: final value) => 'value:$value',
+            Failure<int>(failure: final error) => 'error:${error.message}',
+          };
 
       expect(describe(const Success(42)), 'value:42');
-      expect(describe(const Failure(NetworkFailure('offline'))), 'error:offline');
+      expect(
+          describe(const Failure(NetworkFailure('offline'))), 'error:offline');
     });
   });
 
@@ -274,7 +279,8 @@ void main() {
       expect(event.shareUrl, 'https://storage.to/abc');
     });
 
-    test('DomainEventBus type-filtered stream ignores unrelated events', () async {
+    test('DomainEventBus type-filtered stream ignores unrelated events',
+        () async {
       final bus = DomainEventBus.instance;
 
       final deletedEvents = <FileDeletedEvent>[];
@@ -291,7 +297,8 @@ void main() {
       await sub.cancel();
     });
 
-    test('DomainEventBus broadcasts one event to multiple typed listeners', () async {
+    test('DomainEventBus broadcasts one event to multiple typed listeners',
+        () async {
       final bus = DomainEventBus.instance;
       final first = bus.on<FolderDeletedEvent>().first;
       final second = bus.on<FolderDeletedEvent>().first;

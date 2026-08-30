@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../../../core/events/domain_event_bus.dart';
 import '../../../../../../core/models/app_metadata.dart';
+import '../../../../../../core/models/download_conflict_policy.dart';
 import '../../../../../../core/models/file_record.dart';
 import '../../../../../../core/models/web_share_job.dart';
 import '../../../../../../core/services/service_locator.dart';
@@ -335,9 +336,13 @@ class HomeCubit extends Cubit<HomeState> {
   }
 
   /// Enqueues a file download task.
-  Future<void> downloadFile(FileRecord file) async {
+  Future<void> downloadFile(
+    FileRecord file, {
+    String? subpath,
+    DownloadConflictPolicy policy = DownloadConflictPolicy.overwrite,
+  }) async {
     try {
-      await _repository.enqueueDownload(file);
+      await _repository.enqueueDownload(file, subpath: subpath, policy: policy);
     } catch (e) {
       emit(state.copyWith(errorMessage: 'Failed to start download: $e'));
     }

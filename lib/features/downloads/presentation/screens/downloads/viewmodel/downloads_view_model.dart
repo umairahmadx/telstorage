@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../../../core/models/download_job.dart';
 import '../../../../../../core/models/file_record.dart';
+import '../../../../../../core/models/download_conflict_policy.dart';
 import '../../../../../../core/models/transfer_task.dart';
 import '../../../../../../core/models/web_share_job.dart';
 import '../../../../../../core/services/service_locator.dart';
@@ -154,8 +155,16 @@ class TransferCubit extends Cubit<TransferState> {
   }
 
   /// Enqueues download for a specific file.
-  Future<void> enqueueDownload(FileRecord file) async {
-    final result = await ServiceLocator.instance.downloadFileUseCase(file);
+  Future<void> enqueueDownload(
+    FileRecord file, {
+    String? subpath,
+    DownloadConflictPolicy policy = DownloadConflictPolicy.overwrite,
+  }) async {
+    final result = await ServiceLocator.instance.downloadFileUseCase(
+      file,
+      subpath: subpath,
+      policy: policy,
+    );
     result.fold(
       (_) {},
       (failure) => emit(state.copyWith(errorMessage: failure.message)),

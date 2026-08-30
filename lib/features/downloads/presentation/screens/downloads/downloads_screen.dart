@@ -96,6 +96,14 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
         mimeType: mimeType,
         fileName: fileName,
       );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('File path not found on device.'),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 2),
+        ),
+      );
     }
   }
 
@@ -117,6 +125,24 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   void _shareUrl(String url) {
     HapticFeedback.lightImpact();
     SharePlus.instance.share(ShareParams(text: url));
+  }
+
+  /// Shares completed download via web link (if indexed) or local file sharing.
+  void _handleShareCompletedJob(DownloadJob job, FileRecord? file) {
+    if (file != null) {
+      _showShareSheet(file);
+    } else if (job.localPath != null && job.localPath!.isNotEmpty) {
+      HapticFeedback.lightImpact();
+      SharePlus.instance.share(ShareParams(files: [XFile(job.localPath!)]));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('File not found on device to share.'),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   /// Deletes and expires the share link remotely and locally.
@@ -239,8 +265,12 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
             return true;
           }).toList();
 
-          // Completed downloads
+          final activeIds = activeTransfers.map((t) => t.id).toSet();
+
+          // Completed downloads (strictly completed and mutually exclusive from active)
           final completedDownloads = state.downloadJobs.where((j) {
+            if (!j.isComplete) return false;
+            if (activeIds.contains(j.fileId)) return false;
             if (query.isNotEmpty && !j.name.toLowerCase().contains(query)) {
               return false;
             }
@@ -297,7 +327,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                 DownloadsCompletedSection(
                   completedDownloads: completedDownloads,
                   onOpenFile: _openFile,
-                  onShareFile: _showShareSheet,
+                  onShareJob: _handleShareCompletedJob,
                   onDeleteJob: _deleteDownloadedFile,
                 ),
               if (_activeTab == 1 && uploadFiles.isNotEmpty) ...[

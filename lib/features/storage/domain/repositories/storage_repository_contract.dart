@@ -4,9 +4,9 @@
  */
 
 import '../../../../core/errors/result.dart';
+import '../../../../core/models/download_conflict_policy.dart';
 import '../../../../core/models/file_record.dart';
 import '../../../../core/models/folder_record.dart';
-
 import '../../../../core/models/folder_stats.dart';
 
 /// Small read-only capability for browsing and home screens.
@@ -35,7 +35,11 @@ abstract interface class StorageWriter {
 }
 
 abstract interface class DownloadEnqueuer {
-  Future<Result<void>> enqueueDownload(FileRecord file);
+  Future<Result<void>> enqueueDownload(
+    FileRecord file, {
+    String? subpath,
+    DownloadConflictPolicy policy = DownloadConflictPolicy.overwrite,
+  });
 }
 
 abstract interface class WebShareEnqueuer {

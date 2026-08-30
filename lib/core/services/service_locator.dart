@@ -98,6 +98,21 @@ class ServiceLocator {
     _downloadService = service;
   }
 
+  /// Injects upload service instance for test isolation.
+  void setUploadServiceForTesting(UploadService service) {
+    _uploadService = service;
+  }
+
+  /// Sets initialization flag for testing isolation.
+  void setInitializedForTesting(bool val) {
+    _initialized = val;
+  }
+
+  /// Injects hive service instance for test isolation.
+  void setHiveForTesting(HiveService hive) {
+    _hive = hive;
+  }
+
   ThumbnailRepository get thumbnailRepository => _thumbnailRepository;
   WebShareQueueService get webShareQueue => _webShareQueue;
   DownloadFileUseCase get downloadFileUseCase => _downloadFileUseCase;

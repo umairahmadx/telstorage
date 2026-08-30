@@ -5,12 +5,169 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:telstorage/core/models/download_conflict_policy.dart';
 import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
 import 'package:telstorage/shared/widgets/dialogs/file_detail_sheet.dart';
 
+export 'package:telstorage/core/models/download_conflict_policy.dart';
+
+/// Decision returned from [AppDialogs.showFileConflictDialog].
+class FileConflictDecision {
+  final DownloadConflictPolicy policy;
+  final bool applyToAll;
+
+  const FileConflictDecision({
+    required this.policy,
+    this.applyToAll = false,
+  });
+}
+
 /// Centralized modal dialog controller for TelStorage.
 abstract final class AppDialogs {
+  /// Shows a modal dialog prompting the user how to handle a file download collision.
+  static Future<FileConflictDecision?> showFileConflictDialog(
+    BuildContext context, {
+    required String fileName,
+    bool isBatch = false,
+  }) {
+    HapticFeedback.mediumImpact();
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
+    var applyToAll = false;
+
+    return showDialog<FileConflictDecision>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          backgroundColor: colors.bgSurface,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Icon(Icons.file_copy_outlined,
+                  color: colors.accentPrimary, size: 24),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'File Already Exists',
+                  style: TextStyle(
+                      color: colors.textPrimary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '"$fileName" is already saved on your device.',
+                style: TextStyle(color: colors.textSecondary, fontSize: 14),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'How would you like to handle this file?',
+                style: TextStyle(
+                    color: colors.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500),
+              ),
+              if (isBatch) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: Checkbox(
+                        value: applyToAll,
+                        activeColor: colors.accentPrimary,
+                        checkColor: colors.bgPrimary,
+                        onChanged: (val) =>
+                            setState(() => applyToAll = val ?? false),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => setState(() => applyToAll = !applyToAll),
+                        child: Text(
+                          'Apply to remaining conflicts',
+                          style: TextStyle(
+                              color: colors.textSecondary, fontSize: 13),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                HapticFeedback.selectionClick();
+                Navigator.pop(
+                  ctx,
+                  FileConflictDecision(
+                    policy: DownloadConflictPolicy.skip,
+                    applyToAll: applyToAll,
+                  ),
+                );
+              },
+              child: Text(
+                isBatch ? 'Skip' : 'Cancel',
+                style: TextStyle(color: colors.textSecondary),
+              ),
+            ),
+            OutlinedButton(
+              onPressed: () {
+                HapticFeedback.mediumImpact();
+                Navigator.pop(
+                  ctx,
+                  FileConflictDecision(
+                    policy: DownloadConflictPolicy.keepBoth,
+                    applyToAll: applyToAll,
+                  ),
+                );
+              },
+              style: OutlinedButton.styleFrom(
+                foregroundColor: colors.accentPrimary,
+                side: BorderSide(color: colors.accentPrimary),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Keep Both',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            FilledButton(
+              onPressed: () {
+                HapticFeedback.heavyImpact();
+                Navigator.pop(
+                  ctx,
+                  FileConflictDecision(
+                    policy: DownloadConflictPolicy.overwrite,
+                    applyToAll: applyToAll,
+                  ),
+                );
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: colors.accentPrimary,
+                foregroundColor: colors.bgPrimary,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Overwrite',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Shows a standardized confirmation dialog.
   static Future<bool?> showConfirm(
     BuildContext context, {

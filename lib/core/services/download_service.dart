@@ -86,7 +86,8 @@ class DownloadService implements DownloadServiceContract {
       const int maxParallel = 3;
 
       for (var i = 0; i < chunks.length; i += maxParallel) {
-        while (TransferQueueService.instance.isPaused(record.fileId)) {
+        while (TransferQueueService.instance.isPaused(record.fileId) &&
+            !TransferQueueService.instance.isCancelled(record.fileId)) {
           await Future.delayed(const Duration(seconds: 1));
         }
         if (TransferQueueService.instance.isCancelled(record.fileId)) {
@@ -172,6 +173,7 @@ class DownloadService implements DownloadServiceContract {
     Uint8List bytes,
     String filename, {
     String? subpath,
+    DownloadConflictPolicy policy = DownloadConflictPolicy.overwrite,
   }) async {
     if (kIsWeb) {
       triggerWebDownload(bytes, filename);
@@ -182,7 +184,8 @@ class DownloadService implements DownloadServiceContract {
     }
 
     // Native: delegate to platform-specific helper
-    final result = await saveNative(bytes, filename, subpath: subpath);
+    final result =
+        await saveNative(bytes, filename, subpath: subpath, policy: policy);
     return SaveResult(
       success: result.success,
       savedPath: result.savedPath,
@@ -196,12 +199,13 @@ class DownloadService implements DownloadServiceContract {
     Uint8List bytes,
     String filename, {
     String? subpath,
+    DownloadConflictPolicy policy = DownloadConflictPolicy.overwrite,
   }) async {
     if (kIsWeb) {
       triggerWebDownload(bytes, filename);
       return;
     }
-    await saveAndOpen(bytes, filename, subpath: subpath);
+    await saveAndOpen(bytes, filename, subpath: subpath, policy: policy);
   }
 
   // ── Private helpers ────────────────────────────────────────────────────────

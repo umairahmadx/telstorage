@@ -9,6 +9,7 @@ import 'package:telstorage/core/services/service_locator.dart';
 import 'package:telstorage/core/services/zip_archive_service.dart';
 import 'package:telstorage/core/utils/connectivity.dart';
 import 'package:telstorage/features/storage/domain/repositories/storage_repository_contract.dart';
+import 'package:telstorage/shared/widgets/dialogs/app_dialogs.dart';
 import 'browser_event.dart';
 import 'browser_state.dart';
 
@@ -43,6 +44,7 @@ abstract final class BrowserBatchHelper {
   static Future<int> executeBatchDownload({
     required BrowserState state,
     required StorageRepositoryContract repository,
+    Future<FileConflictDecision?> Function(String fileName)? conflictResolver,
   }) async {
     if (state.selectedFolderIds.isEmpty && state.selectedFileIds.isEmpty) {
       return 0;
@@ -62,20 +64,51 @@ abstract final class BrowserBatchHelper {
     );
 
     final downloadQueue = ServiceLocator.instance.downloadQueue;
+    DownloadConflictPolicy? batchPolicy;
+    var enqueuedCount = 0;
+
     for (final item in items) {
+      var policy = batchPolicy ?? DownloadConflictPolicy.overwrite;
+      final subpath = item.subpath.isNotEmpty ? item.subpath : null;
+
+      if (batchPolicy == null && conflictResolver != null) {
+        final hasConflict = await downloadQueue.checkFileConflict(
+          item.file,
+          subpath: subpath,
+        );
+        if (hasConflict) {
+          final decision = await conflictResolver(item.file.name);
+          if (decision == null) {
+            // Cancel entire remaining batch
+            break;
+          }
+          if (decision.applyToAll) {
+            batchPolicy = decision.policy;
+          }
+          policy = decision.policy;
+        }
+      }
+
+      if (policy == DownloadConflictPolicy.skip) {
+        continue;
+      }
+
       await downloadQueue.enqueueDownload(
         item.file,
-        subpath: item.subpath.isNotEmpty ? item.subpath : null,
+        subpath: subpath,
+        policy: policy,
       );
+      enqueuedCount++;
     }
 
-    return items.length;
+    return enqueuedCount;
   }
 
   /// Recursively enqueues an entire folder structure for download.
   static Future<int> executeDownloadFolder({
     required FolderRecord folder,
     required StorageRepositoryContract repository,
+    Future<FileConflictDecision?> Function(String fileName)? conflictResolver,
   }) async {
     if (!await Connectivity.hasConnection()) {
       throw Exception('Cannot download folder while offline');
@@ -91,14 +124,44 @@ abstract final class BrowserBatchHelper {
     );
 
     final downloadQueue = ServiceLocator.instance.downloadQueue;
+    DownloadConflictPolicy? batchPolicy;
+    var enqueuedCount = 0;
+
     for (final item in items) {
+      var policy = batchPolicy ?? DownloadConflictPolicy.overwrite;
+      final subpath = item.subpath.isNotEmpty ? item.subpath : null;
+
+      if (batchPolicy == null && conflictResolver != null) {
+        final hasConflict = await downloadQueue.checkFileConflict(
+          item.file,
+          subpath: subpath,
+        );
+        if (hasConflict) {
+          final decision = await conflictResolver(item.file.name);
+          if (decision == null) {
+            // Cancel entire remaining batch
+            break;
+          }
+          if (decision.applyToAll) {
+            batchPolicy = decision.policy;
+          }
+          policy = decision.policy;
+        }
+      }
+
+      if (policy == DownloadConflictPolicy.skip) {
+        continue;
+      }
+
       await downloadQueue.enqueueDownload(
         item.file,
-        subpath: item.subpath,
+        subpath: subpath,
+        policy: policy,
       );
+      enqueuedCount++;
     }
 
-    return items.length;
+    return enqueuedCount;
   }
 
   /// Exports a folder structure into a standalone `.zip` file in the background.

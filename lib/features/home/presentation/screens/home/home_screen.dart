@@ -3,6 +3,7 @@
  * Description: Home dashboard view displaying storage statistics, greeting, and recent files.
  */
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -106,10 +107,26 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Triggers file download through ViewModel.
+  /// Triggers file download through ViewModel with conflict check.
   Future<void> _downloadFile(FileRecord file) async {
     HapticFeedback.mediumImpact();
-    await context.read<HomeCubit>().downloadFile(file);
+    var policy = DownloadConflictPolicy.overwrite;
+    if (!kIsWeb) {
+      final hasConflict =
+          await ServiceLocator.instance.downloadQueue.checkFileConflict(file);
+      if (hasConflict && mounted) {
+        final decision = await AppDialogs.showFileConflictDialog(
+          context,
+          fileName: file.name,
+        );
+        if (decision == null) return;
+        if (decision.policy == DownloadConflictPolicy.skip) return;
+        policy = decision.policy;
+      }
+    }
+
+    if (!mounted) return;
+    await context.read<HomeCubit>().downloadFile(file, policy: policy);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

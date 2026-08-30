@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:telstorage/core/models/transfer_task.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
 import 'package:telstorage/shared/widgets/app_surface_card.dart';
+import 'package:telstorage/shared/widgets/thumbnail_widget.dart';
 
 /// Centralized transfer item tile for active background upload and download queues.
 class AppTransferTile extends StatelessWidget {
@@ -38,6 +39,22 @@ class AppTransferTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
+    final badge = SmartBadgeInfo.resolve(task.name, '', colors);
+
+    final pct = (task.progress * 100).toInt();
+    final subtitleParts = <String>['$pct%'];
+    if (task.sizeMb > 0) {
+      final transferred = (task.progress * task.sizeMb).toStringAsFixed(1);
+      final total = task.sizeMb.toStringAsFixed(1);
+      subtitleParts.add('$transferred / $total MB');
+    }
+    if (task.speedKbps > 0 && task.speedKbps.isFinite && !task.speedKbps.isNaN) {
+      subtitleParts.add('${(task.speedKbps / 1024).toStringAsFixed(1)} MB/s');
+    }
+    if (task.currentStage != null && task.currentStage!.isNotEmpty) {
+      subtitleParts.add(task.currentStage!);
+    }
+    final subtitle = subtitleParts.join(' • ');
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -51,18 +68,18 @@ class AppTransferTile extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  width: 40,
-                  height: 40,
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
-                    color: colors.accentPrimary.withValues(alpha: 0.15),
+                    color: badge.bgColor,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(
-                    task.type == TransferType.upload
-                        ? Icons.cloud_upload_rounded
-                        : Icons.cloud_download_rounded,
-                    color: colors.accentPrimary,
-                    size: 20,
+                  child: Center(
+                    child: Icon(
+                      badge.icon,
+                      color: badge.iconColor,
+                      size: 22,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 14),
@@ -80,13 +97,15 @@ class AppTransferTile extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 3),
                       Text(
-                        '${(task.progress * 100).toInt()}% • ${task.currentStage}',
+                        subtitle,
                         style: TextStyle(
                           color: colors.textSecondary,
                           fontSize: 11,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
@@ -96,17 +115,20 @@ class AppTransferTile extends StatelessWidget {
                   IconButton(
                     icon: Icon(Icons.pause_circle_outline_rounded,
                         color: colors.textSecondary, size: 22),
+                    tooltip: 'Pause',
                     onPressed: onPause,
                   )
                 else if (task.status == TransferStatus.paused)
                   IconButton(
                     icon: Icon(Icons.play_circle_outline_rounded,
                         color: colors.accentPrimary, size: 22),
+                    tooltip: 'Resume',
                     onPressed: onResume,
                   ),
                 IconButton(
                   icon: Icon(Icons.cancel_outlined,
                       color: colors.error, size: 22),
+                  tooltip: 'Cancel',
                   onPressed: onCancel,
                 ),
               ],

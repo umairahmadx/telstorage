@@ -19,6 +19,8 @@ import 'service_locator.dart';
 import '../models/transfer_task.dart';
 import '../utils/local_file_stub.dart'
     if (dart.library.io) '../utils/local_file_native.dart';
+import '../utils/native_save_stub.dart'
+    if (dart.library.io) '../utils/native_save_helper.dart';
 
 /// Manages concurrent downloads (max 3), queue, and state persistence using Hive.
 class DownloadQueueService {
@@ -32,6 +34,9 @@ class DownloadQueueService {
   // Active downloads tracking for cancellation and pause
   final Map<String, bool> _activeCancellationTokens = {};
   final Map<String, bool> _activePauseTokens = {};
+
+  // Transient in-memory conflict policy map per fileId
+  final Map<String, DownloadConflictPolicy> _inFlightPolicies = {};
 
   // Track currently downloading futures to manage concurrency limit (max 3)
   final Set<String> _runningFileIds = {};
@@ -55,16 +60,29 @@ class DownloadQueueService {
   /// Returns the local path if file has been completed and exists on disk, otherwise null.
   String? getCompletedPath(String fileId) {
     final job = _box.get(fileId);
-    if (job != null && job.isComplete && job.localPath != null) {
-      if (checkLocalFileExists(job.localPath!)) {
-        return job.localPath;
-      }
+    if (job != null &&
+        job.isComplete &&
+        job.localPath != null &&
+        checkLocalFileExists(job.localPath!)) {
+      return job.localPath;
     }
     return null;
   }
 
   /// Check if a file is already downloaded and exists locally.
   bool isFileDownloaded(String fileId) => getCompletedPath(fileId) != null;
+
+  /// Returns transient conflict policy configured for an in-flight fileId.
+  DownloadConflictPolicy getConflictPolicy(String fileId) =>
+      _inFlightPolicies[fileId] ?? DownloadConflictPolicy.overwrite;
+
+  /// Checks whether a file with the given record already exists in download history or on disk.
+  Future<bool> checkFileConflict(FileRecord file, {String? subpath}) async {
+    final existingJob = _box.get(file.fileId);
+    if (existingJob != null && existingJob.isComplete) return true;
+    if (!kIsWeb) return doesTargetFileExist(file.name, subpath: subpath);
+    return false;
+  }
 
   /// Clears all completed download job records.
   Future<void> clearCompleted() async {
@@ -86,18 +104,25 @@ class DownloadQueueService {
       TransferQueueService.instance.isPaused(fileId);
 
   /// Add a new download job or resume an existing failed/cancelled one
-  Future<void> enqueueDownload(FileRecord file, {String? subpath}) async {
+  Future<void> enqueueDownload(
+    FileRecord file, {
+    String? subpath,
+    DownloadConflictPolicy policy = DownloadConflictPolicy.overwrite,
+  }) async {
+    _inFlightPolicies[file.fileId] = policy;
     final existingJob = _box.get(file.fileId);
 
     if (existingJob != null) {
-      if (existingJob.status == 'completed') {
-        AppLogger.i('File already downloaded: ${file.name}',
-            tag: 'DownloadQueue');
-        return;
-      }
       if (existingJob.status == 'queued' ||
           existingJob.status == 'downloading') {
         return;
+      }
+      if (existingJob.isComplete) {
+        if (policy == DownloadConflictPolicy.skip) {
+          AppLogger.i('Skipping existing download: ${file.name}',
+              tag: 'DownloadQueue');
+          return;
+        }
       }
       existingJob.status = 'queued';
       existingJob.progress = 0.0;
@@ -207,28 +232,72 @@ class DownloadQueueService {
         AppLogger.w('Could not delete local file: $e', tag: 'DownloadQueue');
       }
     }
-    await removeJob(fileId);
+    try {
+      await removeJob(fileId);
+    } catch (e) {
+      AppLogger.e('Could not remove download job from Hive: $e',
+          tag: 'DownloadQueue');
+    }
+  }
+
+  /// Adds or updates a ZIP export download job in Hive with idempotent upsert semantics.
+  Future<void> addOrUpdateZipJob({
+    required String fileId,
+    required String name,
+    required String mimeType,
+    required double sizeMb,
+    required String status,
+    double progress = 0.0,
+    String? localPath,
+    String? error,
+    DateTime? addedAt,
+    DateTime? completedAt,
+    String? subpath,
+  }) async {
+    final existing = _box.get(fileId);
+    if (existing != null) {
+      existing.status = status;
+      existing.progress = progress;
+      if (localPath != null) existing.localPath = localPath;
+      existing.error = (status == 'downloading' || status == 'completed')
+          ? null
+          : (error ?? existing.error);
+      if (completedAt != null) existing.completedAt = completedAt;
+      await existing.save();
+    } else {
+      final job = DownloadJob(
+        fileId: fileId,
+        name: name,
+        mimeType: mimeType,
+        sizeMb: sizeMb,
+        status: status,
+        progress: progress,
+        localPath: localPath,
+        error: error,
+        addedAt: addedAt ?? DateTime.now(),
+        completedAt: completedAt,
+        subpath: subpath,
+      );
+      await _box.put(fileId, job);
+    }
   }
 
   /// Clear all completed downloads from history
   Future<void> clearCompletedHistory() async {
-    final completed = completedJobs;
-    for (final job in completed) {
+    for (final job in completedJobs) {
       await _box.delete(job.fileId);
     }
   }
 
-  /// Restarts queued work after an app relaunch. A previously running download
-  /// has no live network request to resume, so it is safely restarted from the
-  /// beginning using its persisted metadata.
+  /// Restarts queued work after an app relaunch using persisted metadata.
   Future<void> resumePendingDownloads() async {
+    unawaited(cleanStaleTempFiles());
     for (final job in _box.values) {
-      if (job.status == 'downloading') {
-        job.status = 'queued';
-        await job.save();
-        _activeCancellationTokens[job.fileId] = false;
-        _activePauseTokens[job.fileId] = false;
-      } else if (job.status == 'queued') {
+      if (job.status == 'downloading' || job.status == 'queued') {
+        if (job.status == 'downloading') {
+          job.status = 'queued';
+          await job.save();
+        }
         _activeCancellationTokens[job.fileId] = false;
         _activePauseTokens[job.fileId] = false;
       }
@@ -238,18 +307,20 @@ class DownloadQueueService {
 
   /// Manually add a completed download job (used for direct downloads)
   Future<void> addCompletedJob(FileRecord file, String? savedPath) async {
-    final job = DownloadJob(
-      fileId: file.fileId,
-      name: file.name,
-      mimeType: file.mimeType,
-      sizeMb: file.sizeMb,
-      progress: 1.0,
-      status: 'completed',
-      localPath: savedPath,
-      completedAt: DateTime.now(),
-      addedAt: DateTime.now(),
+    await _box.put(
+      file.fileId,
+      DownloadJob(
+        fileId: file.fileId,
+        name: file.name,
+        mimeType: file.mimeType,
+        sizeMb: file.sizeMb,
+        progress: 1.0,
+        status: 'completed',
+        localPath: savedPath,
+        completedAt: DateTime.now(),
+        addedAt: DateTime.now(),
+      ),
     );
-    await _box.put(file.fileId, job);
   }
 
   /// Process the queue managing concurrency limit across global coordinator
@@ -341,13 +412,13 @@ class DownloadQueueService {
 
         job.progress = 0.95;
         await job.save();
-        TransferQueueService.instance
-            .updateTask(fileId, progress: 0.95, currentStage: 'Finalizing…');
-
+        final policy =
+            _inFlightPolicies[fileId] ?? DownloadConflictPolicy.overwrite;
         final saveResult = await _downloadService.saveAndOpen(
           bytes,
           job.name,
           subpath: job.subpath,
+          policy: policy,
         );
 
         if (saveResult.success) {
@@ -366,16 +437,10 @@ class DownloadQueueService {
             payload: 'transfer_download',
             actions: [
               if (saveResult.savedPath != null)
-                AndroidNotificationAction(
-                  'open_path:${saveResult.savedPath}',
-                  'Open File',
-                  showsUserInterface: true,
-                ),
+                AndroidNotificationAction('open_path:${saveResult.savedPath}',
+                    'Open File', showsUserInterface: true),
               const AndroidNotificationAction(
-                'view_downloads',
-                'View Downloads',
-                showsUserInterface: true,
-              ),
+                  'view_downloads', 'View Downloads', showsUserInterface: true),
             ],
           );
         } else {
@@ -396,15 +461,18 @@ class DownloadQueueService {
       } catch (e) {
         if (_isCancelled(fileId)) {
           job.status = 'cancelled';
+          try { await job.save(); } catch (_) {}
           TransferQueueService.instance
               .updateTask(fileId, status: TransferStatus.cancelled);
         } else if (isPaused(fileId) || e.toString().contains('Paused')) {
           job.status = 'paused';
+          try { await job.save(); } catch (_) {}
           TransferQueueService.instance.updateTask(fileId,
               status: TransferStatus.paused, currentStage: 'Paused');
         } else {
           job.status = 'failed';
           job.error = e.toString();
+          try { await job.save(); } catch (_) {}
           TransferQueueService.instance.updateTask(fileId,
               status: TransferStatus.failed, error: e.toString());
 
@@ -415,8 +483,8 @@ class DownloadQueueService {
             payload: 'transfer_download',
           );
         }
-        await job.save();
       } finally {
+        _inFlightPolicies.remove(fileId);
         _runningFileIds.remove(fileId);
         _activeCancellationTokens.remove(fileId);
         _activePauseTokens.remove(fileId);

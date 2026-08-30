@@ -18,6 +18,7 @@ import '../../../../core/services/auth_service.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/services/sync_queue_service.dart';
 import '../../../../core/services/service_locator.dart';
+import '../../../../core/models/download_conflict_policy.dart';
 import '../../../../core/models/web_share_job.dart';
 import 'package:hive/hive.dart';
 
@@ -89,9 +90,17 @@ class StorageRepository implements StorageRepositoryContract {
   List<FolderRecord> get currentFolders => _hive.allFolders;
 
   @override
-  Future<Result<void>> enqueueDownload(FileRecord file) async {
+  Future<Result<void>> enqueueDownload(
+    FileRecord file, {
+    String? subpath,
+    DownloadConflictPolicy policy = DownloadConflictPolicy.overwrite,
+  }) async {
     try {
-      await ServiceLocator.instance.downloadQueue.enqueueDownload(file);
+      await ServiceLocator.instance.downloadQueue.enqueueDownload(
+        file,
+        subpath: subpath,
+        policy: policy,
+      );
       return const Success(null);
     } catch (e) {
       return Failure(UnknownFailure(e.toString(), e));

@@ -269,7 +269,8 @@ class UploadService implements UploadServiceContract {
           for (var i = 0; i < parts.length; i++) {
             final chunkIndex = i + 1;
             // Check for pause/cancel
-            while (TransferQueueService.instance.isPaused(fileId)) {
+            while (TransferQueueService.instance.isPaused(fileId) &&
+                !TransferQueueService.instance.isCancelled(fileId)) {
               await Future.delayed(const Duration(seconds: 1));
             }
             if (TransferQueueService.instance.isCancelled(fileId)) {

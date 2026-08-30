@@ -201,6 +201,7 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
       final count = await BrowserBatchHelper.executeBatchDownload(
         state: state,
         repository: _repository,
+        conflictResolver: event.conflictResolver,
       );
       if (count > 0) {
         emit(state.copyWith(selectedFolderIds: {}, selectedFileIds: {}));
@@ -216,6 +217,7 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
       await BrowserBatchHelper.executeDownloadFolder(
         folder: event.folder,
         repository: _repository,
+        conflictResolver: event.conflictResolver,
       );
     } catch (e) {
       emit(state.copyWith(errorMessage: '$e'.replaceAll('Exception: ', '')));
@@ -237,7 +239,11 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
   Future<void> _onEnqueueDownload(
       EnqueueDownload event, Emitter<BrowserState> emit) async {
     try {
-      await _repository.enqueueDownload(event.file);
+      await _repository.enqueueDownload(
+        event.file,
+        subpath: event.subpath,
+        policy: event.policy,
+      );
     } catch (e) {
       emit(state.copyWith(errorMessage: 'Download failed to start: $e'));
     }

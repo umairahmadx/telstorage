@@ -8,6 +8,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:telstorage/core/errors/result.dart';
+import 'package:telstorage/core/models/download_conflict_policy.dart';
 import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/models/folder_record.dart';
 import 'package:telstorage/core/models/folder_stats.dart';
@@ -88,7 +89,11 @@ class _FakeStorageRepository implements StorageRepositoryContract {
   Future<Result<void>> deleteFile(String fileId) async => const Success(null);
 
   @override
-  Future<Result<void>> enqueueDownload(FileRecord file) async =>
+  Future<Result<void>> enqueueDownload(
+    FileRecord file, {
+    String? subpath,
+    DownloadConflictPolicy policy = DownloadConflictPolicy.overwrite,
+  }) async =>
       const Success(null);
 
   @override

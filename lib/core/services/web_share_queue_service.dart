@@ -4,24 +4,29 @@
  */
 
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import '../constants/app_constants.dart';
 import '../models/file_record.dart';
+import '../models/folder_record.dart';
 import '../models/web_share_job.dart';
 import '../utils/app_logger.dart';
 import '../utils/connectivity.dart';
 import '../utils/file_reader_stub.dart'
     if (dart.library.io) '../utils/file_reader_native.dart';
 import 'download_service.dart';
+import 'folder_traversal_service.dart';
 import 'notification_service.dart';
 import 'transfer_queue_service.dart';
 import '../models/transfer_task.dart';
 import 'web_share_api_client.dart';
 import 'service_locator.dart';
 import '../events/domain_event_bus.dart';
+import 'web_share_settings_service.dart';
+import 'zip_archive_service.dart';
 
 class WebShareQueueService {
   final DownloadService _downloadService;
@@ -59,6 +64,38 @@ class WebShareQueueService {
       }
     }
     return job;
+  }
+
+  /// Enqueue a folder to be zipped and shared publicly on storage.to
+  Future<void> enqueueFolderShare(FolderRecord folder,
+      {String? password, int? maxDownloads, int? expiryDays, String? vanitySlug}) async {
+    final cleanFolderName = FolderTraversalService.sanitizeSegment(folder.name);
+    final zipName = '$cleanFolderName.zip';
+    final allFolders = Hive.box<FolderRecord>(AppConstants.foldersBox).values.toList();
+    final allFiles = Hive.box<FileRecord>(AppConstants.filesBox).values.toList();
+    final items = FolderTraversalService.resolveDescendants(
+      targetFolderId: folder.id,
+      allFolders: allFolders,
+      allFiles: allFiles,
+    );
+    final stats = FolderTraversalService.calculateStats(items);
+    final syntheticFile = FileRecord(
+      fileId: folder.id,
+      name: zipName,
+      mimeType: 'application/zip',
+      sizeMb: stats.totalSizeMb,
+      metadataMessageId: 0,
+      uploadedAt: DateTime.now(),
+      chunkCount: 1,
+      sha256Hash: '',
+    );
+    await enqueueShare(
+      syntheticFile,
+      password: password,
+      maxDownloads: maxDownloads,
+      expiryDays: expiryDays,
+      vanitySlug: vanitySlug,
+    );
   }
 
   /// Enqueue a file to be shared publicly on storage.to
@@ -185,67 +222,145 @@ class WebShareQueueService {
       }
 
       final visitorToken = await _apiClient.getOrCreateVisitorToken();
+      File? tempZipToCleanup;
+      Map<String, dynamic> uploadResult;
 
-      // ── Step 1: Download file from Telegram ──────────────────────────────
-      current = current.copyWith(status: 'downloading', progress: 0.0);
-      await _box.put(current.fileId, current.toMap());
+      // Check if job targets a folder
+      final folderRecord =
+          Hive.box<FolderRecord>(AppConstants.foldersBox).get(current.fileId);
 
-      TransferQueueService.instance.updateTask(current.fileId,
-          status: TransferStatus.downloading,
-          progress: 0.0,
-          currentStage: 'Downloading from Cloud…');
+      if (folderRecord != null) {
+        // ── Folder Path: Package into ZIP and Stream to storage.to ───────
+        final allFolders =
+            Hive.box<FolderRecord>(AppConstants.foldersBox).values.toList();
+        final allFiles =
+            Hive.box<FileRecord>(AppConstants.filesBox).values.toList();
+        final items = FolderTraversalService.resolveDescendants(
+          targetFolderId: folderRecord.id,
+          allFolders: allFolders,
+          allFiles: allFiles,
+        );
 
-      final fileRecord = FileRecord(
-        fileId: current.fileId,
-        name: current.name,
-        mimeType: current.mimeType,
-        sizeMb: current.sizeMb,
-        metadataMessageId: 0,
-        uploadedAt: DateTime.now(),
-        chunkCount: 1,
-        sha256Hash: '',
-      );
+        if (items.isEmpty) {
+          throw Exception('Folder contains no files to share');
+        }
 
-      final localCachedFile =
-          Hive.box<FileRecord>(AppConstants.filesBox).get(current.fileId);
-      if (localCachedFile != null) {
-        fileRecord.metadataFileId = localCachedFile.metadataFileId;
-        fileRecord.metadataMessageId = localCachedFile.metadataMessageId;
+        current = current.copyWith(status: 'downloading', progress: 0.0);
+        await _box.put(current.fileId, current.toMap());
+        TransferQueueService.instance.updateTask(current.fileId,
+            status: TransferStatus.downloading,
+            progress: 0.0,
+            currentStage: 'Preparing folder files…');
+
+        try {
+          final stagedZip = await ZipArchiveService.packageFolderToTempZip(
+            folder: folderRecord,
+            items: items,
+            downloadService: _downloadService,
+            transferId: current.fileId,
+            onProgress: (p, stage) async {
+              current = current.copyWith(progress: p * 0.40);
+              await _box.put(current.fileId, current.toMap());
+              TransferQueueService.instance.updateTask(
+                current.fileId,
+                progress: current.progress,
+                currentStage: stage,
+              );
+            },
+          );
+
+          if (stagedZip == null) throw Exception('ZIP archive creation failed');
+          tempZipToCleanup = stagedZip;
+
+          current = current.copyWith(status: 'uploading', progress: 0.40);
+          await _box.put(current.fileId, current.toMap());
+          TransferQueueService.instance.updateTask(current.fileId,
+              status: TransferStatus.sharing,
+              progress: 0.40,
+              currentStage: 'Uploading ZIP to Web…');
+
+          uploadResult = await _apiClient.uploadFileToStorageTo(
+            file: stagedZip,
+            transferId: current.fileId,
+            filename: current.name,
+            mimeType: 'application/zip',
+            visitorToken: visitorToken,
+            onProgress: (pct) async {
+              current = current.copyWith(progress: 0.40 + pct * 0.55);
+              await _box.put(current.fileId, current.toMap());
+              TransferQueueService.instance.updateTask(current.fileId,
+                  progress: current.progress,
+                  currentStage: 'Uploading… ${(pct * 100).toInt()}%');
+            },
+          );
+        } finally {
+          if (tempZipToCleanup != null &&
+              tempZipToCleanup.parent.existsSync()) {
+            try {
+              await tempZipToCleanup.parent.delete(recursive: true);
+            } catch (_) {}
+          }
+        }
+      } else {
+        // ── Single File Path: Download and Upload ─────────────────────────
+        current = current.copyWith(status: 'downloading', progress: 0.0);
+        await _box.put(current.fileId, current.toMap());
+        TransferQueueService.instance.updateTask(current.fileId,
+            status: TransferStatus.downloading,
+            progress: 0.0,
+            currentStage: 'Downloading from Cloud…');
+
+        final fileRecord = FileRecord(
+          fileId: current.fileId,
+          name: current.name,
+          mimeType: current.mimeType,
+          sizeMb: current.sizeMb,
+          metadataMessageId: 0,
+          uploadedAt: DateTime.now(),
+          chunkCount: 1,
+          sha256Hash: '',
+        );
+
+        final localCachedFile =
+            Hive.box<FileRecord>(AppConstants.filesBox).get(current.fileId);
+        if (localCachedFile != null) {
+          fileRecord.metadataFileId = localCachedFile.metadataFileId;
+          fileRecord.metadataMessageId = localCachedFile.metadataMessageId;
+        }
+
+        final bytes = await _downloadService.downloadFile(
+          fileRecord,
+          (progress, status) async {
+            current = current.copyWith(progress: progress * 0.40);
+            await _box.put(current.fileId, current.toMap());
+            TransferQueueService.instance.updateTask(current.fileId,
+                progress: current.progress,
+                currentStage: 'Downloading… ${(progress * 100).toInt()}%');
+          },
+        );
+
+        current = current.copyWith(status: 'uploading', progress: 0.40);
+        await _box.put(current.fileId, current.toMap());
+        TransferQueueService.instance.updateTask(current.fileId,
+            status: TransferStatus.sharing,
+            progress: 0.40,
+            currentStage: 'Uploading to Web…');
+
+        uploadResult = await _apiClient.uploadToStorageTo(
+          bytes: bytes,
+          transferId: current.fileId,
+          filename: current.name,
+          mimeType: current.mimeType,
+          visitorToken: visitorToken,
+          onProgress: (pct) async {
+            current = current.copyWith(progress: 0.40 + pct * 0.55);
+            await _box.put(current.fileId, current.toMap());
+            TransferQueueService.instance.updateTask(current.fileId,
+                progress: current.progress,
+                currentStage: 'Uploading… ${(pct * 100).toInt()}%');
+          },
+        );
       }
-
-      final bytes = await _downloadService.downloadFile(
-        fileRecord,
-        (progress, status) async {
-          current = current.copyWith(progress: progress * 0.40);
-          await _box.put(current.fileId, current.toMap());
-          TransferQueueService.instance.updateTask(current.fileId,
-              progress: current.progress,
-              currentStage: 'Downloading… ${(progress * 100).toInt()}%');
-        },
-      );
-
-      // ── Step 2: Upload to storage.to R2 ──────────────────────────────────
-      current = current.copyWith(status: 'uploading', progress: 0.40);
-      await _box.put(current.fileId, current.toMap());
-      TransferQueueService.instance.updateTask(current.fileId,
-          status: TransferStatus.sharing,
-          progress: 0.40,
-          currentStage: 'Uploading to Web…');
-
-      final uploadResult = await _apiClient.uploadToStorageTo(
-        bytes: bytes,
-        transferId: current.fileId,
-        filename: current.name,
-        mimeType: current.mimeType,
-        visitorToken: visitorToken,
-        onProgress: (pct) async {
-          current = current.copyWith(progress: 0.40 + pct * 0.55);
-          await _box.put(current.fileId, current.toMap());
-          TransferQueueService.instance.updateTask(current.fileId,
-              progress: current.progress,
-              currentStage: 'Uploading… ${(pct * 100).toInt()}%');
-        },
-      );
 
       // ── Step 3: Save Share Record ─────────────────────────────────────────
       current = current.copyWith(
@@ -282,10 +397,12 @@ class WebShareQueueService {
       );
 
       // ── Step 4: Upload Thumbnail ──────────────────────────────────────────
-      if (localCachedFile?.thumbnailFileId != null) {
+      final cachedFile =
+          Hive.box<FileRecord>(AppConstants.filesBox).get(current.fileId);
+      if (cachedFile?.thumbnailFileId != null) {
         try {
           final thumbData = await ServiceLocator.instance.thumbnailRepository
-              .getThumbnailData(localCachedFile!);
+              .getThumbnailData(cachedFile!);
           if (thumbData != null) {
             Uint8List? thumbBytes;
             if (thumbData is Uint8List) {
@@ -307,24 +424,16 @@ class WebShareQueueService {
 
       // ── Step 5: Apply Security & Vanity Settings ─────────────────────────
       if (current.password != null) {
-        try {
-          await setPassword(current.fileId, current.password!);
-        } catch (_) {}
+        try { await setPassword(current.fileId, current.password!); } catch (_) {}
       }
       if (current.maxDownloads != null) {
-        try {
-          await setMaxDownloads(current.fileId, current.maxDownloads!);
-        } catch (_) {}
+        try { await setMaxDownloads(current.fileId, current.maxDownloads!); } catch (_) {}
       }
       if (current.expiryDays != null) {
-        try {
-          await setExpiry(current.fileId, current.expiryDays!);
-        } catch (_) {}
+        try { await setExpiry(current.fileId, current.expiryDays!); } catch (_) {}
       }
       if (current.vanitySlug != null && current.vanitySlug!.isNotEmpty) {
-        try {
-          await setVanitySlug(current.fileId, current.vanitySlug!);
-        } catch (_) {}
+        try { await setVanitySlug(current.fileId, current.vanitySlug!); } catch (_) {}
       }
 
       DomainEventBus.instance.fire(
@@ -360,90 +469,18 @@ class WebShareQueueService {
     }
   }
 
-  Future<void> deleteShare(String fileId) async {
-    final existingMap = _box.get(fileId);
-    if (existingMap == null) return;
-    final job = WebShareJob.fromMap(Map<dynamic, dynamic>.from(existingMap));
+  late final WebShareSettingsService _settings =
+      WebShareSettingsService(apiClient: _apiClient, box: _box);
 
-    if (job.storageToId != null && job.ownerToken != null) {
-      try {
-        await _apiClient.deleteShareRemote(job.storageToId!, job.ownerToken!);
-      } catch (e) {
-        AppLogger.w('Failed deleteShare: $e', tag: 'WebShareQueue');
-      }
-    }
-    await _box.delete(fileId);
-  }
-
-  Future<void> setPassword(String fileId, String password) async {
-    final existingMap = _box.get(fileId);
-    if (existingMap == null) return;
-    final job = WebShareJob.fromMap(Map<dynamic, dynamic>.from(existingMap));
-
-    if (job.storageToId == null || job.ownerToken == null) return;
-
-    final success = await _apiClient.setPasswordRemote(
-        job.storageToId!, job.ownerToken!, password);
-    if (success) {
-      await _box.put(fileId, job.copyWith(password: password).toMap());
-    } else {
-      throw Exception('Failed password update');
-    }
-  }
-
-  Future<void> setExpiry(String fileId, int days) async {
-    final existingMap = _box.get(fileId);
-    if (existingMap == null) return;
-    final job = WebShareJob.fromMap(Map<dynamic, dynamic>.from(existingMap));
-
-    if (job.storageToId == null || job.ownerToken == null) return;
-
-    final success = await _apiClient.setExpiryRemote(
-        job.storageToId!, job.ownerToken!, days);
-    if (success) {
-      await _box.put(fileId, job.copyWith(expiryDays: days).toMap());
-    } else {
-      throw Exception('Failed expiry update');
-    }
-  }
-
-  Future<void> setMaxDownloads(String fileId, int? maxDownloads) async {
-    final existingMap = _box.get(fileId);
-    if (existingMap == null) return;
-    final job = WebShareJob.fromMap(Map<dynamic, dynamic>.from(existingMap));
-
-    if (job.storageToId == null || job.ownerToken == null) return;
-
-    final success = await _apiClient.setMaxDownloadsRemote(
-        job.storageToId!, job.ownerToken!, maxDownloads);
-    if (success) {
-      await _box.put(fileId, job.copyWith(maxDownloads: maxDownloads).toMap());
-    } else {
-      throw Exception('Failed download cap update');
-    }
-  }
-
-  Future<void> setVanitySlug(String fileId, String vanitySlug) async {
-    final existingMap = _box.get(fileId);
-    if (existingMap == null) return;
-    final job = WebShareJob.fromMap(Map<dynamic, dynamic>.from(existingMap));
-
-    if (job.storageToId == null || job.ownerToken == null) return;
-
-    final formattedSlug =
-        vanitySlug.toLowerCase().replaceAll(RegExp(r'[^a-z0-9\-]'), '-');
-    final success = await _apiClient.setVanitySlugRemote(
-        job.storageToId!, job.ownerToken!, formattedSlug);
-    if (success) {
-      final updatedUrl = 'https://storage.to/v/$formattedSlug';
-      await _box.put(
-        fileId,
-        job.copyWith(shareUrl: updatedUrl, vanitySlug: formattedSlug).toMap(),
-      );
-    } else {
-      throw Exception('Failed vanity slug update');
-    }
-  }
+  Future<void> deleteShare(String fileId) => _settings.deleteShare(fileId);
+  Future<void> setPassword(String fileId, String password) =>
+      _settings.setPassword(fileId, password);
+  Future<void> setExpiry(String fileId, int days) =>
+      _settings.setExpiry(fileId, days);
+  Future<void> setMaxDownloads(String fileId, int? maxDownloads) =>
+      _settings.setMaxDownloads(fileId, maxDownloads);
+  Future<void> setVanitySlug(String fileId, String vanitySlug) =>
+      _settings.setVanitySlug(fileId, vanitySlug);
 
   Future<Map<String, dynamic>> getBandwidthStatus() async {
     final visitorToken = await _apiClient.getOrCreateVisitorToken();

@@ -8,7 +8,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/errors/result.dart';
 import '../../../../core/services/notification_service.dart';
 import '../../../../core/services/service_locator.dart';
+import '../../../../core/utils/app_logger.dart';
 import '../../../../core/utils/connectivity.dart';
+import '../../../../core/utils/file_reader_stub.dart'
+    if (dart.library.io) '../../../../core/utils/file_reader_native.dart';
 
 // ── Upload Task Definition ───────────────────────────────────────────────────
 
@@ -17,22 +20,49 @@ class UploadTask {
   /// Unique task ID.
   final String id;
 
-  /// Raw file bytes.
-  final Uint8List bytes;
+  /// Raw file bytes (populated on Web or for in-memory sources).
+  final Uint8List? bytes;
+
+  /// Absolute filesystem path (populated on Native platforms).
+  final String? path;
 
   /// Original file name.
   final String name;
 
+  /// Approximate file size in bytes if known.
+  final int? size;
+
   /// Destination folder ID.
   final String? folderId;
+
+  /// Whether this path points to a temporary cache file that should be deleted upon upload.
+  final bool isTemporaryCacheFile;
 
   /// Constructs an UploadTask.
   UploadTask({
     required this.id,
-    required this.bytes,
+    this.bytes,
+    this.path,
     required this.name,
+    this.size,
     this.folderId,
-  });
+    this.isTemporaryCacheFile = false,
+  }) : assert(bytes != null || path != null,
+            'UploadTask must have either in-memory bytes or a filesystem path.');
+
+  /// Reads bytes on-demand for execution, releasing immediately after upload.
+  Future<Uint8List> getBytes() async {
+    if (bytes != null) return bytes!;
+    if (path != null) return await readFileBytes(path!);
+    throw StateError('UploadTask has neither bytes nor valid path.');
+  }
+
+  /// Deletes the temporary cache file if marked as temporary.
+  Future<void> cleanupCacheFile() async {
+    if (isTemporaryCacheFile && path != null) {
+      await deleteFileIfExists(path!);
+    }
+  }
 }
 
 // ── Events ────────────────────────────────────────────────────────────────────
@@ -306,16 +336,32 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
       totalCount: _totalCount,
     ));
 
+    Uint8List bytes;
+    try {
+      bytes = await task.getBytes();
+    } catch (e) {
+      AppLogger.w('Failed to read bytes for ${task.name}: $e',
+          tag: 'UploadBloc');
+      await task.cleanupCacheFile();
+      if (!isClosed) {
+        add(UploadFailed('File inaccessible: ${task.name}',
+            fileName: task.name));
+      }
+      return;
+    }
+
     final isBatch = _totalCount > 1;
     final result = await ServiceLocator.instance.uploadService.uploadFile(
-      task.bytes,
+      bytes,
       task.name,
       task.folderId,
       (progress, status) {
-        add(UploadProgressUpdated(
-          progress,
-          'Uploading ${task.name} (${_completedCount + 1}/$_totalCount)…',
-        ));
+        if (!isClosed) {
+          add(UploadProgressUpdated(
+            progress,
+            'Uploading ${task.name} (${_completedCount + 1}/$_totalCount)…',
+          ));
+        }
       },
       skipGlobalMetadataUpdate: isBatch,
     );
@@ -325,7 +371,8 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
         if (isBatch && data.isNotEmpty) {
           _completedBatchMeta.add(data);
         }
-        add(UploadCompleted());
+        await task.cleanupCacheFile();
+        if (!isClosed) add(UploadCompleted());
       case Failure(:final failure):
         if (_completedBatchMeta.isNotEmpty) {
           try {
@@ -351,7 +398,10 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
           emit(UploadWaitingForNetwork(task.name));
           _retryWhenOnline();
         } else {
-          add(UploadFailed(failure.message, fileName: task.name));
+          await task.cleanupCacheFile();
+          if (!isClosed) {
+            add(UploadFailed(failure.message, fileName: task.name));
+          }
         }
     }
   }
@@ -375,7 +425,7 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
   void _onUploadCompleted(UploadCompleted event, Emitter<UploadState> emit) {
     _completedCount++;
     _activeWorkers--;
-    add(_ProcessNextUpload());
+    if (!isClosed) add(_ProcessNextUpload());
   }
 
   /// Marks a single upload task as failed.
@@ -383,7 +433,7 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
     _completedCount++;
     _activeWorkers--;
     emit(UploadSingleError(fileName: event.fileName, message: event.message));
-    add(_ProcessNextUpload());
+    if (!isClosed) add(_ProcessNextUpload());
   }
 
   /// Clears active upload state.

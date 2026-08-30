@@ -1,6 +1,6 @@
 /*
  * File: native_save_helper.dart
- * Description: Platform-specific native file saving with path sanitization, traversal prevention, scoped storage, and fallback mechanisms.
+ * Description: Platform-specific native file saving with path sanitization, atomic overwrites, collision resolution, scoped storage, and fallback mechanisms.
  */
 
 // Native save helper — Android, iOS, Desktop.
@@ -11,8 +11,12 @@ import 'dart:typed_data';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:uuid/uuid.dart';
+import '../models/download_conflict_policy.dart';
 import 'app_logger.dart';
 import 'file_category_helper.dart';
+
+export '../models/download_conflict_policy.dart';
 
 /// Result from a native save operation.
 class NativeSaveResult {
@@ -66,14 +70,159 @@ String resolveSafeFilename(String filename) {
       .replaceAll(RegExp(r'_+'), '_')
       .replaceAll(RegExp(r'_\.'), '.');
 
-  while (clean.startsWith('_') || clean.startsWith(' ')) {
+  while (clean.startsWith('_') || clean.startsWith(' ') || clean.startsWith('.')) {
     clean = clean.substring(1).trim();
   }
-  while (clean.endsWith('_') || clean.endsWith(' ')) {
+  while (clean.endsWith('_') || clean.endsWith(' ') || clean.endsWith('.')) {
     clean = clean.substring(0, clean.length - 1).trim();
   }
 
   return clean.isEmpty ? 'unnamed_file' : clean;
+}
+
+/// Resolves the destination directory on the device.
+Future<Directory> resolveTargetDirectory({String? subpath}) async {
+  final cleanSubpath =
+      subpath != null && subpath.isNotEmpty ? subpath : 'other';
+  if (Platform.isAndroid) {
+    try {
+      final dlPath = await _androidDownloadsPath();
+      final dir = Directory(p.join(dlPath, 'TelStorage', cleanSubpath));
+      if (!dir.existsSync()) {
+        await dir.create(recursive: true);
+      }
+      return dir;
+    } catch (_) {
+      final appDir = await getApplicationDocumentsDirectory();
+      final dir = Directory(p.join(appDir.path, 'TelStorage', cleanSubpath));
+      if (!dir.existsSync()) {
+        await dir.create(recursive: true);
+      }
+      return dir;
+    }
+  } else if (Platform.isIOS) {
+    final dir = await getApplicationDocumentsDirectory();
+    final targetDir = Directory(p.join(dir.path, 'TelStorage', cleanSubpath));
+    if (!targetDir.existsSync()) {
+      await targetDir.create(recursive: true);
+    }
+    return targetDir;
+  } else {
+    Directory dir;
+    try {
+      dir = (await getDownloadsDirectory()) ??
+          (await getApplicationDocumentsDirectory());
+    } catch (_) {
+      dir = Directory.systemTemp;
+    }
+    final targetDir = Directory(p.join(dir.path, 'TelStorage', cleanSubpath));
+    if (!targetDir.existsSync()) {
+      await targetDir.create(recursive: true);
+    }
+    return targetDir;
+  }
+}
+
+/// Resolves canonical target file path on disk.
+Future<String> resolveTargetFilePath(String filename, {String? subpath}) async {
+  final safeFilename = resolveSafeFilename(filename);
+  final safeSubpath = resolveSafeSubpath(subpath, safeFilename);
+  final targetDir = await resolveTargetDirectory(subpath: safeSubpath);
+  return p.join(targetDir.path, safeFilename);
+}
+
+/// Checks if a file with the given name physically exists at destination.
+Future<bool> doesTargetFileExist(String filename, {String? subpath}) async {
+  try {
+    final targetPath =
+        await resolveTargetFilePath(filename, subpath: subpath);
+    return File(targetPath).existsSync();
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Resolves a non-colliding filename (e.g. `file (1).png`, `file (2).png`).
+/// Bounded to [maxAttempts] iterations, falling back to timestamp suffix.
+Future<String> resolveNonCollidingFilename(
+  String filename, {
+  String? subpath,
+  int maxAttempts = 100,
+}) async {
+  final safeFilename = resolveSafeFilename(filename);
+  final safeSubpath = resolveSafeSubpath(subpath, safeFilename);
+
+  if (!(await doesTargetFileExist(safeFilename, subpath: safeSubpath))) {
+    return safeFilename;
+  }
+
+  final ext = p.extension(safeFilename);
+  final nameWithoutExt = p.basenameWithoutExtension(safeFilename);
+
+  for (var i = 1; i <= maxAttempts; i++) {
+    final candidate = '$nameWithoutExt ($i)$ext';
+    if (!(await doesTargetFileExist(candidate, subpath: safeSubpath))) {
+      return candidate;
+    }
+  }
+
+  return '${nameWithoutExt}_${DateTime.now().millisecondsSinceEpoch}$ext';
+}
+
+/// Sweeps and deletes orphaned temporary staging files in destination directory.
+Future<void> cleanStaleTempFiles({String? subpath}) async {
+  try {
+    final dir = await resolveTargetDirectory(subpath: subpath);
+    if (!dir.existsSync()) return;
+    final entries = dir.listSync();
+    for (final entry in entries) {
+      if (entry is File) {
+        final name = p.basename(entry.path);
+        if (name.startsWith('.') && name.contains('.tmp_')) {
+          try {
+            await entry.delete();
+          } catch (_) {}
+        }
+      }
+    }
+  } catch (_) {}
+}
+
+/// Writes [bytes] to [targetFile] via temporary staging file and atomic rename.
+Future<void> _writeWithAtomicRename(File targetFile, Uint8List bytes) async {
+  final parentDir = targetFile.parent;
+  if (!parentDir.existsSync()) {
+    await parentDir.create(recursive: true);
+  }
+
+  final baseName = p.basename(targetFile.path);
+  final randSuffix = const Uuid().v4().substring(0, 8);
+  final tempFile = File(
+      '${parentDir.path}/.$baseName.tmp_${DateTime.now().microsecondsSinceEpoch}_$randSuffix');
+
+  try {
+    await tempFile.writeAsBytes(bytes, flush: true);
+    final writtenLen = await tempFile.length();
+    if (writtenLen != bytes.length) {
+      throw Exception(
+          'Staged file length mismatch: expected ${bytes.length} bytes, wrote $writtenLen');
+    }
+
+    if (targetFile.existsSync()) {
+      try {
+        await targetFile.delete();
+      } catch (_) {}
+    }
+
+    await tempFile.rename(targetFile.path);
+  } catch (e) {
+    if (tempFile.existsSync()) {
+      try {
+        await tempFile.delete();
+      } catch (_) {}
+    }
+    rethrow;
+  }
 }
 
 /// Save [bytes] as [filename] to the platform's public Downloads/Files location.
@@ -82,16 +231,35 @@ Future<NativeSaveResult> saveNative(
   Uint8List bytes,
   String filename, {
   String? subpath,
+  DownloadConflictPolicy policy = DownloadConflictPolicy.overwrite,
 }) async {
-  final safeFilename = resolveSafeFilename(filename);
+  var safeFilename = resolveSafeFilename(filename);
   final safeSubpath = resolveSafeSubpath(subpath, safeFilename);
 
+  if (policy == DownloadConflictPolicy.keepBoth) {
+    safeFilename = await resolveNonCollidingFilename(safeFilename,
+        subpath: safeSubpath);
+  } else if (policy == DownloadConflictPolicy.skip) {
+    if (await doesTargetFileExist(safeFilename, subpath: safeSubpath)) {
+      final existingPath =
+          await resolveTargetFilePath(safeFilename, subpath: safeSubpath);
+      return NativeSaveResult(
+        success: true,
+        savedPath: existingPath,
+        message: 'File already exists (skipped download).',
+      );
+    }
+  }
+
   if (Platform.isAndroid) {
-    return _saveAndroid(bytes, safeFilename, subpath: safeSubpath);
+    return _saveAndroid(bytes, safeFilename,
+        subpath: safeSubpath, policy: policy);
   } else if (Platform.isIOS) {
-    return _saveIos(bytes, safeFilename, subpath: safeSubpath);
+    return _saveIos(bytes, safeFilename,
+        subpath: safeSubpath, policy: policy);
   } else {
-    return _saveDesktop(bytes, safeFilename, subpath: safeSubpath);
+    return _saveDesktop(bytes, safeFilename,
+        subpath: safeSubpath, policy: policy);
   }
 }
 
@@ -101,6 +269,7 @@ Future<NativeSaveResult> _saveAndroid(
   Uint8List bytes,
   String filename, {
   required String subpath,
+  required DownloadConflictPolicy policy,
 }) async {
   try {
     final sdkInt = await _androidSdk();
@@ -116,10 +285,8 @@ Future<NativeSaveResult> _saveAndroid(
 
     final dlPath = await _androidDownloadsPath();
     final targetDir = Directory(p.join(dlPath, 'TelStorage', subpath));
-    await targetDir.create(recursive: true);
-
     final file = File(p.join(targetDir.path, filename));
-    await file.writeAsBytes(bytes);
+    await _writeWithAtomicRename(file, bytes);
     AppLogger.i('Android: saved to ${file.path}', tag: 'SaveHelper');
 
     return NativeSaveResult(
@@ -132,10 +299,8 @@ Future<NativeSaveResult> _saveAndroid(
     try {
       final dir = await getApplicationDocumentsDirectory();
       final targetDir = Directory(p.join(dir.path, 'TelStorage', subpath));
-      await targetDir.create(recursive: true);
-
       final file = File(p.join(targetDir.path, filename));
-      await file.writeAsBytes(bytes);
+      await _writeWithAtomicRename(file, bytes);
       return NativeSaveResult(
         success: true,
         savedPath: file.path,
@@ -153,14 +318,13 @@ Future<NativeSaveResult> _saveIos(
   Uint8List bytes,
   String filename, {
   required String subpath,
+  required DownloadConflictPolicy policy,
 }) async {
   try {
     final dir = await getApplicationDocumentsDirectory();
     final targetDir = Directory(p.join(dir.path, 'TelStorage', subpath));
-    await targetDir.create(recursive: true);
-
     final file = File(p.join(targetDir.path, filename));
-    await file.writeAsBytes(bytes);
+    await _writeWithAtomicRename(file, bytes);
     AppLogger.i('iOS: saved to ${file.path}', tag: 'SaveHelper');
 
     return NativeSaveResult(
@@ -179,6 +343,7 @@ Future<NativeSaveResult> _saveDesktop(
   Uint8List bytes,
   String filename, {
   required String subpath,
+  required DownloadConflictPolicy policy,
 }) async {
   try {
     Directory dir;
@@ -190,10 +355,8 @@ Future<NativeSaveResult> _saveDesktop(
     }
 
     final targetDir = Directory(p.join(dir.path, 'TelStorage', subpath));
-    await targetDir.create(recursive: true);
-
     final file = File(p.join(targetDir.path, filename));
-    await file.writeAsBytes(bytes);
+    await _writeWithAtomicRename(file, bytes);
     return NativeSaveResult(
       success: true,
       savedPath: file.path,

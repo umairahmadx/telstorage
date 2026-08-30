@@ -219,23 +219,7 @@ class ThumbnailGenerator {
 
   /// Generates image thumbnail scaled proportionally to max 400px preserving original aspect ratio.
   static Future<Uint8List?> generateImageThumbnail(Uint8List bytes) async {
-    // 1. Primary: Standard decode via isolate
-    try {
-      final isolateResult = await compute(_isolateProcessImage, bytes);
-      if (isolateResult != null && isolateResult.length <= maxByteSize) {
-        return isolateResult;
-      }
-    } catch (_) {}
-
-    // 2. Secondary: Embedded JPEG preview extraction (e.g. for HEIC/HEIF container images)
-    try {
-      final embedded = _extractEmbeddedJpegFromHeic(bytes);
-      if (embedded != null && embedded.length <= maxByteSize) {
-        return embedded;
-      }
-    } catch (_) {}
-
-    // 3. Tertiary: Native platform codec (works on Apple and Android devices supporting HEIC)
+    // 1. Primary: Native hardware-accelerated downsampled decoding (low RAM, C++ Skia/Impeller)
     try {
       final ui.Codec codec = await ui.instantiateImageCodec(
         bytes,
@@ -255,9 +239,26 @@ class ThumbnailGenerator {
         }
       }
     } catch (e) {
-      AppLogger.d('Native image codec fallback failed: $e',
+      AppLogger.d('Native image codec decode failed/skipped: $e',
           tag: 'ThumbnailGenerator');
     }
+
+    // 2. Secondary: Embedded JPEG preview extraction (e.g. for HEIC/HEIF container images)
+    try {
+      final embedded = _extractEmbeddedJpegFromHeic(bytes);
+      if (embedded != null && embedded.length <= maxByteSize) {
+        return embedded;
+      }
+    } catch (_) {}
+
+    // 3. Tertiary: Fallback standard decode via isolate
+    try {
+      final isolateResult = await compute(_isolateProcessImage, bytes);
+      if (isolateResult != null && isolateResult.length <= maxByteSize) {
+        return isolateResult;
+      }
+    } catch (_) {}
+
     return null;
   }
 

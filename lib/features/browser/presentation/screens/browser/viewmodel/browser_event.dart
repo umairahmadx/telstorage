@@ -5,6 +5,7 @@
 
 import '../../../../../../core/models/file_record.dart';
 import '../../../../../../core/models/folder_record.dart';
+import '../../../../../../shared/widgets/dialogs/app_dialogs.dart';
 
 /// Supported sorting options in the file browser.
 enum BrowserSortOption {
@@ -104,8 +105,18 @@ class EnqueueDownload extends BrowserEvent {
   /// File to download.
   final FileRecord file;
 
+  /// Optional subpath destination.
+  final String? subpath;
+
+  /// Conflict resolution policy.
+  final DownloadConflictPolicy policy;
+
   /// Constructs EnqueueDownload event.
-  EnqueueDownload(this.file);
+  EnqueueDownload(
+    this.file, {
+    this.subpath,
+    this.policy = DownloadConflictPolicy.overwrite,
+  });
 }
 
 /// Enqueues web share link creation.
@@ -271,8 +282,12 @@ class ToggleSelectAll extends BrowserEvent {
 
 /// Enqueues all currently selected files and folders for download.
 class BatchDownload extends BrowserEvent {
+  /// Optional conflict resolver callback for interactive batch decisions.
+  final Future<FileConflictDecision?> Function(String fileName)?
+      conflictResolver;
+
   /// Constructs BatchDownload event.
-  const BatchDownload();
+  const BatchDownload({this.conflictResolver});
 }
 
 /// Recursively downloads an entire folder hierarchy.
@@ -280,8 +295,12 @@ class DownloadFolder extends BrowserEvent {
   /// Target folder to download.
   final FolderRecord folder;
 
+  /// Optional conflict resolver callback for interactive batch decisions.
+  final Future<FileConflictDecision?> Function(String fileName)?
+      conflictResolver;
+
   /// Constructs DownloadFolder event.
-  const DownloadFolder(this.folder);
+  const DownloadFolder(this.folder, {this.conflictResolver});
 }
 
 /// Exports a folder structure into a standalone `.zip` archive.

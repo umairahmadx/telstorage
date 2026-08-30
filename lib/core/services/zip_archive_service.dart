@@ -10,10 +10,13 @@ import 'package:path/path.dart' as p;
 import '../models/folder_record.dart';
 import '../models/transfer_task.dart';
 import '../utils/app_logger.dart';
+import '../utils/local_file_stub.dart'
+    if (dart.library.io) '../utils/local_file_native.dart';
 import '../utils/native_save_helper.dart';
 import 'download_service_contract.dart';
 import 'folder_traversal_service.dart';
 import 'notification_service.dart';
+import 'service_locator.dart';
 import 'transfer_concurrency_coordinator.dart';
 import 'transfer_queue_service.dart';
 
@@ -56,7 +59,7 @@ abstract final class ZipArchiveService {
     return match.isEmpty || match.first.status == TransferStatus.cancelled;
   }
 
-  /// Compresses a collection of [entries] into [destinationZip].
+  /// Compresses a collection of [entries] into [destinationZip] with streaming disk I/O.
   static Future<void> createZipFromFiles({
     required File destinationZip,
     required List<ZipEntry> entries,
@@ -67,25 +70,98 @@ abstract final class ZipArchiveService {
       await parentDir.create(recursive: true);
     }
 
-    final archive = Archive();
-    final total = entries.length;
+    final encoder = ZipFileEncoder();
+    try {
+      encoder.create(destinationZip.path);
+      final total = entries.length;
 
-    for (var i = 0; i < total; i++) {
-      final entry = entries[i];
-      if (entry.file.existsSync()) {
-        final bytes = await entry.file.readAsBytes();
-        archive.addFile(ArchiveFile(
-          entry.archivePath,
-          bytes.length,
-          bytes,
-        ));
+      for (var i = 0; i < total; i++) {
+        final entry = entries[i];
+        if (entry.file.existsSync()) {
+          await encoder.addFile(entry.file, entry.archivePath);
+        }
+        final progress = total > 0 ? (i + 1) / total : 1.0;
+        onProgress?.call(progress, 'Compressing ${i + 1}/$total items…');
       }
-      final progress = total > 0 ? (i + 1) / total : 1.0;
-      onProgress?.call(progress, 'Compressing ${i + 1}/$total items…');
+    } finally {
+      try {
+        await encoder.close();
+      } catch (_) {}
     }
+  }
 
-    final zipData = ZipEncoder().encode(archive);
-    await destinationZip.writeAsBytes(zipData);
+  /// Downloads and packages folder contents into a temporary `.zip` file for web sharing.
+  static Future<File?> packageFolderToTempZip({
+    required FolderRecord folder,
+    required List<FolderFileItem> items,
+    required DownloadServiceContract downloadService,
+    required String transferId,
+    void Function(double progress, String status)? onProgress,
+  }) async {
+    final cleanFolderName = FolderTraversalService.sanitizeSegment(folder.name);
+    final zipName = '$cleanFolderName.zip';
+    final tempDir = Directory.systemTemp.createTempSync('web_share_zip_');
+    final stagedZipFile = File('${tempDir.path}/$zipName');
+
+    try {
+      final List<ZipEntry> zipEntries = [];
+      final Set<String> usedArchivePaths = <String>{};
+      final total = items.length;
+
+      for (var i = 0; i < total; i++) {
+        if (isTaskCancelled(transferId)) {
+          throw Exception('Share cancelled by user');
+        }
+
+        final item = items[i];
+        onProgress?.call(
+          total > 0 ? (i / total) * 0.7 : 0.0,
+          'Preparing ${i + 1}/$total: ${item.file.name}',
+        );
+
+        final bytes = await downloadService.downloadFile(
+          item.file,
+          (chunkProgress, _) {
+            final fileBase = total > 0 ? (i / total) * 0.7 : 0.0;
+            final fileSpan = total > 0 ? (1.0 / total) * 0.7 : 0.7;
+            onProgress?.call(
+              fileBase + (chunkProgress * fileSpan),
+              'Downloading ${i + 1}/$total: ${item.file.name}',
+            );
+          },
+        );
+
+        final safeArchivePath =
+            disambiguateArchivePath(item.relativePath, usedArchivePaths);
+        final targetFile = File('${tempDir.path}/$safeArchivePath');
+        await targetFile.parent.create(recursive: true);
+        await targetFile.writeAsBytes(bytes);
+
+        zipEntries.add(ZipEntry(file: targetFile, archivePath: safeArchivePath));
+      }
+
+      if (isTaskCancelled(transferId)) {
+        throw Exception('Share cancelled by user');
+      }
+
+      onProgress?.call(0.75, 'Compressing folder into ZIP…');
+      await createZipFromFiles(
+        destinationZip: stagedZipFile,
+        entries: zipEntries,
+        onProgress: (compProgress, compStatus) {
+          onProgress?.call(0.75 + (compProgress * 0.25), compStatus);
+        },
+      );
+
+      return stagedZipFile;
+    } catch (e) {
+      if (tempDir.existsSync()) {
+        try {
+          await tempDir.delete(recursive: true);
+        } catch (_) {}
+      }
+      rethrow;
+    }
   }
 
   /// Downloads all files inside [folder] recursively and packages them into a `.zip` archive.
@@ -114,6 +190,7 @@ abstract final class ZipArchiveService {
       return null;
     }
 
+    // Step 1: Register in-memory active task synchronously
     TransferQueueService.instance.addTask(TransferTask(
       id: taskId,
       name: zipName,
@@ -124,8 +201,35 @@ abstract final class ZipArchiveService {
       currentStage: 'Preparing archive…',
     ));
 
+    // Step 2: Register initial download job in Hive with start-write guard
+    try {
+      if (ServiceLocator.instance.isInitialized) {
+        await ServiceLocator.instance.downloadQueue.addOrUpdateZipJob(
+          fileId: taskId,
+          name: zipName,
+          mimeType: 'application/zip',
+          sizeMb: stats.totalSizeMb,
+          status: 'downloading',
+          progress: 0.0,
+          addedAt: DateTime.now(),
+          subpath: 'zip',
+        );
+      }
+    } catch (e, st) {
+      AppLogger.e('Failed to initialize ZIP download tracking in Hive: $e',
+          error: e, stackTrace: st, tag: 'ZipArchive');
+      TransferQueueService.instance.updateTask(
+        taskId,
+        status: TransferStatus.failed,
+        error: 'Failed to initialize download tracking: $e',
+        currentStage: 'Initialization failed',
+      );
+      return null;
+    }
+
     return await TransferConcurrencyCoordinator.instance.runGuarded(() async {
       Directory? tempDir;
+      String? savedZipPath;
       try {
         tempDir = await Directory.systemTemp
             .createTemp('telstorage_zip_${folder.id}_');
@@ -138,6 +242,23 @@ abstract final class ZipArchiveService {
           if (isTaskCancelled(taskId)) {
             AppLogger.i('ZIP export cancelled for "${folder.name}"',
                 tag: 'ZipArchive');
+            // Best-effort Hive write; always surface cancellation state to TQS even if Hive write itself fails
+            try {
+              if (ServiceLocator.instance.isInitialized) {
+                await ServiceLocator.instance.downloadQueue.addOrUpdateZipJob(
+                  fileId: taskId,
+                  name: zipName,
+                  mimeType: 'application/zip',
+                  sizeMb: stats.totalSizeMb,
+                  status: 'cancelled',
+                );
+              }
+            } catch (_) {}
+            TransferQueueService.instance.updateTask(
+              taskId,
+              status: TransferStatus.cancelled,
+              currentStage: 'Cancelled',
+            );
             return null;
           }
 
@@ -173,6 +294,22 @@ abstract final class ZipArchiveService {
         }
 
         if (isTaskCancelled(taskId)) {
+          try {
+            if (ServiceLocator.instance.isInitialized) {
+              await ServiceLocator.instance.downloadQueue.addOrUpdateZipJob(
+                fileId: taskId,
+                name: zipName,
+                mimeType: 'application/zip',
+                sizeMb: stats.totalSizeMb,
+                status: 'cancelled',
+              );
+            }
+          } catch (_) {}
+          TransferQueueService.instance.updateTask(
+            taskId,
+            status: TransferStatus.cancelled,
+            currentStage: 'Cancelled',
+          );
           return null;
         }
 
@@ -196,6 +333,22 @@ abstract final class ZipArchiveService {
         );
 
         if (isTaskCancelled(taskId)) {
+          try {
+            if (ServiceLocator.instance.isInitialized) {
+              await ServiceLocator.instance.downloadQueue.addOrUpdateZipJob(
+                fileId: taskId,
+                name: zipName,
+                mimeType: 'application/zip',
+                sizeMb: stats.totalSizeMb,
+                status: 'cancelled',
+              );
+            }
+          } catch (_) {}
+          TransferQueueService.instance.updateTask(
+            taskId,
+            status: TransferStatus.cancelled,
+            currentStage: 'Cancelled',
+          );
           return null;
         }
 
@@ -213,6 +366,35 @@ abstract final class ZipArchiveService {
         );
 
         if (saveResult.success) {
+          savedZipPath = saveResult.savedPath;
+
+          // Step 1: Await Hive persistence first
+          try {
+            if (ServiceLocator.instance.isInitialized) {
+              await ServiceLocator.instance.downloadQueue.addOrUpdateZipJob(
+                fileId: taskId,
+                name: zipName,
+                mimeType: 'application/zip',
+                sizeMb: stats.totalSizeMb,
+                status: 'completed',
+                localPath: saveResult.savedPath,
+                completedAt: DateTime.now(),
+                progress: 1.0,
+              );
+            }
+          } catch (e, st) {
+            AppLogger.e('Failed to persist completed ZIP job to Hive: $e',
+                error: e, stackTrace: st, tag: 'ZipArchive');
+            TransferQueueService.instance.updateTask(
+              taskId,
+              status: TransferStatus.failed,
+              error: 'Failed to save download record: $e',
+              currentStage: 'Failed to record download',
+            );
+            return null;
+          }
+
+          // Step 2: ONLY executed when Step 1 succeeded
           TransferQueueService.instance.updateTask(
             taskId,
             status: TransferStatus.completed,
@@ -245,10 +427,49 @@ abstract final class ZipArchiveService {
         }
       } catch (e, st) {
         if (isTaskCancelled(taskId)) {
+          try {
+            if (ServiceLocator.instance.isInitialized) {
+              await ServiceLocator.instance.downloadQueue.addOrUpdateZipJob(
+                fileId: taskId,
+                name: zipName,
+                mimeType: 'application/zip',
+                sizeMb: stats.totalSizeMb,
+                status: 'cancelled',
+              );
+            }
+          } catch (_) {}
+          TransferQueueService.instance.updateTask(
+            taskId,
+            status: TransferStatus.cancelled,
+            currentStage: 'Cancelled',
+          );
           return null;
         }
+
+        // Clean up partial saved file on error if partially created
+        if (savedZipPath != null) {
+          try {
+            await deleteLocalFileIfExists(savedZipPath);
+          } catch (_) {}
+        }
+
         AppLogger.e('ZIP export failed for "${folder.name}": $e',
             error: e, stackTrace: st, tag: 'ZipArchive');
+
+        // Best-effort Hive write; always surface failure state to TQS even if Hive write itself fails
+        try {
+          if (ServiceLocator.instance.isInitialized) {
+            await ServiceLocator.instance.downloadQueue.addOrUpdateZipJob(
+              fileId: taskId,
+              name: zipName,
+              mimeType: 'application/zip',
+              sizeMb: stats.totalSizeMb,
+              status: 'failed',
+              error: e.toString(),
+            );
+          }
+        } catch (_) {}
+
         TransferQueueService.instance.updateTask(
           taskId,
           status: TransferStatus.failed,

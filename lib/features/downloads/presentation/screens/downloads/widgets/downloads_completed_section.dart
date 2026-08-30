@@ -18,14 +18,14 @@ class DownloadsCompletedSection extends StatelessWidget {
   final List<DownloadJob> completedDownloads;
   final void Function(String? localPath, {String? mimeType, String? fileName})
       onOpenFile;
-  final void Function(FileRecord file) onShareFile;
+  final void Function(DownloadJob job, FileRecord? file) onShareJob;
   final void Function(DownloadJob job) onDeleteJob;
 
   const DownloadsCompletedSection({
     super.key,
     required this.completedDownloads,
     required this.onOpenFile,
-    required this.onShareFile,
+    required this.onShareJob,
     required this.onDeleteJob,
   });
 
@@ -73,7 +73,7 @@ class DownloadsCompletedSection extends StatelessWidget {
                       color: colors.textSecondary, size: 20),
                   onPressed: () {
                     HapticFeedback.lightImpact();
-                    if (file != null) onShareFile(file);
+                    onShareJob(job, file);
                   },
                 ),
                 IconButton(

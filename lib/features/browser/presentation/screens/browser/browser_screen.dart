@@ -427,7 +427,11 @@ class _BrowserScreenState extends State<BrowserScreen> {
     );
 
     if (ok == true && context.mounted) {
-      context.read<BrowserBloc>().add(const BatchDownload());
+      context.read<BrowserBloc>().add(BatchDownload(
+            conflictResolver: (fileName) =>
+                AppDialogs.showFileConflictDialog(context,
+                    fileName: fileName, isBatch: true),
+          ));
     }
   }
 }

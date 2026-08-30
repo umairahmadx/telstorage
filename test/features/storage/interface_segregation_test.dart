@@ -5,6 +5,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:telstorage/core/errors/result.dart';
+import 'package:telstorage/core/models/download_conflict_policy.dart';
 import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/features/storage/domain/repositories/storage_repository_contract.dart';
 import 'package:telstorage/features/storage/domain/usecases/download_file_usecase.dart';
@@ -12,7 +13,11 @@ import 'package:telstorage/features/storage/domain/usecases/generate_web_share_u
 
 class DownloadOnlyFake implements DownloadEnqueuer {
   @override
-  Future<Result<void>> enqueueDownload(FileRecord file) async =>
+  Future<Result<void>> enqueueDownload(
+    FileRecord file, {
+    String? subpath,
+    DownloadConflictPolicy policy = DownloadConflictPolicy.overwrite,
+  }) async =>
       const Success(null);
 }
 

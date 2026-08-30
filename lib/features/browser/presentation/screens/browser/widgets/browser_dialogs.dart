@@ -3,6 +3,7 @@
  * Description: Modal dialog and sheet helpers for Browser screen delegating to centralized AppDialogs and AppSortFilterSheet.
  */
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -30,9 +31,27 @@ abstract final class BrowserDialogs {
         Navigator.pop(context);
         showShareSheet(context, file);
       },
-      onDownload: () {
+      onDownload: () async {
         Navigator.pop(context);
-        context.read<BrowserBloc>().add(EnqueueDownload(file));
+        var policy = DownloadConflictPolicy.overwrite;
+        if (!kIsWeb) {
+          final hasConflict = await ServiceLocator.instance.downloadQueue
+              .checkFileConflict(file);
+          if (hasConflict && context.mounted) {
+            final decision = await AppDialogs.showFileConflictDialog(
+              context,
+              fileName: file.name,
+            );
+            if (decision == null) return;
+            if (decision.policy == DownloadConflictPolicy.skip) return;
+            policy = decision.policy;
+          }
+        }
+        if (context.mounted) {
+          context
+              .read<BrowserBloc>()
+              .add(EnqueueDownload(file, policy: policy));
+        }
       },
       onRename: () {
         Navigator.pop(context);
@@ -198,6 +217,18 @@ abstract final class BrowserDialogs {
               },
             ),
             ListTile(
+              leading: Icon(Icons.share_outlined, color: colors.textPrimary),
+              title: Text('Share Folder / Get Link',
+                  style: TextStyle(color: colors.textPrimary)),
+              subtitle: Text('Compress folder into ZIP and share public link',
+                  style: TextStyle(color: colors.textSecondary, fontSize: 12)),
+              onTap: () {
+                HapticFeedback.selectionClick();
+                Navigator.pop(ctx);
+                shareFolder(context, folder);
+              },
+            ),
+            ListTile(
               leading: Icon(Icons.delete_outline_rounded, color: colors.error),
               title: Text('Delete', style: TextStyle(color: colors.error)),
               onTap: () {
@@ -208,6 +239,51 @@ abstract final class BrowserDialogs {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Displays the share link bottom sheet for [folder] packaged as a ZIP.
+  static void shareFolder(BuildContext context, FolderRecord folder) {
+    final cleanName = FolderTraversalService.sanitizeSegment(folder.name);
+    final repo = ServiceLocator.instance.storageRepository;
+    final items = FolderTraversalService.resolveDescendants(
+      targetFolderId: folder.id,
+      allFolders: repo.currentFolders,
+      allFiles: repo.currentFiles,
+    );
+    final stats = FolderTraversalService.calculateStats(items);
+
+    final syntheticFile = FileRecord(
+      fileId: folder.id,
+      name: '$cleanName.zip',
+      mimeType: 'application/zip',
+      sizeMb: stats.totalSizeMb,
+      metadataMessageId: 0,
+      uploadedAt: DateTime.now(),
+      chunkCount: 1,
+      sha256Hash: '',
+    );
+
+    final existing =
+        context.read<TransferCubit>().getShareJob(folder.id);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => ShareLinkSheet(
+        file: syntheticFile,
+        shareUrl: existing?.shareUrl,
+        onCopyLink: (pwd, expiryDays, vanitySlug) async {
+          context.read<BrowserBloc>().add(EnqueueShare(
+                syntheticFile,
+                password: pwd,
+                expiryDays: expiryDays,
+                vanitySlug: vanitySlug,
+              ));
+          if (ctx.mounted) Navigator.pop(ctx);
+        },
       ),
     );
   }
@@ -306,7 +382,12 @@ abstract final class BrowserDialogs {
     );
     if (!context.mounted) return;
     if (ok == true) {
-      context.read<BrowserBloc>().add(DownloadFolder(folder));
+      context.read<BrowserBloc>().add(DownloadFolder(
+            folder,
+            conflictResolver: (fileName) =>
+                AppDialogs.showFileConflictDialog(context,
+                    fileName: fileName, isBatch: true),
+          ));
     }
   }
 

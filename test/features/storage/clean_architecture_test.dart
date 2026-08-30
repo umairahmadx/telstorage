@@ -6,6 +6,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:telstorage/core/errors/result.dart';
 import 'package:telstorage/core/events/domain_event_bus.dart';
+import 'package:telstorage/core/models/download_conflict_policy.dart';
 import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/models/folder_record.dart';
 import 'package:telstorage/core/models/folder_stats.dart';
@@ -79,7 +80,11 @@ class MockStorageRepository implements StorageRepositoryContract {
   Future<Result<void>> deleteFile(String fileId) async => const Success(null);
 
   @override
-  Future<Result<void>> enqueueDownload(FileRecord file) async {
+  Future<Result<void>> enqueueDownload(
+    FileRecord file, {
+    String? subpath,
+    DownloadConflictPolicy policy = DownloadConflictPolicy.overwrite,
+  }) async {
     if (shouldFail) {
       return const Failure(UnknownFailure('Download failed test'));
     }
@@ -104,7 +109,11 @@ class DownloadOnlyFake implements DownloadEnqueuer {
   bool called = false;
 
   @override
-  Future<Result<void>> enqueueDownload(FileRecord file) async {
+  Future<Result<void>> enqueueDownload(
+    FileRecord file, {
+    String? subpath,
+    DownloadConflictPolicy policy = DownloadConflictPolicy.overwrite,
+  }) async {
     called = true;
     return const Success(null);
   }

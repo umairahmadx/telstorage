@@ -67,16 +67,24 @@ class TransferQueueService {
 
       if (lastTime != null) {
         final duration = now.difference(lastTime).inMilliseconds;
-        if (duration > 500) {
+        if (duration >= 500) {
           // Update speed every 500ms
           final progressDelta = progress - lastProgress;
           final sizeDeltaKb = progressDelta * task.sizeMb * 1024;
-          speed = (sizeDeltaKb / (duration / 1000.0));
+          final durationSec = duration / 1000.0;
+          if (durationSec > 0 && sizeDeltaKb > 0) {
+            final calculatedSpeed = sizeDeltaKb / durationSec;
+            if (calculatedSpeed.isFinite && !calculatedSpeed.isNaN && calculatedSpeed > 0) {
+              speed = calculatedSpeed;
+            }
+          }
 
-          if (speed > 0) {
+          if (speed > 0 && speed.isFinite) {
             final remainingMb = (1.0 - progress) * task.sizeMb;
             final remainingSeconds = (remainingMb * 1024) / speed;
-            eta = _formatDuration(Duration(seconds: remainingSeconds.toInt()));
+            if (remainingSeconds.isFinite && remainingSeconds > 0) {
+              eta = _formatDuration(Duration(seconds: remainingSeconds.toInt()));
+            }
           }
 
           _lastUpdateTimes[id] = now;
@@ -121,6 +129,13 @@ class TransferQueueService {
     _lastUpdateTimes.remove(id);
     _lastProgresses.remove(id);
     _updateNotification();
+  }
+
+  /// Clears all tasks from memory (for testing or full reset).
+  void clearAll() {
+    _tasksNotifier.value = [];
+    _lastUpdateTimes.clear();
+    _lastProgresses.clear();
   }
 
   /// Requests cancellation while retaining the task long enough for its

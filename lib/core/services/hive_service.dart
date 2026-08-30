@@ -145,7 +145,11 @@ class HiveService {
 
   List<FileRecord> recentFiles(int n) {
     final all = _files.values.toList()
-      ..sort((a, b) => b.uploadedAt.compareTo(a.uploadedAt));
+      ..sort((a, b) {
+        final cmp = b.uploadedAt.compareTo(a.uploadedAt);
+        if (cmp != 0) return cmp;
+        return b.fileId.compareTo(a.fileId);
+      });
     return all.take(n).toList();
   }
 

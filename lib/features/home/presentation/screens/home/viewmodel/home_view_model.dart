@@ -4,6 +4,7 @@
  */
 
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../../../core/events/domain_event_bus.dart';
 import '../../../../../../core/models/app_metadata.dart';
@@ -132,99 +133,183 @@ class HomeCubit extends Cubit<HomeState> {
   /// Subscription to global domain event bus.
   StreamSubscription? _domainEventSubscription;
 
+  /// Debounce timer for coalescing rapid local database updates.
+  Timer? _debounceTimer;
+
   /// Flag indicating if database listeners have been initialized.
   bool _isSubscribed = false;
+
+  /// Monotonically increasing counter for local cache refreshes.
+  int _localRefreshRequestId = 0;
+
+  /// Monotonically increasing counter for remote network enrichments.
+  int _enrichRequestId = 0;
+
+  /// Timestamp of the last remote enrichment to prevent duplicate in-flight requests.
+  DateTime? _lastEnrichTime;
 
   /// Constructs HomeCubit and binds event bus listener.
   HomeCubit() : super(HomeState()) {
     _domainEventSubscription = DomainEventBus.instance.stream.listen((_) {
-      if (!isClosed) refreshData();
+      _scheduleDebouncedLocalRefresh();
     });
   }
 
-  /// Sets up reactive Hive database listeners.
+  /// Sets up reactive Hive database listeners with debouncing.
   void _initSubscriptions() {
     if (_isSubscribed) return;
     try {
       _filesSubscription = ServiceLocator.instance.hive.filesListenable.value
           .watch()
-          .listen((_) {
-        if (!isClosed) {
-          refreshData();
-        }
-      });
+          .listen((_) => _scheduleDebouncedLocalRefresh());
       _foldersSubscription = ServiceLocator
           .instance.hive.foldersListenable.value
           .watch()
-          .listen((_) {
-        if (!isClosed) {
-          refreshData();
-        }
-      });
+          .listen((_) => _scheduleDebouncedLocalRefresh());
       _isSubscribed = true;
     } catch (e) {
       AppLogger.w('Could not initialize HomeCubit subscriptions: $e',
-          tag: 'HomeCubit');
+          tag: 'HomeCubit', error: e);
     }
   }
 
-  /// Initializes home state and starts auto-sync.
+  /// Coalesces rapid local Hive change events (e.g. bulk uploads / sync).
+  /// Note: Only recalculates local metrics and NEVER touches the network.
+  void _scheduleDebouncedLocalRefresh() {
+    if (isClosed) return;
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 350), () {
+      if (!isClosed) {
+        refreshLocalData();
+      }
+    });
+  }
+
+  /// Testing hook to invoke debounced refresh.
+  @visibleForTesting
+  void scheduleDebouncedLocalRefreshForTesting() =>
+      _scheduleDebouncedLocalRefresh();
+
+  /// Initializes home state with local cache immediately and starts auto-sync.
   Future<void> initialize() async {
     try {
       if (!ServiceLocator.instance.isInitialized) {
         await ServiceLocator.instance.init();
       }
       _initSubscriptions();
-      await refreshData();
-      sync();
-    } catch (e) {
-      emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
+      await refreshLocalData();
+      unawaited(enrichRemoteData());
+      unawaited(sync(userInitiated: false));
+    } catch (e, stack) {
+      AppLogger.e('HomeCubit initialization failed: $e',
+          tag: 'HomeCubit', error: e, stackTrace: stack);
+      if (!isClosed) {
+        emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
+      }
     }
   }
 
-  /// Refreshes user metrics, recent files, and quota stats.
-  Future<void> refreshData() async {
-    final email = await _repository.getUserEmail();
-    final recent = _repository.getRecentFiles(5);
-    final totalFiles = _repository.getTotalFiles();
-    final usedMb = _repository.getTotalSizeMb();
-    final totalShares = _repository.getTotalShares();
-    final totalDownloads = _repository.getTotalCompletedDownloads();
+  /// Phase 1: Pure 0ms Local Hive Cache Read (no network calls).
+  Future<void> refreshLocalData() async {
+    final requestId = ++_localRefreshRequestId;
 
-    Map<String, dynamic>? quota;
     try {
-      quota = await _repository.getWebShareQuota();
-    } catch (_) {}
+      final email = await _repository.getUserEmail();
+      final recent = _repository.getRecentFiles(5);
+      final totalFiles = _repository.getTotalFiles();
+      final usedMb = _repository.getTotalSizeMb();
+      final totalShares = _repository.getTotalShares();
+      final totalDownloads = _repository.getTotalCompletedDownloads();
 
-    String? name;
-    if (email != null) {
-      name = email.split('@').first;
-      if (name.isNotEmpty) {
-        name = name[0].toUpperCase() + name.substring(1);
+      String? name;
+      if (email != null) {
+        name = email.split('@').first;
+        if (name.isNotEmpty) {
+          name = name[0].toUpperCase() + name.substring(1);
+        }
       }
+
+      if (isClosed || requestId != _localRefreshRequestId) return;
+
+      emit(state.copyWith(
+        isLoading: false,
+        userName: name ?? state.userName,
+        userEmail: email ?? state.userEmail,
+        recentFiles: recent,
+        totalFiles: totalFiles,
+        storageUsedMb: usedMb,
+        totalShares: totalShares,
+        totalDownloads: totalDownloads,
+      ));
+    } catch (e) {
+      AppLogger.w('Local data read error in HomeCubit: $e',
+          tag: 'HomeCubit', error: e);
+    }
+  }
+
+  /// Phase 2: Parallel Remote Network Enrichment with content equality check and cooldown lock.
+  Future<void> enrichRemoteData({bool force = false}) async {
+    final now = DateTime.now();
+    if (!force &&
+        _lastEnrichTime != null &&
+        now.difference(_lastEnrichTime!).inSeconds < 5) {
+      return;
     }
 
-    AppMetadata? meta;
-    try {
-      meta = await _repository.getAppMetadata();
-    } catch (_) {}
+    // Claim slot immediately at invocation start to guard concurrent in-flight calls
+    _lastEnrichTime = now;
+    final requestId = ++_enrichRequestId;
 
-    emit(state.copyWith(
-      isLoading: false,
-      userName: name,
-      userEmail: email,
-      recentFiles: recent,
-      totalFiles: totalFiles,
-      storageUsedMb: usedMb,
-      totalShares: totalShares,
-      totalDownloads: totalDownloads,
-      metadata: meta,
-      webShareQuota: quota,
-    ));
+    try {
+      final (quota, meta) = await (
+        () async {
+          try {
+            return await _repository.getWebShareQuota();
+          } catch (e) {
+            AppLogger.w('Failed to fetch web share quota: $e',
+                tag: 'HomeCubit', error: e);
+            return null;
+          }
+        }(),
+        () async {
+          try {
+            return await _repository.getAppMetadata();
+          } catch (e) {
+            AppLogger.w('Failed to fetch app metadata: $e',
+                tag: 'HomeCubit', error: e);
+            return null;
+          }
+        }(),
+      ).wait;
+
+      if (isClosed || requestId != _enrichRequestId) return;
+
+      // Content equality deduplication
+      final isQuotaUnchanged =
+          quota == null || mapEquals(quota, state.webShareQuota);
+      final isMetaUnchanged =
+          meta == null || mapEquals(meta.toJson(), state.metadata?.toJson());
+
+      if (isQuotaUnchanged && isMetaUnchanged) return;
+
+      emit(state.copyWith(
+        webShareQuota: quota ?? state.webShareQuota,
+        metadata: meta ?? state.metadata,
+      ));
+    } catch (e) {
+      AppLogger.w('Background enrichment error in HomeCubit: $e',
+          tag: 'HomeCubit', error: e);
+    }
+  }
+
+  /// Backward-compatible unified refresh method for existing callers and tests.
+  Future<void> refreshData() async {
+    await refreshLocalData();
+    await enrichRemoteData(force: true);
   }
 
   /// Triggers cloud metadata synchronization with Telegram backend.
-  Future<void> sync() async {
+  Future<void> sync({bool userInitiated = false}) async {
     if (state.isSyncing) return;
 
     emit(state.copyWith(
@@ -239,10 +324,12 @@ class HomeCubit extends Cubit<HomeState> {
         },
       );
 
-      await refreshData();
+      await refreshLocalData();
+      unawaited(enrichRemoteData(force: userInitiated));
       emit(state.copyWith(isSyncing: false, syncStatus: 'Sync complete'));
-    } catch (e) {
-      AppLogger.e('HomeCubit: sync failed', tag: 'HomeCubit', error: e);
+    } catch (e, stack) {
+      AppLogger.e('HomeCubit: sync failed',
+          tag: 'HomeCubit', error: e, stackTrace: stack);
       emit(state.copyWith(isSyncing: false, errorMessage: 'Sync failed: $e'));
     }
   }
@@ -276,7 +363,7 @@ class HomeCubit extends Cubit<HomeState> {
   Future<void> renameFile(String fileId, String newName) async {
     try {
       await _repository.renameFile(fileId, newName);
-      await refreshData();
+      await refreshLocalData();
     } catch (e) {
       emit(state.copyWith(errorMessage: 'Failed to rename file: $e'));
     }
@@ -286,7 +373,7 @@ class HomeCubit extends Cubit<HomeState> {
   Future<void> deleteFile(String fileId) async {
     try {
       await _repository.deleteFile(fileId);
-      await refreshData();
+      await refreshLocalData();
     } catch (e) {
       emit(state.copyWith(errorMessage: 'Failed to delete file: $e'));
     }
@@ -297,6 +384,7 @@ class HomeCubit extends Cubit<HomeState> {
 
   @override
   Future<void> close() {
+    _debounceTimer?.cancel();
     _filesSubscription?.cancel();
     _foldersSubscription?.cancel();
     _domainEventSubscription?.cancel();

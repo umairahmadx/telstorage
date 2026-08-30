@@ -159,7 +159,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           body: RefreshIndicator(
-            onRefresh: () => context.read<HomeCubit>().sync(),
+            onRefresh: () =>
+                context.read<HomeCubit>().sync(userInitiated: true),
             color: colors.accentPrimary,
             backgroundColor: colors.bgSurface,
             child: SingleChildScrollView(

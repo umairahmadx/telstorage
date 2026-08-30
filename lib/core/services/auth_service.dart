@@ -15,6 +15,7 @@ class AuthService {
 
   final _storage = const FlutterSecureStorage();
   final _dio = Dio();
+  String? _cachedEmail;
 
   Future<Map<String, dynamic>> login(String email, String password) async {
     try {
@@ -28,6 +29,7 @@ class AuthService {
       );
 
       if (res.data['success'] == true) {
+        _cachedEmail = email;
         await _storage.write(
             key: AppConstants.keyBotToken, value: res.data['bot_token']);
         await _storage.write(
@@ -59,6 +61,7 @@ class AuthService {
         },
       );
       if (res.data['success'] == true) {
+        _cachedEmail = email;
         await _storage.write(key: AppConstants.keyBotToken, value: botToken);
         await _storage.write(key: AppConstants.keyChannelId, value: channelId);
         await _storage.write(key: AppConstants.keyEmail, value: email);
@@ -75,6 +78,7 @@ class AuthService {
   }
 
   Future<void> logout() async {
+    _cachedEmail = null;
     ServiceLocator.instance.reset();
     await _storage.deleteAll();
   }
@@ -83,5 +87,11 @@ class AuthService {
       _storage.read(key: AppConstants.keyBotToken);
   Future<String?> getChannelId() async =>
       _storage.read(key: AppConstants.keyChannelId);
-  Future<String?> getEmail() async => _storage.read(key: AppConstants.keyEmail);
+  Future<String?> getEmail() async {
+    if (_cachedEmail != null && _cachedEmail!.isNotEmpty) {
+      return _cachedEmail;
+    }
+    _cachedEmail = await _storage.read(key: AppConstants.keyEmail);
+    return _cachedEmail;
+  }
 }

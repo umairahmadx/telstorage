@@ -416,7 +416,7 @@ class MobileShellState extends State<MobileShell> {
   Future<void> _pickAndUpload() async {
     final picked = await FilePicker.platform
         .pickFiles(withData: kIsWeb, allowMultiple: true);
-    if (picked == null || picked.files.isEmpty) return;
+    if (!mounted || picked == null || picked.files.isEmpty) return;
 
     final browserState = context.read<BrowserBloc>().state;
     final currentFolderId =

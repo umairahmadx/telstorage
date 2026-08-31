@@ -14,8 +14,6 @@ import '../../../../core/services/service_locator.dart';
 import '../../../../core/services/transfer_queue_service.dart';
 import '../../../../core/utils/app_logger.dart';
 import '../../../../core/utils/connectivity.dart';
-import '../../../../core/utils/file_reader_stub.dart'
-    if (dart.library.io) '../../../../core/utils/file_reader_native.dart';
 import '../../../../core/utils/thumbnail_generator.dart';
 import '../../../../core/utils/thumbnail_helper_native.dart'
     if (dart.library.js_interop) '../../../../core/utils/thumbnail_helper_web.dart';

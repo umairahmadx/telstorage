@@ -7,7 +7,6 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:telstorage/core/errors/result.dart';
-import 'package:telstorage/core/models/transfer_task.dart';
 import 'package:telstorage/core/services/notification_service.dart';
 import 'package:telstorage/core/services/service_locator.dart';
 import 'package:telstorage/core/services/transfer_queue_service.dart';

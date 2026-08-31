@@ -37,7 +37,6 @@ class AppTransferTile extends StatelessWidget {
     required this.onCancel,
   });
 
-  @override
   Widget _buildBadge(SmartBadgeInfo badge) {
     return Container(
       width: 44,

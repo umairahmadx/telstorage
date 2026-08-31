@@ -97,7 +97,13 @@ class DownloadsSharedSection extends StatelessWidget {
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          url,
+                          job.isComplete
+                              ? url
+                              : (job.status == 'uploading'
+                                  ? 'Uploading to Web… ${(job.progress * 100).toInt()}%'
+                                  : (job.status == 'downloading'
+                                      ? 'Preparing share… ${(job.progress * 100).toInt()}%'
+                                      : 'Queued for share…')),
                           style: TextStyle(
                             color: colors.textSecondary,
                             fontSize: 12,
@@ -108,29 +114,42 @@ class DownloadsSharedSection extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: Icon(Icons.copy_rounded,
-                            color: colors.accentPrimary, size: 20),
-                        tooltip: 'Copy Link',
-                        onPressed: () => onCopyUrl(url),
-                      ),
-                      IconButton(
-                        icon: Icon(Icons.share_outlined,
-                            color: colors.textSecondary, size: 20),
-                        tooltip: 'Share',
-                        onPressed: () => onShareUrl(url),
-                      ),
-                      IconButton(
-                        icon: Icon(Icons.link_off_rounded,
-                            color: colors.error, size: 20),
-                        tooltip: 'Delete Link',
-                        onPressed: () => onDeleteShareLink(job.fileId, name),
-                      ),
-                    ],
-                  ),
+                  if (job.isComplete && url.isNotEmpty)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.copy_rounded,
+                              color: colors.accentPrimary, size: 20),
+                          tooltip: 'Copy Link',
+                          onPressed: () => onCopyUrl(url),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.share_outlined,
+                              color: colors.textSecondary, size: 20),
+                          tooltip: 'Share',
+                          onPressed: () => onShareUrl(url),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.link_off_rounded,
+                              color: colors.error, size: 20),
+                          tooltip: 'Delete Link',
+                          onPressed: () => onDeleteShareLink(job.fileId, name),
+                        ),
+                      ],
+                    )
+                  else
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.cancel_outlined,
+                              color: colors.error, size: 20),
+                          tooltip: 'Cancel Share',
+                          onPressed: () => onDeleteShareLink(job.fileId, name),
+                        ),
+                      ],
+                    ),
                 ],
               ),
             ),

@@ -12,6 +12,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../../core/utils/app_logger.dart';
 import '../../core/utils/battery_optimization_helper.dart';
 import '../../core/utils/file_opener_helper.dart';
+import '../../core/utils/storage_permission_helper.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/navigation/navigation_intent.dart';
@@ -298,6 +299,10 @@ class MobileShellState extends State<MobileShell> {
 
   /// Opens directory picker and enqueues folder files with hierarchy for upload.
   Future<void> _pickAndUploadFolder() async {
+    final hasPermission =
+        await StoragePermissionHelper.ensureStoragePermission(context);
+    if (!hasPermission || !mounted) return;
+
     final dirPath = await FilePicker.platform.getDirectoryPath();
     if (dirPath == null || dirPath.isEmpty) return;
 
@@ -413,6 +418,10 @@ class MobileShellState extends State<MobileShell> {
         .pickFiles(withData: kIsWeb, allowMultiple: true);
     if (picked == null || picked.files.isEmpty) return;
 
+    final browserState = context.read<BrowserBloc>().state;
+    final currentFolderId =
+        _currentIndex == 1 ? browserState.currentFolderId : null;
+
     final List<UploadTask> tasks = [];
     const uuid = Uuid();
     for (final file in picked.files) {
@@ -424,6 +433,7 @@ class MobileShellState extends State<MobileShell> {
         bytes: file.bytes,
         name: file.name,
         size: file.size,
+        folderId: currentFolderId,
         isTemporaryCacheFile: !kIsWeb,
       ));
     }

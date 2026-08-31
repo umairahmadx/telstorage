@@ -5,6 +5,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:telstorage/core/models/transfer_task.dart';
+import 'package:telstorage/core/services/service_locator.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
 import 'package:telstorage/shared/widgets/app_surface_card.dart';
 import 'package:telstorage/shared/widgets/thumbnail_widget.dart';
@@ -37,24 +38,73 @@ class AppTransferTile extends StatelessWidget {
   });
 
   @override
+  Widget _buildBadge(SmartBadgeInfo badge) {
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: badge.bgColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Center(
+        child: Icon(
+          badge.icon,
+          color: badge.iconColor,
+          size: 22,
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
     final badge = SmartBadgeInfo.resolve(task.name, '', colors);
 
-    final pct = (task.progress * 100).toInt();
-    final subtitleParts = <String>['$pct%'];
-    if (task.sizeMb > 0) {
-      final transferred = (task.progress * task.sizeMb).toStringAsFixed(1);
-      final total = task.sizeMb.toStringAsFixed(1);
-      subtitleParts.add('$transferred / $total MB');
-    }
-    if (task.speedKbps > 0 && task.speedKbps.isFinite && !task.speedKbps.isNaN) {
-      subtitleParts.add('${(task.speedKbps / 1024).toStringAsFixed(1)} MB/s');
-    }
-    if (task.currentStage != null && task.currentStage!.isNotEmpty) {
-      subtitleParts.add(task.currentStage!);
+    final subtitleParts = <String>[];
+    if (task.status == TransferStatus.waiting ||
+        task.status == TransferStatus.pending) {
+      if (task.sizeMb > 0) {
+        subtitleParts.add('${task.sizeMb.toStringAsFixed(1)} MB');
+      }
+      subtitleParts.add(task.currentStage ?? 'Waiting in queue…');
+    } else {
+      final pct = (task.progress * 100).toInt();
+      subtitleParts.add('$pct%');
+      if (task.sizeMb > 0) {
+        final transferred = (task.progress * task.sizeMb).toStringAsFixed(1);
+        final total = task.sizeMb.toStringAsFixed(1);
+        subtitleParts.add('$transferred / $total MB');
+      }
+      if (task.speedKbps > 0 &&
+          task.speedKbps.isFinite &&
+          !task.speedKbps.isNaN) {
+        subtitleParts
+            .add('${(task.speedKbps / 1024).toStringAsFixed(1)} MB/s');
+      }
+      if (task.currentStage != null && task.currentStage!.isNotEmpty) {
+        subtitleParts.add(task.currentStage!);
+      }
     }
     final subtitle = subtitleParts.join(' • ');
+
+    final cachedThumb = ServiceLocator.instance.isInitialized
+        ? ServiceLocator.instance.thumbnailRepository
+            .getMemoryCachedBytes(task.id)
+        : null;
+
+    final Widget leadingWidget = cachedThumb != null
+        ? ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.memory(
+              cachedThumb,
+              width: 44,
+              height: 44,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => _buildBadge(badge),
+            ),
+          )
+        : _buildBadge(badge);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -67,21 +117,7 @@ class AppTransferTile extends StatelessWidget {
           children: [
             Row(
               children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: badge.bgColor,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Center(
-                    child: Icon(
-                      badge.icon,
-                      color: badge.iconColor,
-                      size: 22,
-                    ),
-                  ),
-                ),
+                leadingWidget,
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(

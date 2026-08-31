@@ -186,5 +186,39 @@ void main() {
         await box.close();
       }
     });
+
+    test(
+        'TC-04: Active TransferType.share task is marked active and updates stage and progress',
+        () async {
+      final task = TransferTask(
+        id: 'share_job_123',
+        name: 'SharedVideo.mp4',
+        type: TransferType.share,
+        sizeMb: 25.0,
+        addedAt: DateTime.now(),
+        status: TransferStatus.sharing,
+        currentStage: 'Uploading to Web… 50%',
+        progress: 0.50,
+      );
+
+      TransferQueueService.instance.addTask(task);
+
+      final active = TransferQueueService.instance.activeTasks;
+      expect(active.length, equals(1));
+      expect(active.first.type, equals(TransferType.share));
+      expect(active.first.isActive, isTrue);
+      expect(active.first.progress, equals(0.50));
+      expect(active.first.currentStage, equals('Uploading to Web… 50%'));
+
+      TransferQueueService.instance.updateTask(
+        'share_job_123',
+        progress: 0.90,
+        currentStage: 'Uploading to Web… 90%',
+      );
+
+      final updated = TransferQueueService.instance.activeTasks.first;
+      expect(updated.progress, equals(0.90));
+      expect(updated.currentStage, equals('Uploading to Web… 90%'));
+    });
   });
 }

@@ -7,8 +7,10 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:telstorage/core/errors/result.dart';
+import 'package:telstorage/core/models/transfer_task.dart';
 import 'package:telstorage/core/services/notification_service.dart';
 import 'package:telstorage/core/services/service_locator.dart';
+import 'package:telstorage/core/services/transfer_queue_service.dart';
 import 'package:telstorage/core/services/upload_service.dart';
 import 'package:telstorage/features/upload/presentation/viewmodels/upload_view_model.dart';
 
@@ -16,6 +18,7 @@ class _MockUploadService implements UploadService {
   int concurrentActive = 0;
   int peakConcurrent = 0;
   final List<String> uploadedFiles = [];
+  final Map<String, String?> uploadedFolderIds = {};
   final Duration delay = const Duration(milliseconds: 20);
 
   _MockUploadService();
@@ -30,6 +33,10 @@ class _MockUploadService implements UploadService {
     String? folderId,
     Function(double progress, String status) onProgress, {
     bool skipGlobalMetadataUpdate = false,
+    String? taskId,
+    String? precomputedHash,
+    Uint8List? precomputedThumbnailBytes,
+    String? thumbnailExtension,
   }) async {
     concurrentActive++;
     if (concurrentActive > peakConcurrent) {
@@ -41,6 +48,7 @@ class _MockUploadService implements UploadService {
     onProgress(1.0, 'Done');
 
     uploadedFiles.add(name);
+    uploadedFolderIds[name] = folderId;
     concurrentActive--;
     return Success({'file_id': 'f_$name', 'name': name});
   }
@@ -245,6 +253,68 @@ void main() {
       // Now fileB should also be cleaned up after its own upload
       expect(await fileB.exists(), isFalse);
 
+      await bloc.close();
+    });
+
+    test('Test 5: Preserves folderId on queued UploadTask and delivers it to uploadFile',
+        () async {
+      final file = File('${tempDir.path}/nested_doc.pdf');
+      await file.writeAsBytes(Uint8List.fromList([1, 2, 3, 4, 5]));
+
+      final task = UploadTask(
+        id: 'task_nested_1',
+        path: file.path,
+        name: 'nested_doc.pdf',
+        folderId: 'folder_target_456',
+        isTemporaryCacheFile: false,
+      );
+
+      final bloc = UploadBloc();
+      bloc.add(AddUploads([task]));
+
+      while (!mockUploadService.uploadedFiles.contains('nested_doc.pdf')) {
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(mockUploadService.uploadedFolderIds['nested_doc.pdf'],
+          equals('folder_target_456'));
+
+      await bloc.close();
+    });
+
+    test(
+        'Test 6: All queued upload tasks are immediately registered in TransferQueueService with waiting state',
+        () async {
+      TransferQueueService.instance.clearAll();
+
+      final List<UploadTask> tasks = [];
+      for (int i = 0; i < 6; i++) {
+        final f = File('${tempDir.path}/batch_file_$i.txt');
+        await f.writeAsString('Test payload $i');
+        tasks.add(UploadTask(
+          id: 'queue_task_$i',
+          path: f.path,
+          name: 'batch_file_$i.txt',
+          size: 14,
+        ));
+      }
+
+      final bloc = UploadBloc();
+      bloc.add(AddUploads(tasks));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      // Immediately all 6 tasks should be registered in TransferQueueService
+      final registered = TransferQueueService.instance.tasks;
+      expect(registered.length, equals(6));
+
+      // Wait for all 6 tasks to finish
+      while (mockUploadService.uploadedFiles.length < 6) {
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(mockUploadService.uploadedFiles.length, equals(6));
       await bloc.close();
     });
   });

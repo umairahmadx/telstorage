@@ -4,211 +4,29 @@
  */
 
 import 'dart:typed_data';
+import 'package:crypto/crypto.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:mime/mime.dart';
 import '../../../../core/errors/result.dart';
+import '../../../../core/models/transfer_task.dart';
 import '../../../../core/services/notification_service.dart';
 import '../../../../core/services/service_locator.dart';
+import '../../../../core/services/transfer_queue_service.dart';
 import '../../../../core/utils/app_logger.dart';
 import '../../../../core/utils/connectivity.dart';
 import '../../../../core/utils/file_reader_stub.dart'
     if (dart.library.io) '../../../../core/utils/file_reader_native.dart';
+import '../../../../core/utils/thumbnail_generator.dart';
+import '../../../../core/utils/thumbnail_helper_native.dart'
+    if (dart.library.js_interop) '../../../../core/utils/thumbnail_helper_web.dart';
 
-// ── Upload Task Definition ───────────────────────────────────────────────────
+import 'upload_task.dart';
+import 'upload_event.dart';
+import 'upload_state.dart';
 
-/// Immutable description of a queued upload payload.
-class UploadTask {
-  /// Unique task ID.
-  final String id;
-
-  /// Raw file bytes (populated on Web or for in-memory sources).
-  final Uint8List? bytes;
-
-  /// Absolute filesystem path (populated on Native platforms).
-  final String? path;
-
-  /// Original file name.
-  final String name;
-
-  /// Approximate file size in bytes if known.
-  final int? size;
-
-  /// Destination folder ID.
-  final String? folderId;
-
-  /// Whether this path points to a temporary cache file that should be deleted upon upload.
-  final bool isTemporaryCacheFile;
-
-  /// Constructs an UploadTask.
-  UploadTask({
-    required this.id,
-    this.bytes,
-    this.path,
-    required this.name,
-    this.size,
-    this.folderId,
-    this.isTemporaryCacheFile = false,
-  }) : assert(bytes != null || path != null,
-            'UploadTask must have either in-memory bytes or a filesystem path.');
-
-  /// Reads bytes on-demand for execution, releasing immediately after upload.
-  Future<Uint8List> getBytes() async {
-    if (bytes != null) return bytes!;
-    if (path != null) return await readFileBytes(path!);
-    throw StateError('UploadTask has neither bytes nor valid path.');
-  }
-
-  /// Deletes the temporary cache file if marked as temporary.
-  Future<void> cleanupCacheFile() async {
-    if (isTemporaryCacheFile && path != null) {
-      await deleteFileIfExists(path!);
-    }
-  }
-}
-
-// ── Events ────────────────────────────────────────────────────────────────────
-
-/// Base abstract event for upload operations.
-sealed class UploadEvent {}
-
-/// Starts upload of a single file payload.
-class StartUpload extends UploadEvent {
-  /// File bytes.
-  final Uint8List bytes;
-
-  /// File name.
-  final String name;
-
-  /// Destination folder ID.
-  final String? folderId;
-
-  /// Constructs StartUpload event.
-  StartUpload({required this.bytes, required this.name, this.folderId});
-}
-
-/// Appends a batch of UploadTasks to queue.
-class AddUploads extends UploadEvent {
-  /// List of upload tasks.
-  final List<UploadTask> tasks;
-
-  /// Constructs AddUploads event.
-  AddUploads(this.tasks);
-}
-
-/// Cancels a queued upload task by ID.
-class CancelUploadTask extends UploadEvent {
-  /// Unique task identifier.
-  final String taskId;
-
-  /// Constructs CancelUploadTask event.
-  CancelUploadTask(this.taskId);
-}
-
-/// Internal event triggering queue processing.
-class _ProcessNextUpload extends UploadEvent {}
-
-/// Event emitted on upload progress tick.
-class UploadProgressUpdated extends UploadEvent {
-  /// Progress fraction (0.0 to 1.0).
-  final double progress;
-
-  /// Progress message text.
-  final String status;
-
-  /// Constructs UploadProgressUpdated event.
-  UploadProgressUpdated(this.progress, this.status);
-}
-
-/// Event emitted when an upload completes.
-class UploadCompleted extends UploadEvent {}
-
-/// Event emitted when an upload fails.
-class UploadFailed extends UploadEvent {
-  /// Error message description.
-  final String message;
-
-  /// Associated file name.
-  final String fileName;
-
-  /// Constructs UploadFailed event.
-  UploadFailed(this.message, {required this.fileName});
-}
-
-/// Resets upload queue to idle state.
-class ResetUpload extends UploadEvent {}
-
-// ── States ────────────────────────────────────────────────────────────────────
-
-/// Base abstract state for upload lifecycle.
-sealed class UploadState {}
-
-/// Idle state when no uploads are active.
-class UploadIdle extends UploadState {}
-
-/// State representing an active upload in progress.
-class UploadInProgress extends UploadState {
-  /// Current progress fraction (0.0 to 1.0).
-  final double progress;
-
-  /// Textual description of progress stage.
-  final String status;
-
-  /// Name of file currently being uploaded.
-  final String fileName;
-
-  /// Number of completed tasks in current batch.
-  final int completedCount;
-
-  /// Total number of tasks in batch.
-  final int totalCount;
-
-  /// Constructs UploadInProgress state.
-  UploadInProgress({
-    required this.progress,
-    required this.status,
-    required this.fileName,
-    this.completedCount = 0,
-    this.totalCount = 1,
-  });
-}
-
-/// State indicating batch upload completed successfully.
-class UploadSuccess extends UploadState {
-  /// Summary description of uploaded file(s).
-  final String fileName;
-
-  /// Constructs UploadSuccess state.
-  UploadSuccess(this.fileName);
-}
-
-/// Global upload failure state.
-class UploadError extends UploadState {
-  /// Error message string.
-  final String message;
-
-  /// Constructs UploadError state.
-  UploadError(this.message);
-}
-
-/// State representing single file failure within a batch.
-class UploadSingleError extends UploadState {
-  /// File name that failed.
-  final String fileName;
-
-  /// Error message.
-  final String message;
-
-  /// Constructs UploadSingleError state.
-  UploadSingleError({required this.fileName, required this.message});
-}
-
-/// State indicating upload is paused awaiting internet reconnection.
-class UploadWaitingForNetwork extends UploadState {
-  /// File name paused on.
-  final String fileName;
-
-  /// Constructs UploadWaitingForNetwork state.
-  UploadWaitingForNetwork(this.fileName);
-}
+export 'upload_task.dart';
+export 'upload_event.dart';
+export 'upload_state.dart';
 
 // ── ViewModel (Bloc) ──────────────────────────────────────────────────────────
 
@@ -232,6 +50,9 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
   /// Flag indicating if queue is blocked on network connectivity.
   bool _isWaitingForNetwork = false;
 
+  /// Flag indicating if background pre-processing loop is running.
+  bool _isPreProcessing = false;
+
   /// Maximum concurrent upload workers.
   static const int _maxConcurrentWorkers = 3;
 
@@ -240,7 +61,7 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
     on<StartUpload>(_onStartUpload);
     on<AddUploads>(_onAddUploads);
     on<CancelUploadTask>(_onCancelUploadTask);
-    on<_ProcessNextUpload>(_onProcessNextUpload);
+    on<ProcessNextUpload>(_onProcessNextUpload);
     on<UploadProgressUpdated>(_onUploadProgressUpdated);
     on<UploadCompleted>(_onUploadCompleted);
     on<UploadFailed>(_onUploadFailed);
@@ -264,6 +85,23 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
     _queue.addAll(event.tasks);
     _totalCount += event.tasks.length;
 
+    for (final task in event.tasks) {
+      final sizeMb = (task.size != null && task.size! > 0)
+          ? task.size! / 1048576
+          : (task.bytes != null ? task.bytes!.length / 1048576 : 0.0);
+      TransferQueueService.instance.addTask(TransferTask(
+        id: task.id,
+        name: task.name,
+        type: TransferType.upload,
+        sizeMb: sizeMb,
+        addedAt: DateTime.now(),
+        status: TransferStatus.waiting,
+        currentStage: 'Waiting in queue…',
+      ));
+    }
+
+    _triggerBackgroundPreProcessing();
+
     // Proactively start Foreground Service and CPU wakelock in foreground context
     NotificationService.instance.startTransferSession(
       title: event.tasks.length == 1
@@ -276,20 +114,69 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
       final workersToSpawn =
           (_maxConcurrentWorkers - _activeWorkers).clamp(0, _queue.length);
       for (int i = 0; i < workersToSpawn; i++) {
-        add(_ProcessNextUpload());
+        add(ProcessNextUpload());
       }
+    }
+  }
+
+  /// Non-blocking background worker pre-generating hashes and thumbnails.
+  Future<void> _triggerBackgroundPreProcessing() async {
+    if (_isPreProcessing) return;
+    _isPreProcessing = true;
+    try {
+      while (_queue.isNotEmpty) {
+        final pending = _queue
+            .cast<UploadTask?>()
+            .firstWhere((t) => t != null && t.precomputedHash == null, orElse: () => null);
+        if (pending == null) break;
+
+        if (TransferQueueService.instance.isCancelled(pending.id)) {
+          continue;
+        }
+
+        try {
+          final Uint8List b = await pending.getBytes();
+          pending.precomputedHash = sha256.convert(b).toString();
+
+          final mime = lookupMimeType(pending.name) ?? 'application/octet-stream';
+          final thumb = await ThumbnailGenerator.generate(
+            bytes: b,
+            filename: pending.name,
+            mimeType: mime,
+          );
+          if (thumb != null) {
+            pending.precomputedThumbnailBytes = thumb.bytes;
+            pending.thumbnailExtension = thumb.extension;
+            try {
+              if (ServiceLocator.instance.isInitialized) {
+                ServiceLocator.instance.thumbnailRepository
+                    .addToMemoryCache(pending.id, thumb.bytes);
+              }
+              await ThumbnailHelper.cacheThumbnail(pending.id, thumb.bytes);
+            } catch (_) {}
+          }
+          TransferQueueService.instance.updateTask(
+            pending.id,
+            currentStage: 'Ready in queue',
+          );
+        } catch (_) {}
+        await Future.delayed(const Duration(milliseconds: 50));
+      }
+    } finally {
+      _isPreProcessing = false;
     }
   }
 
   /// Cancels a queued upload task before it executes.
   void _onCancelUploadTask(CancelUploadTask event, Emitter<UploadState> emit) {
     _queue.removeWhere((task) => task.id == event.taskId);
+    TransferQueueService.instance.cancelTask(event.taskId);
     if (_totalCount > 0) _totalCount--;
   }
 
   /// Worker execution handler processing individual upload tasks.
   Future<void> _onProcessNextUpload(
-      _ProcessNextUpload event, Emitter<UploadState> emit) async {
+      ProcessNextUpload event, Emitter<UploadState> emit) async {
     if (_queue.isEmpty && _activeWorkers == 0) {
       if (_completedBatchMeta.isNotEmpty) {
         try {
@@ -315,6 +202,12 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
     }
 
     final task = _queue.removeAt(0);
+
+    if (TransferQueueService.instance.isCancelled(task.id)) {
+      await task.cleanupCacheFile();
+      if (!isClosed) add(ProcessNextUpload());
+      return;
+    }
 
     final isOnline = await Connectivity.hasConnection();
     if (!isOnline) {
@@ -364,6 +257,10 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
         }
       },
       skipGlobalMetadataUpdate: isBatch,
+      taskId: task.id,
+      precomputedHash: task.precomputedHash,
+      precomputedThumbnailBytes: task.precomputedThumbnailBytes,
+      thumbnailExtension: task.thumbnailExtension,
     );
 
     switch (result) {
@@ -425,7 +322,7 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
   void _onUploadCompleted(UploadCompleted event, Emitter<UploadState> emit) {
     _completedCount++;
     _activeWorkers--;
-    if (!isClosed) add(_ProcessNextUpload());
+    if (!isClosed) add(ProcessNextUpload());
   }
 
   /// Marks a single upload task as failed.
@@ -433,11 +330,14 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
     _completedCount++;
     _activeWorkers--;
     emit(UploadSingleError(fileName: event.fileName, message: event.message));
-    if (!isClosed) add(_ProcessNextUpload());
+    if (!isClosed) add(ProcessNextUpload());
   }
 
   /// Clears active upload state.
   void _onResetUpload(ResetUpload event, Emitter<UploadState> emit) {
+    for (final task in _queue) {
+      TransferQueueService.instance.cancelTask(task.id);
+    }
     _queue.clear();
     _totalCount = 0;
     _completedCount = 0;
@@ -457,7 +357,7 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
         for (int i = _activeWorkers;
             i < _maxConcurrentWorkers && _queue.isNotEmpty;
             i++) {
-          add(_ProcessNextUpload());
+          add(ProcessNextUpload());
         }
         break;
       }

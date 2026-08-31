@@ -59,6 +59,61 @@ abstract final class UploadFolderHelper {
     final String cleanRootName =
         rootDirName.isEmpty ? 'Uploaded Folder' : rootDirName;
 
+    // Discover directories and files via resilient queue-based traversal
+    final discoveredDirectories = <Directory>[];
+    final discoveredFiles = <File>[];
+    final visitedPaths = <String>{};
+    final queue = <Directory>[rootDir];
+    bool rootReadSuccess = false;
+
+    while (queue.isNotEmpty) {
+      final currentDir = queue.removeAt(0);
+      final currentNormalized = p.normalize(currentDir.path);
+      if (visitedPaths.contains(currentNormalized)) continue;
+      visitedPaths.add(currentNormalized);
+
+      try {
+        final stream = currentDir.list(followLinks: false);
+        await for (final entity in stream) {
+          if (entity is Directory) {
+            discoveredDirectories.add(entity);
+            queue.add(entity);
+          } else if (entity is File) {
+            discoveredFiles.add(entity);
+          } else if (entity is Link) {
+            try {
+              final targetType = await FileSystemEntity.type(entity.path);
+              if (targetType == FileSystemEntityType.file) {
+                discoveredFiles.add(File(entity.path));
+              } else if (targetType == FileSystemEntityType.directory) {
+                final targetDir = Directory(entity.path);
+                discoveredDirectories.add(targetDir);
+                queue.add(targetDir);
+              }
+            } catch (_) {}
+          }
+        }
+        if (currentDir.path == rootDir.path) {
+          rootReadSuccess = true;
+        }
+      } on FileSystemException catch (e) {
+        AppLogger.w(
+          'Directory traversal restricted for ${currentDir.path}: $e',
+          tag: 'UploadFolderHelper',
+        );
+        if (currentDir.path == rootDir.path && !rootReadSuccess) {
+          throw const FolderInaccessibleException(
+            'Unable to read folder contents due to OS storage restrictions. Please grant storage access or select an accessible folder.',
+          );
+        }
+      } catch (e) {
+        AppLogger.w(
+          'Unexpected error reading directory ${currentDir.path}: $e',
+          tag: 'UploadFolderHelper',
+        );
+      }
+    }
+
     // Step 1: Create or find root folder in TelStorage
     final existingRootFolders =
         storageRepository.getFolders(targetParentFolderId);
@@ -89,58 +144,45 @@ abstract final class UploadFolderHelper {
       '.': rootFolderId,
     };
 
-    final List<File> discoveredFiles = [];
     int foldersCreated = 1;
 
-    // Step 2: Traverse directory recursively with strict FileSystemException guard
-    try {
-      final entities = await rootDir
-          .list(recursive: true, followLinks: false)
-          .toList();
+    // Step 2: Sort subdirectories by depth so parent directories are created first
+    discoveredDirectories.sort((a, b) {
+      final relA = p.relative(a.path, from: dirPath);
+      final relB = p.relative(b.path, from: dirPath);
+      return relA.length.compareTo(relB.length);
+    });
 
-      // First sort entities: directories before files to ensure parents are created first
-      final directories = entities.whereType<Directory>().toList();
-      final files = entities.whereType<File>().toList();
+    for (final subDir in discoveredDirectories) {
+      final relPath = p.relative(subDir.path, from: dirPath);
+      final normalizedRelPath = p.normalize(relPath).replaceAll('\\', '/');
 
-      for (final subDir in directories) {
-        final relPath = p.relative(subDir.path, from: dirPath);
-        final normalizedRelPath = p.normalize(relPath).replaceAll('\\', '/');
+      if (normalizedRelPath.isEmpty || normalizedRelPath == '.') continue;
 
-        if (normalizedRelPath.isEmpty || normalizedRelPath == '.') continue;
+      final parentRelPath = p.dirname(normalizedRelPath);
+      final parentNormalized = parentRelPath == '.' ? '' : parentRelPath;
+      final parentFolderId =
+          dirPathToFolderId[parentNormalized] ?? rootFolderId;
+      final folderName = p.basename(normalizedRelPath);
 
-        final parentRelPath = p.dirname(normalizedRelPath);
-        final parentNormalized = parentRelPath == '.' ? '' : parentRelPath;
-        final parentFolderId =
-            dirPathToFolderId[parentNormalized] ?? rootFolderId;
-        final folderName = p.basename(normalizedRelPath);
+      // Check if folder already exists in TelStorage or create it
+      final existingChildren = storageRepository.getFolders(parentFolderId);
+      final existingMatch = existingChildren
+          .cast<FolderRecord?>()
+          .firstWhere((f) => f?.name == folderName, orElse: () => null);
 
-        // Check if folder exists or create it
-        final existingChildren = storageRepository.getFolders(parentFolderId);
-        final existingMatch = existingChildren
-            .cast<FolderRecord?>()
-            .firstWhere((f) => f?.name == folderName, orElse: () => null);
-
-        if (existingMatch != null) {
-          dirPathToFolderId[normalizedRelPath] = existingMatch.id;
-        } else {
-          final res = await storageRepository.createFolder(
-            folderName,
-            parentId: parentFolderId,
-          );
-          if (res is Success<String>) {
-            dirPathToFolderId[normalizedRelPath] = res.data;
-            foldersCreated++;
-          }
+      if (existingMatch != null) {
+        dirPathToFolderId[normalizedRelPath] = existingMatch.id;
+      } else {
+        final res = await storageRepository.createFolder(
+          folderName,
+          parentId: parentFolderId,
+        );
+        if (res is Success<String>) {
+          dirPathToFolderId[normalizedRelPath] = res.data;
+          foldersCreated++;
         }
       }
-
-      discoveredFiles.addAll(files);
-    } on FileSystemException catch (e) {
-      AppLogger.w('Directory traversal restricted by OS permissions: $e',
-          tag: 'UploadFolderHelper');
-      throw const FolderInaccessibleException(
-        'Unable to read folder contents due to OS storage restrictions. Please pick files directly or select an accessible folder.',
-      );
     }
 
     // Step 3: Build path-backed UploadTask instances (isTemporaryCacheFile: false)
@@ -155,7 +197,10 @@ abstract final class UploadFolderHelper {
           dirPathToFolderId[normalizedRelDirPath == '.' ? '' : normalizedRelDirPath] ??
               rootFolderId;
 
-      final fileSize = await file.length();
+      int fileSize = 0;
+      try {
+        fileSize = await file.length();
+      } catch (_) {}
       totalSizeBytes += fileSize;
 
       tasks.add(

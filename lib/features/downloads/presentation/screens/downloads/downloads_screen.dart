@@ -258,7 +258,9 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
             if (_activeTab == 1 && t.type != TransferType.upload) {
               return false;
             }
-            if (_activeTab == 2) return false;
+            if (_activeTab == 2 && t.type != TransferType.share) {
+              return false;
+            }
             if (query.isNotEmpty && !t.name.toLowerCase().contains(query)) {
               return false;
             }
@@ -285,10 +287,11 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
             return true;
           }).toList();
 
-          // Shared links
+          // Completed shared links
           final sharedLinks = state.shareJobs.where((s) {
+            if (!s.isComplete) return false;
             final f = context.read<TransferCubit>().getFile(s.fileId);
-            final name = f?.name ?? 'Shared File';
+            final name = f?.name ?? s.name;
             if (query.isNotEmpty && !name.toLowerCase().contains(query)) {
               return false;
             }

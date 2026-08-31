@@ -80,6 +80,22 @@ String resolveSafeFilename(String filename) {
   return clean.isEmpty ? 'unnamed_file' : clean;
 }
 
+/// Tests if a directory can be written to by creating and deleting a probe file.
+Future<bool> _isDirWritable(Directory dir) async {
+  try {
+    if (!dir.existsSync()) {
+      await dir.create(recursive: true);
+    }
+    final probe = File(p.join(
+        dir.path, '.write_test_${DateTime.now().microsecondsSinceEpoch}'));
+    await probe.writeAsString('test', flush: true);
+    if (probe.existsSync()) await probe.delete();
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 /// Resolves the destination directory on the device.
 Future<Directory> resolveTargetDirectory({String? subpath}) async {
   final cleanSubpath =
@@ -88,24 +104,25 @@ Future<Directory> resolveTargetDirectory({String? subpath}) async {
     try {
       final dlPath = await _androidDownloadsPath();
       final dir = Directory(p.join(dlPath, 'TelStorage', cleanSubpath));
-      if (!dir.existsSync()) {
-        await dir.create(recursive: true);
+      if (await _isDirWritable(dir)) return dir;
+    } catch (_) {}
+
+    try {
+      final ext = await getExternalStorageDirectory();
+      if (ext != null) {
+        final extDir = Directory(p.join(ext.path, 'TelStorage', cleanSubpath));
+        if (await _isDirWritable(extDir)) return extDir;
       }
-      return dir;
-    } catch (_) {
-      final appDir = await getApplicationDocumentsDirectory();
-      final dir = Directory(p.join(appDir.path, 'TelStorage', cleanSubpath));
-      if (!dir.existsSync()) {
-        await dir.create(recursive: true);
-      }
-      return dir;
-    }
+    } catch (_) {}
+
+    final appDir = await getApplicationDocumentsDirectory();
+    final dir = Directory(p.join(appDir.path, 'TelStorage', cleanSubpath));
+    if (!dir.existsSync()) await dir.create(recursive: true);
+    return dir;
   } else if (Platform.isIOS) {
     final dir = await getApplicationDocumentsDirectory();
     final targetDir = Directory(p.join(dir.path, 'TelStorage', cleanSubpath));
-    if (!targetDir.existsSync()) {
-      await targetDir.create(recursive: true);
-    }
+    if (!targetDir.existsSync()) await targetDir.create(recursive: true);
     return targetDir;
   } else {
     Directory dir;
@@ -116,9 +133,7 @@ Future<Directory> resolveTargetDirectory({String? subpath}) async {
       dir = Directory.systemTemp;
     }
     final targetDir = Directory(p.join(dir.path, 'TelStorage', cleanSubpath));
-    if (!targetDir.existsSync()) {
-      await targetDir.create(recursive: true);
-    }
+    if (!targetDir.existsSync()) await targetDir.create(recursive: true);
     return targetDir;
   }
 }
@@ -214,7 +229,15 @@ Future<void> _writeWithAtomicRename(File targetFile, Uint8List bytes) async {
       } catch (_) {}
     }
 
-    await tempFile.rename(targetFile.path);
+    try {
+      await tempFile.rename(targetFile.path);
+    } catch (_) {
+      // Fallback if cross-device / partition atomic rename fails
+      await tempFile.copy(targetFile.path);
+      try {
+        if (tempFile.existsSync()) await tempFile.delete();
+      } catch (_) {}
+    }
   } catch (e) {
     if (tempFile.existsSync()) {
       try {
@@ -272,43 +295,28 @@ Future<NativeSaveResult> _saveAndroid(
   required DownloadConflictPolicy policy,
 }) async {
   try {
-    final sdkInt = await _androidSdk();
-    if (sdkInt < 29) {
-      final status = await Permission.storage.request();
-      if (status.isDenied || status.isPermanentlyDenied) {
-        return const NativeSaveResult(
-          success: false,
-          message: '❌ Storage permission denied. Please allow in app Settings.',
-        );
+    try {
+      final manageStatus = await Permission.manageExternalStorage.status;
+      if (!manageStatus.isGranted) {
+        await Permission.storage.request();
       }
-    }
+    } catch (_) {}
 
-    final dlPath = await _androidDownloadsPath();
-    final targetDir = Directory(p.join(dlPath, 'TelStorage', subpath));
+    final targetDir = await resolveTargetDirectory(subpath: subpath);
     final file = File(p.join(targetDir.path, filename));
     await _writeWithAtomicRename(file, bytes);
     AppLogger.i('Android: saved to ${file.path}', tag: 'SaveHelper');
 
+    final isPublic = file.path.contains('/Download');
     return NativeSaveResult(
       success: true,
       savedPath: file.path,
-      message: '✅ Saved to Downloads: TelStorage/$subpath/$filename',
+      message: isPublic
+          ? '✅ Saved to Downloads: TelStorage/$subpath/$filename'
+          : '✅ Saved to app storage: TelStorage/$subpath/$filename',
     );
   } catch (e) {
-    // Secondary fallback to app Documents
-    try {
-      final dir = await getApplicationDocumentsDirectory();
-      final targetDir = Directory(p.join(dir.path, 'TelStorage', subpath));
-      final file = File(p.join(targetDir.path, filename));
-      await _writeWithAtomicRename(file, bytes);
-      return NativeSaveResult(
-        success: true,
-        savedPath: file.path,
-        message: '✅ Saved to app storage: TelStorage/$subpath/$filename',
-      );
-    } catch (e2) {
-      return NativeSaveResult(success: false, message: '❌ Save failed: $e2');
-    }
+    return NativeSaveResult(success: false, message: '❌ Save failed: $e');
   }
 }
 
@@ -380,8 +388,4 @@ Future<String> _androidDownloadsPath() async {
     }
   } catch (_) {}
   return '/storage/emulated/0/Download';
-}
-
-Future<int> _androidSdk() async {
-  return 29;
 }

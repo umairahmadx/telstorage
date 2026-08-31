@@ -35,16 +35,7 @@ import '../errors/result.dart';
 import '../events/domain_event_bus.dart';
 import 'upload_service_contract.dart';
 
-/// Handles file upload pipeline — non-blocking on Flutter web (single JS thread).
-///
-/// Strategy:
-///   • Files ≤ 19 MB  →  upload directly as original filename.
-///   • Files > 19 MB  →  wrap in ZIP (STORE mode, no DEFLATE compression) →
-///                        split into 19 MB parts → upload each as name.zip.001…
-///
-/// SHA-256 is computed in 1 MB chunks with event-loop yields between each
-/// chunk so the UI never freezes.  ZIP uses STORE mode which is near-instant
-/// (no CPU compression needed since MP4/JPG/etc are already compressed).
+/// Handles chunked and streaming uploads to Telegram with non-blocking hashing and STORE ZIP packaging.
 class UploadService implements UploadServiceContract {
   final TelegramService _telegram;
   final MetadataService _metadata;
@@ -77,6 +68,10 @@ class UploadService implements UploadServiceContract {
     String? folderId,
     Function(double progress, String status) onProgress, {
     bool skipGlobalMetadataUpdate = false,
+    String? taskId,
+    String? precomputedHash,
+    Uint8List? precomputedThumbnailBytes,
+    String? thumbnailExtension,
   }) async {
     if (!await Connectivity.hasConnection()) {
       return const Failure(
@@ -89,21 +84,31 @@ class UploadService implements UploadServiceContract {
       try {
         AppLogger.d('Starting upload for: $name', tag: 'UploadService');
 
-        final fileId = const Uuid().v4();
+        final fileId = taskId ?? const Uuid().v4();
         transferId = fileId;
         final mimeType = lookupMimeType(name) ?? 'application/octet-stream';
         final sizeMb = bytes.length / 1048576;
 
-        final task = TransferTask(
-          id: fileId,
-          name: name,
-          type: TransferType.upload,
-          sizeMb: sizeMb,
-          addedAt: DateTime.now(),
-          status: TransferStatus.preparing,
-          currentStage: 'Preparing…',
-        );
-        TransferQueueService.instance.addTask(task);
+        final existingTask = TransferQueueService.instance.tasks
+            .cast<TransferTask?>()
+            .firstWhere((t) => t?.id == fileId, orElse: () => null);
+        if (existingTask == null) {
+          TransferQueueService.instance.addTask(TransferTask(
+            id: fileId,
+            name: name,
+            type: TransferType.upload,
+            sizeMb: sizeMb,
+            addedAt: DateTime.now(),
+            status: TransferStatus.preparing,
+            currentStage: 'Preparing…',
+          ));
+        } else {
+          TransferQueueService.instance.updateTask(
+            fileId,
+            status: TransferStatus.preparing,
+            currentStage: 'Preparing…',
+          );
+        }
 
         void internalOnProgress(double progress, String status) {
           if (TransferQueueService.instance.isCancelled(fileId)) {
@@ -123,13 +128,18 @@ class UploadService implements UploadServiceContract {
         AppLogger.d('Size: ${sizeMb.toStringAsFixed(2)} MB',
             tag: 'UploadService');
 
-        // ── Step 1: SHA-256 in chunks (non-blocking) ───────────────────────────
-        internalOnProgress(0.03, 'Verifying file… 0%');
-        final hash = await _sha256Chunked(
-          bytes,
-          (pct) => internalOnProgress(
-              0.03 + pct * 0.07, 'Verifying… ${(pct * 100).toInt()}%'),
-        );
+        // ── Step 1: SHA-256 (precomputed or chunked) ───────────────────────────
+        final String hash;
+        if (precomputedHash != null && precomputedHash.isNotEmpty) {
+          hash = precomputedHash;
+        } else {
+          internalOnProgress(0.03, 'Verifying file… 0%');
+          hash = await _sha256Chunked(
+            bytes,
+            (pct) => internalOnProgress(
+                0.03 + pct * 0.07, 'Verifying… ${(pct * 100).toInt()}%'),
+          );
+        }
 
         // ── Step 1.2: Check for SHA-256 Deduplication ──────────────────────────
         final existingFile = _hive.allFiles.firstWhere(
@@ -199,24 +209,33 @@ class UploadService implements UploadServiceContract {
 
         if (thumbnailFileId == null) {
           try {
-            internalOnProgress(0.08, 'Generating thumbnail…');
-            final thumbResult = await ThumbnailGenerator.generate(
-              bytes: bytes,
-              filename: name,
-              mimeType: mimeType,
-            );
+            final Uint8List? thumbBytes;
+            final String ext;
+            if (precomputedThumbnailBytes != null) {
+              thumbBytes = precomputedThumbnailBytes;
+              ext = thumbnailExtension ?? 'jpg';
+            } else {
+              internalOnProgress(0.08, 'Generating thumbnail…');
+              final gen = await ThumbnailGenerator.generate(
+                bytes: bytes,
+                filename: name,
+                mimeType: mimeType,
+              );
+              thumbBytes = gen?.bytes;
+              ext = gen?.extension ?? 'jpg';
+            }
 
-            if (thumbResult != null) {
+            if (thumbBytes != null) {
               try {
                 ServiceLocator.instance.thumbnailRepository
-                    .addToMemoryCache(fileId, thumbResult.bytes);
-                await ThumbnailHelper.cacheThumbnail(fileId, thumbResult.bytes);
+                    .addToMemoryCache(fileId, thumbBytes);
+                await ThumbnailHelper.cacheThumbnail(fileId, thumbBytes);
               } catch (_) {}
 
               internalOnProgress(0.10, 'Uploading thumbnail…');
               final thumbUpload = await _telegram.uploadBytesWithFileId(
-                thumbResult.bytes,
-                '.thumb_$name.${thumbResult.extension}',
+                thumbBytes,
+                '.thumb_$name.$ext',
               );
               thumbnailFileId = thumbUpload['file_id'] as String?;
               if (thumbnailFileId != null) {
@@ -355,7 +374,7 @@ class UploadService implements UploadServiceContract {
             await _metadata.addFile(appMeta, fileMeta);
           } catch (e) {
             AppLogger.w(
-                'Direct metadata index update failed ($e), enqueuing background sync action',
+                'Direct metadata update failed ($e), enqueuing background sync',
                 tag: 'UploadService');
             final pending = PendingAction(
               id: const Uuid().v4(),
@@ -403,11 +422,8 @@ class UploadService implements UploadServiceContract {
         }
         AppLogger.e('Upload failed: $e',
             tag: 'UploadService', error: e, stackTrace: st);
-        if (wasCancelled) {
-          return const Failure(CancelledFailure());
-        }
-        if (e is OfflineException ||
-            e.toString().contains('OfflineException')) {
+        if (wasCancelled) return const Failure(CancelledFailure());
+        if (e is OfflineException || e.toString().contains('OfflineException')) {
           return Failure(NetworkFailure(e.toString(), e));
         }
         return Failure(UnknownFailure('Upload failed: $e', e));
@@ -423,19 +439,12 @@ class UploadService implements UploadServiceContract {
 
   // ── Private helpers ─────────────────────────────────────────────────────────
 
-  /// SHA-256 computed in 1 MB chunks.
-  ///
-  /// Each chunk `add()` is followed by `await Future.delayed(Duration.zero)`
-  /// every 4 MB so the Flutter event loop can process a frame and update the
-  /// progress text in the UI.  This prevents the "frozen tab" feeling.
+  /// SHA-256 computed in 1 MB chunks with event-loop yields.
   Future<String> _sha256Chunked(
     Uint8List data,
     void Function(double) onProgress,
   ) async {
-    const chunkSize = 1024 * 1024; // 1 MB per chunk
-    // Yield every single chunk — gives UI a frame per MB, no stutter
-    const yieldEvery = 1;
-
+    const chunkSize = 1024 * 1024;
     final output = AccumulatorSink<Digest>();
     final input = sha256.startChunkedConversion(output);
 
@@ -444,40 +453,23 @@ class UploadService implements UploadServiceContract {
       final end = (offset + chunkSize).clamp(0, data.length);
       input.add(Uint8List.sublistView(data, offset, end));
       chunk++;
-
-      // Report progress
       onProgress(offset / data.length);
-
-      // Yield to event loop periodically on Web so UI frames can render
-      if (kIsWeb && chunk % yieldEvery == 0) {
-        await Future.delayed(Duration.zero);
-      }
+      if (kIsWeb && chunk % 1 == 0) await Future.delayed(Duration.zero);
     }
-
     input.close();
     return output.events.single.toString();
   }
 
   /// Wraps [bytes] in a ZIP using STORE (no compression).
-  ///
-  /// STORE mode simply packs the bytes into the ZIP container without
-  /// running DEFLATE.  For already-compressed files (MP4, JPEG, etc.) this
-  /// is functionally identical and takes milliseconds instead of seconds.
   Future<Uint8List> _wrapInZipStore(Uint8List bytes, String filename) async {
-    // Yield one frame on Web so the "Packaging…" status text is visible
-    if (kIsWeb) {
-      await Future.delayed(Duration.zero);
-    }
-
+    if (kIsWeb) await Future.delayed(Duration.zero);
     final archive = Archive();
-    // level: 0 = Deflate.NO_COMPRESSION → STORE mode
     archive.add(ArchiveFile(filename, bytes.length, bytes));
     final encoded = ZipEncoder().encode(archive, level: 0);
     return Uint8List.fromList(encoded);
   }
 
-  /// Split [bytes] into chunks of size ≤ [partSize] using zero-copy typed data views.
-  /// Slices share the original [bytes.buffer] preventing redundant heap memory allocation.
+  /// Split [bytes] into chunks of size <= [partSize] using zero-copy typed data views.
   static List<Uint8List> splitBytesZeroCopy(
     Uint8List bytes, [
     int partSize = _partSize,
@@ -492,8 +484,6 @@ class UploadService implements UploadServiceContract {
     return parts;
   }
 
-  /// Split [bytes] into ≤ _partSize chunks using zero-copy view.
-  List<Uint8List> _splitBytes(Uint8List bytes) {
-    return splitBytesZeroCopy(bytes, _partSize);
-  }
+  List<Uint8List> _splitBytes(Uint8List bytes) =>
+      splitBytesZeroCopy(bytes, _partSize);
 }

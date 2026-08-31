@@ -265,20 +265,11 @@ class DownloadQueueService {
       if (completedAt != null) existing.completedAt = completedAt;
       await existing.save();
     } else {
-      final job = DownloadJob(
-        fileId: fileId,
-        name: name,
-        mimeType: mimeType,
-        sizeMb: sizeMb,
-        status: status,
-        progress: progress,
-        localPath: localPath,
-        error: error,
-        addedAt: addedAt ?? DateTime.now(),
-        completedAt: completedAt,
-        subpath: subpath,
-      );
-      await _box.put(fileId, job);
+      await _box.put(fileId, DownloadJob(
+        fileId: fileId, name: name, mimeType: mimeType, sizeMb: sizeMb,
+        status: status, progress: progress, localPath: localPath, error: error,
+        addedAt: addedAt ?? DateTime.now(), completedAt: completedAt, subpath: subpath,
+      ));
     }
   }
 
@@ -307,20 +298,11 @@ class DownloadQueueService {
 
   /// Manually add a completed download job (used for direct downloads)
   Future<void> addCompletedJob(FileRecord file, String? savedPath) async {
-    await _box.put(
-      file.fileId,
-      DownloadJob(
-        fileId: file.fileId,
-        name: file.name,
-        mimeType: file.mimeType,
-        sizeMb: file.sizeMb,
-        progress: 1.0,
-        status: 'completed',
-        localPath: savedPath,
-        completedAt: DateTime.now(),
-        addedAt: DateTime.now(),
-      ),
-    );
+    await _box.put(file.fileId, DownloadJob(
+      fileId: file.fileId, name: file.name, mimeType: file.mimeType,
+      sizeMb: file.sizeMb, progress: 1.0, status: 'completed',
+      localPath: savedPath, completedAt: DateTime.now(), addedAt: DateTime.now(),
+    ));
   }
 
   /// Process the queue managing concurrency limit across global coordinator
@@ -422,6 +404,15 @@ class DownloadQueueService {
         );
 
         if (saveResult.success) {
+          if (policy == DownloadConflictPolicy.overwrite &&
+              job.localPath != null &&
+              job.localPath != saveResult.savedPath &&
+              !kIsWeb) {
+            try {
+              await deleteLocalFileIfExists(job.localPath!);
+            } catch (_) {}
+          }
+
           job.status = 'completed';
           job.progress = 1.0;
           job.localPath = saveResult.savedPath;

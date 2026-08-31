@@ -233,5 +233,33 @@ void main() {
       expect(result.foldersCount, equals(1));
       expect(result.queuedTasks, isEmpty);
     });
+
+    test(
+        'TC-06: Resilient scanning discovers files across multiple directory levels with various file types',
+        () async {
+      final mediaDir = Directory('${tempTestDir.path}/media')..createSync();
+      final photosDir = Directory('${mediaDir.path}/photos')..createSync();
+      final docsDir = Directory('${mediaDir.path}/docs')..createSync();
+
+      File('${photosDir.path}/photo1.jpg').writeAsBytesSync([1, 2, 3, 4]);
+      File('${photosDir.path}/photo2.png').writeAsBytesSync([5, 6, 7, 8]);
+      File('${docsDir.path}/notes.txt').writeAsStringSync('Notes');
+      File('${mediaDir.path}/summary.pdf').writeAsStringSync('PDF Summary');
+
+      final result = await UploadFolderHelper.scanAndQueueFolder(
+        dirPath: mediaDir.path,
+        targetParentFolderId: null,
+        storageRepository: repository,
+        uploadBloc: uploadBloc,
+      );
+
+      expect(result.filesCount, equals(4));
+      // Root (media) + photos + docs = 3 folders
+      expect(result.foldersCount, equals(3));
+      expect(result.queuedTasks.length, equals(4));
+
+      final names = result.queuedTasks.map((t) => t.name).toList();
+      expect(names, containsAll(['photo1.jpg', 'photo2.png', 'notes.txt', 'summary.pdf']));
+    });
   });
 }

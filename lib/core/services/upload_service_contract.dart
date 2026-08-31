@@ -13,5 +13,9 @@ abstract class UploadServiceContract {
     String? folderId,
     void Function(double progress, String status) onProgress, {
     bool skipGlobalMetadataUpdate = false,
+    String? taskId,
+    String? precomputedHash,
+    Uint8List? precomputedThumbnailBytes,
+    String? thumbnailExtension,
   });
 }

@@ -16,6 +16,7 @@ import 'package:telstorage/core/services/hive_service.dart';
 import 'package:telstorage/core/services/metadata_service.dart';
 import 'package:telstorage/core/services/sync_service.dart';
 import 'package:telstorage/core/services/telegram_service.dart';
+import 'package:telstorage/core/utils/connectivity.dart';
 
 class FakeTelegramService extends TelegramService {}
 
@@ -70,9 +71,11 @@ void main() {
     await pendingBox.clear();
 
     hiveService = HiveService.instance;
+    Connectivity.mockConnectionStatus = true;
   });
 
   tearDown(() async {
+    Connectivity.mockConnectionStatus = null;
     await filesBox.close();
     await foldersBox.close();
     await pendingBox.close();

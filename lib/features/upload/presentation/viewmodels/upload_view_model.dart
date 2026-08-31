@@ -122,13 +122,14 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
     if (_isPreProcessing) return;
     _isPreProcessing = true;
     try {
-      while (_queue.isNotEmpty) {
+      while (_queue.isNotEmpty && !isClosed) {
         final pending = _queue
             .cast<UploadTask?>()
             .firstWhere((t) => t != null && t.precomputedHash == null, orElse: () => null);
         if (pending == null) break;
 
         if (TransferQueueService.instance.isCancelled(pending.id)) {
+          pending.precomputedHash = '';
           continue;
         }
 

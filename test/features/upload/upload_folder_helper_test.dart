@@ -11,6 +11,7 @@ import 'package:telstorage/core/models/download_conflict_policy.dart';
 import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/models/folder_record.dart';
 import 'package:telstorage/core/models/folder_stats.dart';
+import 'package:telstorage/core/utils/connectivity.dart';
 import 'package:telstorage/features/storage/domain/repositories/storage_repository_contract.dart';
 import 'package:telstorage/features/upload/presentation/viewmodels/upload_folder_helper.dart';
 import 'package:telstorage/features/upload/presentation/viewmodels/upload_view_model.dart';
@@ -94,9 +95,11 @@ void main() {
     tempTestDir = Directory.systemTemp.createTempSync('upload_helper_test_');
     repository = FakeStorageRepository();
     uploadBloc = UploadBloc();
+    Connectivity.mockConnectionStatus = true;
   });
 
   tearDown(() async {
+    Connectivity.mockConnectionStatus = null;
     if (tempTestDir.existsSync()) {
       try {
         tempTestDir.deleteSync(recursive: true);

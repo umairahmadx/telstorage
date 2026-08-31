@@ -17,6 +17,7 @@ import 'package:telstorage/core/services/download_service.dart';
 import 'package:telstorage/core/services/hive_service.dart';
 import 'package:telstorage/core/services/service_locator.dart';
 import 'package:telstorage/core/services/transfer_queue_service.dart';
+import 'package:telstorage/core/utils/connectivity.dart';
 import 'package:telstorage/core/utils/native_save_helper.dart';
 
 class _MockDownloadService implements DownloadService {
@@ -67,6 +68,7 @@ void main() {
     if (!Hive.isAdapterRegistered(2)) {
       Hive.registerAdapter(DownloadJobAdapter());
     }
+    Connectivity.mockConnectionStatus = true;
   });
 
   setUp(() async {
@@ -95,6 +97,7 @@ void main() {
   });
 
   tearDownAll(() async {
+    Connectivity.mockConnectionStatus = null;
     if (tempDir.existsSync()) {
       await tempDir.delete(recursive: true);
     }

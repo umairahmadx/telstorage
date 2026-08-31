@@ -11,6 +11,7 @@ import 'package:telstorage/core/services/notification_service.dart';
 import 'package:telstorage/core/services/service_locator.dart';
 import 'package:telstorage/core/services/transfer_queue_service.dart';
 import 'package:telstorage/core/services/upload_service.dart';
+import 'package:telstorage/core/utils/connectivity.dart';
 import 'package:telstorage/features/upload/presentation/viewmodels/upload_view_model.dart';
 
 class _MockUploadService implements UploadService {
@@ -69,9 +70,11 @@ void main() {
     ServiceLocator.instance.setUploadServiceForTesting(mockUploadService);
     ServiceLocator.instance.setInitializedForTesting(true);
     NotificationService.setMockInitialized(true);
+    Connectivity.mockConnectionStatus = true;
   });
 
   tearDown(() async {
+    Connectivity.mockConnectionStatus = null;
     try {
       if (await tempDir.exists()) {
         await tempDir.delete(recursive: true);

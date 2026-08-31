@@ -20,6 +20,7 @@ import 'package:telstorage/core/services/service_locator.dart';
 import 'package:telstorage/core/services/telegram_service.dart';
 import 'package:telstorage/core/services/transfer_queue_service.dart';
 import 'package:telstorage/core/services/zip_archive_service.dart';
+import 'package:telstorage/core/utils/connectivity.dart';
 
 class _MockDownloadService implements DownloadServiceContract {
   final Future<Uint8List> Function(FileRecord file)? customDownload;
@@ -103,9 +104,11 @@ void main() {
     if (!Hive.isAdapterRegistered(2)) {
       Hive.registerAdapter(DownloadJobAdapter());
     }
+    Connectivity.mockConnectionStatus = true;
   });
 
   tearDownAll(() async {
+    Connectivity.mockConnectionStatus = null;
     await Hive.close();
     if (tempHiveDir.existsSync()) {
       await tempHiveDir.delete(recursive: true);

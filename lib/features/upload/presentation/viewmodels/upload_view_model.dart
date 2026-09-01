@@ -54,6 +54,19 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
   /// Maximum concurrent upload workers.
   static const int _maxConcurrentWorkers = 3;
 
+  /// Adds an event to the Bloc, silently ignoring attempts after close.
+  ///
+  /// Eliminates the TOCTOU race between `isClosed` and `add()` that can
+  /// occur when async handlers are in-flight during `bloc.close()`.
+  void _safeAdd(UploadEvent event) {
+    if (isClosed) return;
+    try {
+      add(event);
+    } on StateError catch (_) {
+      // Bloc was closed between the isClosed check and add().
+    }
+  }
+
   /// Constructs UploadBloc and registers event handlers.
   UploadBloc() : super(UploadIdle()) {
     on<StartUpload>(_onStartUpload);
@@ -75,7 +88,7 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
       name: event.name,
       folderId: event.folderId,
     );
-    add(AddUploads([task]));
+    _safeAdd(AddUploads([task]));
   }
 
   /// Handles adding multiple tasks to queue.
@@ -158,7 +171,9 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
             pending.id,
             currentStage: 'Ready in queue',
           );
-        } catch (_) {}
+        } catch (_) {
+          pending.precomputedHash = '';
+        }
         await Future.delayed(const Duration(milliseconds: 50));
       }
     } finally {
@@ -204,7 +219,7 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
 
     if (TransferQueueService.instance.isCancelled(task.id)) {
       await task.cleanupCacheFile();
-      if (!isClosed) add(ProcessNextUpload());
+      _safeAdd(ProcessNextUpload());
       return;
     }
 
@@ -235,10 +250,8 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
       AppLogger.w('Failed to read bytes for ${task.name}: $e',
           tag: 'UploadBloc');
       await task.cleanupCacheFile();
-      if (!isClosed) {
-        add(UploadFailed('File inaccessible: ${task.name}',
-            fileName: task.name));
-      }
+      _safeAdd(UploadFailed('File inaccessible: ${task.name}',
+          fileName: task.name));
       return;
     }
 
@@ -248,12 +261,10 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
       task.name,
       task.folderId,
       (progress, status) {
-        if (!isClosed) {
-          add(UploadProgressUpdated(
-            progress,
-            'Uploading ${task.name} (${_completedCount + 1}/$_totalCount)…',
-          ));
-        }
+        _safeAdd(UploadProgressUpdated(
+          progress,
+          'Uploading ${task.name} (${_completedCount + 1}/$_totalCount)…',
+        ));
       },
       skipGlobalMetadataUpdate: isBatch,
       taskId: task.id,
@@ -268,7 +279,7 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
           _completedBatchMeta.add(data);
         }
         await task.cleanupCacheFile();
-        if (!isClosed) add(UploadCompleted());
+        _safeAdd(UploadCompleted());
       case Failure(:final failure):
         if (_completedBatchMeta.isNotEmpty) {
           try {
@@ -295,9 +306,7 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
           _retryWhenOnline();
         } else {
           await task.cleanupCacheFile();
-          if (!isClosed) {
-            add(UploadFailed(failure.message, fileName: task.name));
-          }
+          _safeAdd(UploadFailed(failure.message, fileName: task.name));
         }
     }
   }
@@ -321,7 +330,7 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
   void _onUploadCompleted(UploadCompleted event, Emitter<UploadState> emit) {
     _completedCount++;
     _activeWorkers--;
-    if (!isClosed) add(ProcessNextUpload());
+    _safeAdd(ProcessNextUpload());
   }
 
   /// Marks a single upload task as failed.
@@ -329,7 +338,7 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
     _completedCount++;
     _activeWorkers--;
     emit(UploadSingleError(fileName: event.fileName, message: event.message));
-    if (!isClosed) add(ProcessNextUpload());
+    _safeAdd(ProcessNextUpload());
   }
 
   /// Clears active upload state.
@@ -356,7 +365,7 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
         for (int i = _activeWorkers;
             i < _maxConcurrentWorkers && _queue.isNotEmpty;
             i++) {
-          add(ProcessNextUpload());
+          _safeAdd(ProcessNextUpload());
         }
         break;
       }

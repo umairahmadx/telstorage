@@ -71,6 +71,7 @@ void main() {
     ServiceLocator.instance.setInitializedForTesting(true);
     NotificationService.setMockInitialized(true);
     Connectivity.mockConnectionStatus = true;
+    TransferQueueService.instance.clearAll();
   });
 
   tearDown(() async {

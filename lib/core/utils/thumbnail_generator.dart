@@ -3,6 +3,7 @@
  * Description: Generates 400px high-efficiency media previews compressed to <= 50KB for images, videos, PDFs, APKs, and code/text files, strictly preserving non-1:1 aspect ratios.
  */
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
@@ -287,29 +288,50 @@ class ThumbnailGenerator {
   }
 
   /// Renders PDF first-page preview scaled proportionally to max 400px.
+  ///
+  /// Uses [runZonedGuarded] because `pdfx`'s `PdfDocument.openData` throws
+  /// `PlatformNotSupportedException` through a Dart Zone callback on
+  /// unsupported platforms (e.g. Linux CI runners), which escapes a normal
+  /// `try/catch`. The guarded zone captures these zone-level errors and
+  /// returns `null` gracefully.
   static Future<Uint8List?> generatePdfThumbnail(Uint8List pdfBytes) async {
-    try {
-      final document = await PdfDocument.openData(pdfBytes);
-      final page = await document.getPage(1);
-      final pageImage = await page.render(
-        width: maxDimension.toDouble(),
-        height: (maxDimension * (page.height / page.width)).toDouble(),
-        format: PdfPageImageFormat.png,
-      );
-      await page.close();
-      await document.close();
-      if (pageImage == null) return null;
-      final decoded = img.decodeImage(pageImage.bytes);
-      if (decoded != null) {
-        final encoded =
-            Uint8List.fromList(img.encodeJpg(decoded, quality: quality));
-        return compressUnder50KB(encoded);
+    final completer = Completer<Uint8List?>();
+    runZonedGuarded(() async {
+      try {
+        final document = await PdfDocument.openData(pdfBytes);
+        final page = await document.getPage(1);
+        final pageImage = await page.render(
+          width: maxDimension.toDouble(),
+          height: (maxDimension * (page.height / page.width)).toDouble(),
+          format: PdfPageImageFormat.png,
+        );
+        await page.close();
+        await document.close();
+        if (pageImage == null) {
+          if (!completer.isCompleted) completer.complete(null);
+          return;
+        }
+        final decoded = img.decodeImage(pageImage.bytes);
+        if (decoded != null) {
+          final encoded =
+              Uint8List.fromList(img.encodeJpg(decoded, quality: quality));
+          if (!completer.isCompleted) {
+            completer.complete(compressUnder50KB(encoded));
+          }
+        } else {
+          if (!completer.isCompleted) completer.complete(null);
+        }
+      } catch (e) {
+        AppLogger.d('PDF thumbnail generation skipped: $e',
+            tag: 'ThumbnailGenerator');
+        if (!completer.isCompleted) completer.complete(null);
       }
-    } catch (e) {
-      AppLogger.d('PDF thumbnail generation skipped: $e',
+    }, (error, stack) {
+      AppLogger.d('PDF thumbnail generation skipped (zone): $error',
           tag: 'ThumbnailGenerator');
-    }
-    return null;
+      if (!completer.isCompleted) completer.complete(null);
+    });
+    return completer.future;
   }
 
   /// Extracts the launcher icon from an Android APK archive in memory without disk writes.

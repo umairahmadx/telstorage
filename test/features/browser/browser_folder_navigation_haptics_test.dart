@@ -21,7 +21,6 @@ import 'package:telstorage/features/browser/presentation/screens/browser/viewmod
 import 'package:telstorage/features/downloads/presentation/screens/downloads/viewmodel/downloads_view_model.dart';
 import 'package:telstorage/features/home/presentation/screens/home/viewmodel/home_view_model.dart';
 import 'package:telstorage/features/storage/data/repositories/storage_repository.dart';
-import 'package:telstorage/features/storage/domain/repositories/storage_repository_contract.dart';
 import 'package:telstorage/features/upload/presentation/viewmodels/upload_view_model.dart';
 import 'package:telstorage/shared/widgets/mobile_shell.dart';
 import 'package:telstorage/shared/widgets/mobile_shell/mobile_bottom_nav.dart';
@@ -132,7 +131,8 @@ void main() {
   Animate.defaultDuration = Duration.zero;
 
   group('Browser Folder Navigation & Interaction Tests', () {
-    testWidgets('AppFolderTile executes onTap with light impact haptic feedback',
+    testWidgets(
+        'AppFolderTile executes onTap with light impact haptic feedback',
         (tester) async {
       bool tapped = false;
       final folder = FolderRecord(
@@ -159,7 +159,8 @@ void main() {
       expect(tapped, isTrue);
     });
 
-    testWidgets('AppFolderGridTile executes onTap with light impact haptic feedback',
+    testWidgets(
+        'AppFolderGridTile executes onTap with light impact haptic feedback',
         (tester) async {
       bool tapped = false;
       final folder = FolderRecord(
@@ -187,7 +188,8 @@ void main() {
       expect(tapped, isTrue);
     });
 
-    testWidgets('Selecting category filter chip triggers selection and updates category',
+    testWidgets(
+        'Selecting category filter chip triggers selection and updates category',
         (tester) async {
       final fakeRepo = _FakeStorageRepo();
       final bloc = BrowserBloc(fakeRepo);
@@ -213,7 +215,8 @@ void main() {
       expect(bloc.state.category, 'image');
     });
 
-    testWidgets('Tapping bottom bar Files tab while inside a folder resets to root folder',
+    testWidgets(
+        'Tapping bottom bar Files tab while inside a folder resets to root folder',
         (tester) async {
       final fakeRepo = _FakeStorageRepo();
       ServiceLocator.instance.setStorageRepositoryForTesting(fakeRepo);

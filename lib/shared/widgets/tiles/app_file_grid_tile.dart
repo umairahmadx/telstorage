@@ -5,6 +5,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:telstorage/core/models/file_record.dart';
+import 'package:telstorage/core/theme/app_icons.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
 import 'package:telstorage/shared/widgets/thumbnail_widget.dart';
 
@@ -102,7 +103,7 @@ class AppFileGridTile extends StatelessWidget {
                           ),
                           child: isSelected
                               ? Icon(
-                                  Icons.check_rounded,
+                                  AppIcons.check,
                                   size: 16,
                                   color: colors.bgPrimary,
                                 )
@@ -138,7 +139,7 @@ class AppFileGridTile extends StatelessWidget {
                         child: Padding(
                           padding: const EdgeInsets.all(4),
                           child: Icon(
-                            Icons.more_vert_rounded,
+                            AppIcons.moreVert,
                             color: colors.textSecondary,
                             size: 18,
                           ),

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../../core/services/service_locator.dart';
 import '../../../../../core/services/sync_queue_service.dart';
+import '../../../../../core/theme/app_icons.dart';
 import '../../../../../core/theme/app_theme.dart';
 import '../../../../../core/utils/connectivity.dart';
 
@@ -51,7 +52,7 @@ class _SyncScreenState extends State<SyncScreen> {
         backgroundColor: colors.bgPrimary,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_rounded, color: colors.textPrimary),
+          icon: Icon(AppIcons.back, color: colors.textPrimary),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
@@ -66,7 +67,7 @@ class _SyncScreenState extends State<SyncScreen> {
         actions: [
           IconButton(
             icon:
-                Icon(Icons.delete_outline_rounded, color: colors.textSecondary),
+                Icon(AppIcons.delete, color: colors.textSecondary),
             tooltip: 'Clear Logs',
             onPressed: () {
               syncQueue.clearLogs();
@@ -167,8 +168,8 @@ class _SyncScreenState extends State<SyncScreen> {
                 ),
                 child: Icon(
                   pendingCount > 0
-                      ? Icons.sync_rounded
-                      : Icons.cloud_done_rounded,
+                      ? AppIcons.syncing
+                      : AppIcons.cloudDone,
                   color: statusColor,
                   size: 24,
                 ),
@@ -207,7 +208,7 @@ class _SyncScreenState extends State<SyncScreen> {
                 await _checkConnection();
                 syncQueue.processQueue();
               },
-              icon: Icon(Icons.sync_rounded, size: 18, color: colors.bgPrimary),
+              icon: Icon(AppIcons.syncing, size: 18, color: colors.bgPrimary),
               label: Text(
                 'Sync Now',
                 style: TextStyle(
@@ -234,19 +235,19 @@ class _SyncScreenState extends State<SyncScreen> {
 
     switch (log.status) {
       case 'completed':
-        icon = Icons.check_circle_rounded;
+        icon = AppIcons.statusDone;
         color = colors.success;
         break;
       case 'syncing':
-        icon = Icons.sync_rounded;
+        icon = AppIcons.syncing;
         color = colors.accentPrimary;
         break;
       case 'failed':
-        icon = Icons.error_rounded;
+        icon = AppIcons.statusError;
         color = colors.error;
         break;
       default:
-        icon = Icons.schedule_rounded;
+        icon = AppIcons.statusPending;
         color = colors.textTertiary;
     }
 

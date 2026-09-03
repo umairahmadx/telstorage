@@ -38,7 +38,7 @@ class QrDialog extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppTheme.white,
+              color: AppColors.white,
               borderRadius: BorderRadius.circular(20),
             ),
             child: QrImageView(

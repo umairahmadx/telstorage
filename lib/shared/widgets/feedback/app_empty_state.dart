@@ -4,6 +4,7 @@
  */
 
 import 'package:flutter/material.dart';
+import 'package:telstorage/core/theme/app_icons.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
 
 /// Centralized empty placeholder component reused across all list and grid screens.
@@ -87,7 +88,7 @@ class AppEmptyState extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 ),
-                icon: const Icon(Icons.refresh_rounded, size: 18),
+                icon: const Icon(AppIcons.refresh, size: 18),
                 label: Text(
                   buttonText!,
                   style: const TextStyle(fontWeight: FontWeight.bold),

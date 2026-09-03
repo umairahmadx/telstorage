@@ -47,10 +47,6 @@ class StorageRepository implements StorageRepositoryContract {
     return _metadataService.fetch();
   }
 
-  Map<String, int> getCategoryCounts() {
-    return _hive.categoryCount;
-  }
-
   double getTotalSizeMb() {
     return _hive.totalSizeMb;
   }
@@ -61,10 +57,6 @@ class StorageRepository implements StorageRepositoryContract {
 
   Future<String?> getUserEmail() async {
     return AuthService.instance.getEmail();
-  }
-
-  Future<Map<String, dynamic>> getWebShareQuota() async {
-    return ServiceLocator.instance.webShareQueue.getBandwidthStatus();
   }
 
   int getTotalShares() {

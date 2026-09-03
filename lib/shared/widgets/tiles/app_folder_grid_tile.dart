@@ -5,6 +5,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:telstorage/core/models/folder_record.dart';
+import 'package:telstorage/core/theme/app_icons.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
 
 /// Centralized folder card for grid view layouts with curved foreground ink ripple.
@@ -83,7 +84,7 @@ class AppFolderGridTile extends StatelessWidget {
                         ),
                         alignment: Alignment.center,
                         child: Icon(
-                          Icons.folder_rounded,
+                          AppIcons.folder,
                           color: colors.fileFolder,
                           size: 32,
                         ),
@@ -111,7 +112,7 @@ class AppFolderGridTile extends StatelessWidget {
                           ),
                           child: isSelected
                               ? Icon(
-                                  Icons.check_rounded,
+                                  AppIcons.check,
                                   size: 16,
                                   color: colors.bgPrimary,
                                 )
@@ -147,7 +148,7 @@ class AppFolderGridTile extends StatelessWidget {
                         child: Padding(
                           padding: const EdgeInsets.all(4),
                           child: Icon(
-                            Icons.more_vert_rounded,
+                            AppIcons.moreVert,
                             color: colors.textSecondary,
                             size: 18,
                           ),

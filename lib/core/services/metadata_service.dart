@@ -474,7 +474,19 @@ class MetadataService {
   String _category(String mimeType) {
     if (mimeType.startsWith('image/')) return 'images';
     if (mimeType.startsWith('video/')) return 'videos';
-    if (mimeType == 'application/pdf') return 'docs';
+    if (mimeType.startsWith('audio/')) return 'audio';
+    final isDoc = mimeType == 'application/pdf' ||
+        mimeType.contains('document') ||
+        mimeType.contains('text') ||
+        mimeType.contains('sheet') ||
+        mimeType.contains('presentation');
+    if (isDoc) return 'documents';
+    final isArchive = mimeType.contains('zip') ||
+        mimeType.contains('compressed') ||
+        mimeType.contains('tar') ||
+        mimeType.contains('rar') ||
+        mimeType.contains('7z');
+    if (isArchive) return 'archives';
     return 'others';
   }
 }

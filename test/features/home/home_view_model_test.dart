@@ -14,9 +14,7 @@ import 'package:telstorage/features/home/presentation/screens/home/viewmodel/hom
 import 'package:telstorage/features/storage/data/repositories/storage_repository.dart';
 
 class _FakeStorageRepository implements StorageRepository {
-  int getQuotaCallCount = 0;
   int getMetadataCallCount = 0;
-  Completer<Map<String, dynamic>>? quotaCompleter;
   Completer<AppMetadata>? metadataCompleter;
 
   List<FileRecord> mockRecentFiles = [
@@ -49,15 +47,6 @@ class _FakeStorageRepository implements StorageRepository {
 
   @override
   int getTotalCompletedDownloads() => 12;
-
-  @override
-  Future<Map<String, dynamic>> getWebShareQuota() async {
-    getQuotaCallCount++;
-    if (quotaCompleter != null) {
-      return quotaCompleter!.future;
-    }
-    return {'used_bandwidth_bytes': 1024, 'allowed_bandwidth_bytes': 2048};
-  }
 
   @override
   Future<AppMetadata> getAppMetadata() async {
@@ -125,7 +114,6 @@ void main() {
       expect(cubit.state.totalDownloads, equals(12));
 
       // Assert ZERO network calls were dispatched during Phase 1
-      expect(fakeRepo.getQuotaCallCount, equals(0));
       expect(fakeRepo.getMetadataCallCount, equals(0));
 
       await cubit.close();
@@ -134,25 +122,21 @@ void main() {
     test(
         'TC-02: enrichRemoteData acquires start-time lock and suppresses concurrent in-flight calls',
         () async {
-      fakeRepo.quotaCompleter = Completer<Map<String, dynamic>>();
       fakeRepo.metadataCompleter = Completer<AppMetadata>();
 
       final cubit = HomeCubit();
 
       // Call #1: in-flight request started
       final future1 = cubit.enrichRemoteData(force: false);
-      expect(fakeRepo.getQuotaCallCount, equals(1));
       expect(fakeRepo.getMetadataCallCount, equals(1));
 
       // Call #2: fast post-sync call arrives while Call #1 is still in-flight
       final future2 = cubit.enrichRemoteData(force: false);
 
       // Call #2 should be suppressed by the start-time lock
-      expect(fakeRepo.getQuotaCallCount, equals(1));
       expect(fakeRepo.getMetadataCallCount, equals(1));
 
       // Resolve in-flight request
-      fakeRepo.quotaCompleter!.complete({'used_bandwidth_bytes': 1024});
       fakeRepo.metadataCompleter!.complete(AppMetadata(
         owner: 'test_owner',
         storageUsedMb: 150.5,
@@ -166,7 +150,6 @@ void main() {
       await future1;
       await future2;
 
-      expect(cubit.state.webShareQuota, isNotNull);
       expect(cubit.state.metadata, isNotNull);
 
       await cubit.close();
@@ -179,17 +162,14 @@ void main() {
 
       // First enrichment
       await cubit.enrichRemoteData(force: false);
-      expect(fakeRepo.getQuotaCallCount, equals(1));
       expect(fakeRepo.getMetadataCallCount, equals(1));
 
       // Second unforced call within 5s is suppressed
       await cubit.enrichRemoteData(force: false);
-      expect(fakeRepo.getQuotaCallCount, equals(1));
       expect(fakeRepo.getMetadataCallCount, equals(1));
 
       // Forced call (user pull-to-refresh) bypasses cooldown
       await cubit.enrichRemoteData(force: true);
-      expect(fakeRepo.getQuotaCallCount, equals(2));
       expect(fakeRepo.getMetadataCallCount, equals(2));
 
       await cubit.close();
@@ -212,7 +192,6 @@ void main() {
       expect(cubit.state.recentFiles.isNotEmpty, isTrue);
 
       // Local Hive debounce must NEVER dispatch remote network requests
-      expect(fakeRepo.getQuotaCallCount, equals(0));
       expect(fakeRepo.getMetadataCallCount, equals(0));
 
       await cubit.close();
@@ -221,7 +200,6 @@ void main() {
     test(
         'TC-05: Disposed lifecycle safety - closing cubit before async resolution throws no exceptions',
         () async {
-      fakeRepo.quotaCompleter = Completer<Map<String, dynamic>>();
       fakeRepo.metadataCompleter = Completer<AppMetadata>();
 
       final cubit = HomeCubit();
@@ -233,7 +211,6 @@ void main() {
       expect(cubit.isClosed, isTrue);
 
       // Complete async operation post-close
-      fakeRepo.quotaCompleter!.complete({'used_bandwidth_bytes': 1024});
       fakeRepo.metadataCompleter!.complete(AppMetadata(
         owner: 'test_owner',
         storageUsedMb: 150.5,

@@ -138,17 +138,8 @@ class AppConstants {
   /// Delay between sequential chunk uploads in milliseconds.
   static const int uploadDelayMs = 500;
 
-  /// Debounce time in milliseconds before processing pending sync actions.
-  static const int syncDebounceMs = 300;
-
   /// Background periodic sync interval in seconds.
   static const int syncIntervalSeconds = 30;
-
-  /// Fast UI transition animation duration (200ms).
-  static const Duration animDurationFast = Duration(milliseconds: 200);
-
-  /// Standard UI transition animation duration (300ms).
-  static const Duration animDurationMedium = Duration(milliseconds: 300);
 
   // ── Category Filter Identifiers ──────────────────────────────────────────
 

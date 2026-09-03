@@ -85,4 +85,13 @@ abstract final class AppIcons {
   static const IconData calendar = Icons.calendar_today_outlined;
   static const IconData dropdownArrow = Icons.keyboard_arrow_down_rounded;
   static const IconData uploadFile = Icons.upload_file_rounded;
+  static const IconData uploadFolder = Icons.drive_folder_upload_rounded;
+  static const IconData moreVert = Icons.more_vert_rounded;
+  static const IconData check = Icons.check_rounded;
+  static const IconData refresh = Icons.refresh_rounded;
+  static const IconData pauseCircle = Icons.pause_circle_outline_rounded;
+  static const IconData playCircle = Icons.play_circle_outline_rounded;
+  static const IconData cancel = Icons.cancel_outlined;
+  static const IconData linkOff = Icons.link_off_rounded;
+  static const IconData copy = Icons.copy_rounded;
 }

@@ -481,13 +481,4 @@ class WebShareQueueService {
       _settings.setMaxDownloads(fileId, maxDownloads);
   Future<void> setVanitySlug(String fileId, String vanitySlug) =>
       _settings.setVanitySlug(fileId, vanitySlug);
-
-  Future<Map<String, dynamic>> getBandwidthStatus() async {
-    final visitorToken = await _apiClient.getOrCreateVisitorToken();
-    return _apiClient.getBandwidthStatusRemote(visitorToken);
-  }
-
-  Future<bool> isFilePending(String storageToId) async {
-    return _apiClient.isFilePendingRemote(storageToId);
-  }
 }

@@ -44,7 +44,7 @@ class ShareLinkActiveActions extends StatelessWidget {
                     borderRadius: BorderRadius.circular(16),
                   ),
                 ),
-                icon: const Icon(Icons.copy_rounded, size: 18),
+                icon: const Icon(AppIcons.copy, size: 18),
                 label: const Text(
                   'Copy Link',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
@@ -63,7 +63,7 @@ class ShareLinkActiveActions extends StatelessWidget {
                     borderRadius: BorderRadius.circular(16),
                   ),
                 ),
-                icon: const Icon(Icons.share_outlined, size: 18),
+                icon: const Icon(AppIcons.share, size: 18),
                 label: const Text(
                   'Share',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
@@ -115,7 +115,7 @@ class ShareLinkActiveActions extends StatelessWidget {
                 borderRadius: BorderRadius.circular(14),
               ),
             ),
-            icon: const Icon(Icons.link_off_rounded, size: 18),
+            icon: const Icon(AppIcons.linkOff, size: 18),
             label: const Text(
               'Delete Link (Expire Now)',
               style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),

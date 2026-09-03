@@ -23,6 +23,17 @@ class TelegramAuthException implements Exception {
   String toString() => 'TelegramAuthException: $message';
 }
 
+/// Exception thrown when Telegram returns 400 Bad Request indicating missing admin permissions.
+class TelegramPermissionException implements Exception {
+  final String message;
+  TelegramPermissionException(
+      [this.message =
+          'Bot needs admin permissions to perform this operation.']);
+
+  @override
+  String toString() => 'TelegramPermissionException: $message';
+}
+
 /// All raw Telegram Bot API calls with media extraction and proxy support.
 class TelegramService {
   late final String _token;
@@ -59,6 +70,10 @@ class TelegramService {
       attempt++;
       try {
         return await action();
+      } on TelegramAuthException {
+        rethrow;
+      } on TelegramPermissionException {
+        rethrow;
       } on DioException catch (e) {
         if (e.response?.statusCode == 401) {
           AppLogger.e(
@@ -328,11 +343,25 @@ class TelegramService {
         if (response.data['ok'] != true) {
           throw Exception('Pin failed: ${response.data['description']}');
         }
+      } on DioException catch (e) {
+        final desc = (e.response?.data is Map)
+            ? (e.response?.data['description']?.toString() ?? '')
+            : (e.message ?? '');
+        if (desc.contains('not enough rights') ||
+            desc.contains('CHAT_ADMIN_REQUIRED')) {
+          throw TelegramPermissionException(
+              'Bot needs admin permission to pin messages. '
+              'Please make your bot an admin in the channel with "Pin Messages" permission.');
+        }
+        rethrow;
       } catch (e) {
-        // Check if it's a permission error
+        if (e is TelegramPermissionException || e is TelegramAuthException) {
+          rethrow;
+        }
         if (e.toString().contains('not enough rights') ||
             e.toString().contains('CHAT_ADMIN_REQUIRED')) {
-          throw Exception('Bot needs admin permission to pin messages. '
+          throw TelegramPermissionException(
+              'Bot needs admin permission to pin messages. '
               'Please make your bot an admin in the channel with "Pin Messages" permission.');
         }
         throw Exception('Failed to pin message: $e');
@@ -356,6 +385,8 @@ class TelegramService {
         }
 
         return pinnedMsg['message_id'] as int;
+      } on DioException {
+        rethrow;
       } catch (e) {
         throw Exception('Failed to get pinned message: $e');
       }
@@ -377,13 +408,15 @@ class TelegramService {
         AppLogger.w('unpinAllMessages warning: ${response.data['description']}',
             tag: 'TelegramService');
       }
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 429) {
+        final retryAfter =
+            e.response?.data?['parameters']?['retry_after'] as int? ?? 5;
+        TelegramRateLimiter.instance.report429(retryAfter);
+      }
+      AppLogger.w('unpinAllMessages warning: $e', tag: 'TelegramService');
     } catch (e) {
       AppLogger.w('unpinAllMessages warning: $e', tag: 'TelegramService');
     }
-  }
-
-  /// Alias retrieving the permanent Telegram file_id of a message_id.
-  Future<String> getFileIdFromMessage(int messageId) async {
-    return getFileIdOfMessage(messageId);
   }
 }

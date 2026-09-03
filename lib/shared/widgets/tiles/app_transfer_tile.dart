@@ -6,6 +6,7 @@
 import 'package:flutter/material.dart';
 import 'package:telstorage/core/models/transfer_task.dart';
 import 'package:telstorage/core/services/service_locator.dart';
+import 'package:telstorage/core/theme/app_icons.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
 import 'package:telstorage/shared/widgets/app_surface_card.dart';
 import 'package:telstorage/shared/widgets/thumbnail_widget.dart';
@@ -148,20 +149,20 @@ class AppTransferTile extends StatelessWidget {
                 if (task.status == TransferStatus.uploading ||
                     task.status == TransferStatus.downloading)
                   IconButton(
-                    icon: Icon(Icons.pause_circle_outline_rounded,
+                    icon: Icon(AppIcons.pauseCircle,
                         color: colors.textSecondary, size: 22),
                     tooltip: 'Pause',
                     onPressed: onPause,
                   )
                 else if (task.status == TransferStatus.paused)
                   IconButton(
-                    icon: Icon(Icons.play_circle_outline_rounded,
+                    icon: Icon(AppIcons.playCircle,
                         color: colors.accentPrimary, size: 22),
                     tooltip: 'Resume',
                     onPressed: onResume,
                   ),
                 IconButton(
-                  icon: Icon(Icons.cancel_outlined,
+                  icon: Icon(AppIcons.cancel,
                       color: colors.error, size: 22),
                   tooltip: 'Cancel',
                   onPressed: onCancel,

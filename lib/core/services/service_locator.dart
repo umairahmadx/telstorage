@@ -197,7 +197,7 @@ class ServiceLocator {
     TransferConcurrencyCoordinator.instance.reset();
     TransferQueueService.instance.clear();
     if (_initialized) {
-      _thumbnailRepository.clearWebCache();
+      _thumbnailRepository.clearMemoryCache();
     }
     _initialized = false;
     _initFuture = null;

@@ -31,9 +31,6 @@ class HomeState {
   /// Global application metadata.
   final AppMetadata? metadata;
 
-  /// Web share quota information map.
-  final Map<String, dynamic>? webShareQuota;
-
   /// Total number of stored files.
   final int totalFiles;
 
@@ -67,7 +64,6 @@ class HomeState {
     this.userName,
     this.userEmail,
     this.metadata,
-    this.webShareQuota,
     this.totalFiles = 0,
     this.storageUsedMb = 0,
     this.totalShares = 0,
@@ -85,7 +81,6 @@ class HomeState {
     String? userName,
     String? userEmail,
     AppMetadata? metadata,
-    Map<String, dynamic>? webShareQuota,
     int? totalFiles,
     double? storageUsedMb,
     int? totalShares,
@@ -102,7 +97,6 @@ class HomeState {
       userName: userName ?? this.userName,
       userEmail: userEmail ?? this.userEmail,
       metadata: metadata ?? this.metadata,
-      webShareQuota: webShareQuota ?? this.webShareQuota,
       totalFiles: totalFiles ?? this.totalFiles,
       storageUsedMb: storageUsedMb ?? this.storageUsedMb,
       totalShares: totalShares ?? this.totalShares,
@@ -262,40 +256,26 @@ class HomeCubit extends Cubit<HomeState> {
     final requestId = ++_enrichRequestId;
 
     try {
-      final (quota, meta) = await (
-        () async {
-          try {
-            return await _repository.getWebShareQuota();
-          } catch (e) {
-            AppLogger.w('Failed to fetch web share quota: $e',
-                tag: 'HomeCubit', error: e);
-            return null;
-          }
-        }(),
-        () async {
-          try {
-            return await _repository.getAppMetadata();
-          } catch (e) {
-            AppLogger.w('Failed to fetch app metadata: $e',
-                tag: 'HomeCubit', error: e);
-            return null;
-          }
-        }(),
-      ).wait;
+      final meta = await () async {
+        try {
+          return await _repository.getAppMetadata();
+        } catch (e) {
+          AppLogger.w('Failed to fetch app metadata: $e',
+              tag: 'HomeCubit', error: e);
+          return null;
+        }
+      }();
 
       if (isClosed || requestId != _enrichRequestId) return;
 
       // Content equality deduplication
-      final isQuotaUnchanged =
-          quota == null || mapEquals(quota, state.webShareQuota);
       final isMetaUnchanged =
           meta == null || mapEquals(meta.toJson(), state.metadata?.toJson());
 
-      if (isQuotaUnchanged && isMetaUnchanged) return;
+      if (isMetaUnchanged) return;
 
       emit(state.copyWith(
-        webShareQuota: quota ?? state.webShareQuota,
-        metadata: meta ?? state.metadata,
+        metadata: meta,
       ));
     } catch (e) {
       AppLogger.w('Background enrichment error in HomeCubit: $e',

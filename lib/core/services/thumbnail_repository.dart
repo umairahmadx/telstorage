@@ -53,9 +53,6 @@ class ThumbnailRepository {
     _activeDownloads.clear();
   }
 
-  /// Backwards-compatibility alias for clearing cache.
-  void clearWebCache() => clearMemoryCache();
-
   /// Current number of items in memory cache.
   int get memoryCacheCount => _memoryCache.length;
 

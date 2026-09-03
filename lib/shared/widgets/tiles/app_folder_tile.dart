@@ -5,6 +5,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:telstorage/core/models/folder_record.dart';
+import 'package:telstorage/core/theme/app_icons.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
 import 'package:telstorage/shared/widgets/app_surface_card.dart';
 
@@ -84,7 +85,7 @@ class AppFolderTile extends StatelessWidget {
                     ),
                   ),
                   child: isSelected
-                      ? Icon(Icons.check, size: 14, color: colors.bgPrimary)
+                      ? Icon(AppIcons.check, size: 14, color: colors.bgPrimary)
                       : null,
                 ),
               ),
@@ -96,7 +97,7 @@ class AppFolderTile extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               alignment: Alignment.center,
-              child: Icon(Icons.folder_rounded,
+              child: Icon(AppIcons.folder,
                   color: colors.fileFolder, size: 24),
             ),
             const SizedBox(width: 14),
@@ -127,7 +128,7 @@ class AppFolderTile extends StatelessWidget {
             ),
             if (onActionTap != null)
               IconButton(
-                icon: Icon(Icons.more_vert_rounded,
+                icon: Icon(AppIcons.moreVert,
                     color: colors.textSecondary, size: 20),
                 onPressed: onActionTap,
               ),

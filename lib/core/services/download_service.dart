@@ -193,21 +193,6 @@ class DownloadService implements DownloadServiceContract {
     );
   }
 
-  /// Legacy compatibility — delegates to [saveAndOpen].
-  @override
-  Future<void> saveFile(
-    Uint8List bytes,
-    String filename, {
-    String? subpath,
-    DownloadConflictPolicy policy = DownloadConflictPolicy.overwrite,
-  }) async {
-    if (kIsWeb) {
-      triggerWebDownload(bytes, filename);
-      return;
-    }
-    await saveAndOpen(bytes, filename, subpath: subpath, policy: policy);
-  }
-
   // ── Private helpers ────────────────────────────────────────────────────────
 
   /// SHA-256 in 1 MB chunks — yields to event loop every chunk.

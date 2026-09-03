@@ -23,9 +23,6 @@ class AppRouter {
   /// Login route path.
   static const String login = '/login';
 
-  /// Register route path.
-  static const String register = '/register';
-
   /// Main shell home route path.
   static const String home = '/home';
 

@@ -40,9 +40,6 @@ class FakeTelegramService implements TelegramService {
 
   @override
   Future<void> unpinAllMessages() async {}
-
-  @override
-  Future<String> getFileIdFromMessage(int messageId) async => 'mock_file_id';
 }
 
 void main() {

@@ -395,18 +395,4 @@ class WebShareApiClient {
       AppLogger.w('Thumbnail upload failed: $e', tag: 'WebShareApiClient');
     }
   }
-
-  Future<Map<String, dynamic>> getBandwidthStatusRemote(
-      String visitorToken) async {
-    final res = await _dio.get(
-      '/bandwidth/status',
-      options: Options(headers: {'X-Visitor-Token': visitorToken}),
-    );
-    return res.data as Map<String, dynamic>;
-  }
-
-  Future<bool> isFilePendingRemote(String storageToId) async {
-    final res = await _dio.get('/file/$storageToId/status');
-    return res.data['pending'] as bool? ?? false;
-  }
 }

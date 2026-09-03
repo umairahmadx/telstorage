@@ -161,14 +161,11 @@ class HiveService {
     await _files.put(record.fileId, record);
   }
 
-  /// Sentinel value meaning "move to root" when passed as [folderId].
-  static const String kRootFolderId = '__root__';
-
   Future<void> updateFile(
     String fileId, {
     String? name,
 
-    /// Pass [HiveService.kRootFolderId] to move the file to the root folder.
+    /// Pass [AppConstants.rootFolderSentinelId] to move the file to the root folder.
     String? folderId,
     bool clearFolderId = false,
     int? metadataMsgId,
@@ -180,9 +177,10 @@ class HiveService {
     if (name != null) record.name = name;
     if (clearFolderId) {
       record.folderId = null;
-    } else if (folderId != null && folderId != kRootFolderId) {
+    } else if (folderId != null &&
+        folderId != AppConstants.rootFolderSentinelId) {
       record.folderId = folderId;
-    } else if (folderId == kRootFolderId) {
+    } else if (folderId == AppConstants.rootFolderSentinelId) {
       record.folderId = null;
     }
     if (metadataMsgId != null) record.metadataMessageId = metadataMsgId;
@@ -239,29 +237,6 @@ class HiveService {
 
   double get totalSizeMb {
     return _files.values.fold(0.0, (sum, file) => sum + file.sizeMb);
-  }
-
-  Map<String, int> get categoryCount {
-    final counts = <String, int>{
-      'images': 0,
-      'videos': 0,
-      'docs': 0,
-      'others': 0,
-    };
-
-    for (final file in _files.values) {
-      if (file.isImage) {
-        counts['images'] = counts['images']! + 1;
-      } else if (file.isVideo) {
-        counts['videos'] = counts['videos']! + 1;
-      } else if (file.isPdf) {
-        counts['docs'] = counts['docs']! + 1;
-      } else {
-        counts['others'] = counts['others']! + 1;
-      }
-    }
-
-    return counts;
   }
 
   // ── Clear All ────────────────────────────────────────────

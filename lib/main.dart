@@ -51,8 +51,12 @@ void callbackDispatcher() {
         return true;
       }
 
+      // Note: Full queue processing requires active Telegram network services,
+      // which are managed in the main isolate by SyncQueueService on launch and
+      // periodic 30s timers. This background isolate task verifies queue persistence.
       debugPrint(
-          "WorkManager: ${pendingBox.length} pending action(s) found — processing...");
+          "WorkManager: ${pendingBox.length} pending action(s) detected in local queue. "
+          "Queue processing is dispatched by SyncQueueService on app start/resume.");
 
       await Hive.close();
       return true;

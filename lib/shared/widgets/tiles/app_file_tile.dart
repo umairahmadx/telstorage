@@ -6,6 +6,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:telstorage/core/models/file_record.dart';
+import 'package:telstorage/core/theme/app_icons.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
 import 'package:telstorage/shared/widgets/app_surface_card.dart';
 import 'package:telstorage/shared/widgets/thumbnail_widget.dart';
@@ -94,7 +95,7 @@ class AppFileTile extends StatelessWidget {
                     ),
                   ),
                   child: isSelected
-                      ? Icon(Icons.check, size: 14, color: colors.bgPrimary)
+                      ? Icon(AppIcons.check, size: 14, color: colors.bgPrimary)
                       : null,
                 ),
               ),
@@ -138,7 +139,7 @@ class AppFileTile extends StatelessWidget {
               trailing!
             else if (onActionTap != null)
               IconButton(
-                icon: Icon(Icons.more_vert_rounded,
+                icon: Icon(AppIcons.moreVert,
                     color: colors.textSecondary, size: 20),
                 onPressed: onActionTap,
               ),

@@ -260,7 +260,7 @@ class MobileShellState extends State<MobileShell> {
                 AddActionItem(
                   icon: AppIcons.uploadFile,
                   label: 'Upload Files',
-                  color: AppTheme.primary,
+                  color: colors.accentPrimary,
                   onTap: () {
                     HapticFeedback.selectionClick();
                     Navigator.pop(ctx);
@@ -268,9 +268,9 @@ class MobileShellState extends State<MobileShell> {
                   },
                 ),
                 AddActionItem(
-                  icon: Icons.drive_folder_upload_rounded,
+                  icon: AppIcons.uploadFolder,
                   label: 'Upload Folder',
-                  color: AppTheme.primaryLight,
+                  color: AppColors.primaryLight,
                   onTap: () {
                     HapticFeedback.selectionClick();
                     Navigator.pop(ctx);
@@ -281,7 +281,7 @@ class MobileShellState extends State<MobileShell> {
                   AddActionItem(
                     icon: AppIcons.newFolder,
                     label: 'New Folder',
-                    color: AppTheme.warning,
+                    color: colors.warning,
                     onTap: () {
                       HapticFeedback.selectionClick();
                       Navigator.pop(ctx);

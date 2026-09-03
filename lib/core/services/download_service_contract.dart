@@ -19,10 +19,4 @@ abstract class DownloadServiceContract {
     String? subpath,
     DownloadConflictPolicy policy = DownloadConflictPolicy.overwrite,
   });
-  Future<void> saveFile(
-    Uint8List bytes,
-    String filename, {
-    String? subpath,
-    DownloadConflictPolicy policy = DownloadConflictPolicy.overwrite,
-  });
 }

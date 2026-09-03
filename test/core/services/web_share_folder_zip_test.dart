@@ -41,14 +41,6 @@ class FakeDownloadService implements DownloadServiceContract {
     return const SaveResult(
         savedPath: '/fake/path', message: 'OK', success: true);
   }
-
-  @override
-  Future<void> saveFile(
-    Uint8List bytes,
-    String filename, {
-    String? subpath,
-    DownloadConflictPolicy policy = DownloadConflictPolicy.overwrite,
-  }) async {}
 }
 
 void main() {

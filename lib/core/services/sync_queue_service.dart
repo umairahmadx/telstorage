@@ -4,6 +4,7 @@
  */
 
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import '../constants/app_constants.dart';
@@ -11,6 +12,7 @@ import '../models/pending_action.dart';
 import '../utils/app_logger.dart';
 import '../utils/connectivity.dart';
 import 'file_manager.dart';
+import 'telegram_rate_limiter.dart';
 
 class SyncLogItem {
   final String id;
@@ -33,13 +35,28 @@ class SyncLogItem {
 class SyncQueueService {
   final FileManagerService _fileManager;
   bool _isProcessing = false;
-  bool _isFlushing = false;
-  Timer? _debounceTimer;
-  DateTime? _firstUnflushedAt;
   Timer? _periodicTimer;
+  int _failureCount = 0;
+  DateTime? _nextAllowedRun;
+
   final ValueNotifier<int> pendingCountNotifier = ValueNotifier<int>(0);
   final ValueNotifier<List<SyncLogItem>> logsNotifier =
       ValueNotifier<List<SyncLogItem>>([]);
+
+  /// Whether exponential backoff is actively throttling queue retries.
+  bool get isBackoffActive =>
+      _nextAllowedRun != null && DateTime.now().isBefore(_nextAllowedRun!);
+
+  /// Remaining duration of the exponential backoff pause, or [Duration.zero].
+  Duration get remainingBackoff => isBackoffActive
+      ? _nextAllowedRun!.difference(DateTime.now())
+      : Duration.zero;
+
+  /// Reset consecutive failure backoff state.
+  void resetBackoff() {
+    _failureCount = 0;
+    _nextAllowedRun = null;
+  }
 
   SyncQueueService(this._fileManager) {
     _updatePendingCount();
@@ -54,7 +71,6 @@ class SyncQueueService {
   }
 
   void dispose() {
-    _debounceTimer?.cancel();
     _periodicTimer?.cancel();
   }
 
@@ -64,37 +80,6 @@ class SyncQueueService {
   bool get isProcessing => _isProcessing;
   int get pendingCount => _pendingBox.length;
 
-  void notifyItemAdded(String actionType, String description) {
-    final log = SyncLogItem(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      actionType: actionType,
-      description: description,
-      timestamp: DateTime.now(),
-      status: 'pending',
-    );
-    logsNotifier.value = [log, ...logsNotifier.value];
-    _updatePendingCount();
-
-    _firstUnflushedAt ??= DateTime.now();
-
-    // Check 60-second hard ceiling
-    if (DateTime.now().difference(_firstUnflushedAt!) >=
-        const Duration(seconds: 60)) {
-      AppLogger.i(
-          '60s max-wait flush ceiling reached — forcing immediate sync flush',
-          tag: 'SyncQueue');
-      _debounceTimer?.cancel();
-      processQueue();
-      return;
-    }
-
-    // 10-second sliding debounce timer
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(seconds: 10), () {
-      processQueue();
-    });
-  }
-
   void _updatePendingCount() {
     pendingCountNotifier.value = _pendingBox.length;
   }
@@ -103,10 +88,32 @@ class SyncQueueService {
     logsNotifier.value = [];
   }
 
-  Future<void> processQueue() async {
+  Future<void> processQueue({bool force = false}) async {
     _updatePendingCount();
-    if (_isProcessing || _isFlushing) return;
+    if (_isProcessing) return;
     if (pendingCount == 0) return;
+
+    if (force) {
+      resetBackoff();
+    }
+
+    if (TelegramRateLimiter.instance.isPaused) {
+      final waitMs =
+          TelegramRateLimiter.instance.remainingCooldown.inMilliseconds;
+      AppLogger.w(
+        'SyncQueue: cannot process, Telegram rate limit backoff active (${waitMs}ms remaining).',
+        tag: 'SyncQueue',
+      );
+      return;
+    }
+
+    if (isBackoffActive) {
+      AppLogger.d(
+        'SyncQueue: exponential backoff active (${remainingBackoff.inMilliseconds}ms remaining), skipping processing.',
+        tag: 'SyncQueue',
+      );
+      return;
+    }
 
     if (!await Connectivity.hasConnection()) {
       AppLogger.d('SyncQueue: cannot process, device is offline.',
@@ -114,7 +121,6 @@ class SyncQueueService {
       return;
     }
 
-    _isFlushing = true;
     _isProcessing = true;
     AppLogger.i('SyncQueue: starting processing of $pendingCount actions...',
         tag: 'SyncQueue');
@@ -124,6 +130,15 @@ class SyncQueueService {
         ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
       for (final action in actions) {
+        // If a 429 backoff was activated by a prior action in this batch, stop immediately
+        if (TelegramRateLimiter.instance.isPaused) {
+          AppLogger.w(
+            'SyncQueue: Telegram 429 encountered during batch, pausing queue.',
+            tag: 'SyncQueue',
+          );
+          break;
+        }
+
         AppLogger.d(
             'SyncQueue: processing action ${action.actionType} (${action.id})',
             tag: 'SyncQueue');
@@ -146,6 +161,10 @@ class SyncQueueService {
           await _pendingBox.delete(action.id);
           _updatePendingCount();
 
+          // Reset backoff on successful execution
+          _failureCount = 0;
+          _nextAllowedRun = null;
+
           final completedLog = SyncLogItem(
             id: action.id,
             actionType: action.actionType,
@@ -162,6 +181,12 @@ class SyncQueueService {
               'SyncQueue: successfully processed & deleted action ${action.id}',
               tag: 'SyncQueue');
         } catch (e) {
+          _failureCount++;
+          final backoffSeconds =
+              math.min(300, (1 << math.min(_failureCount, 5)) * 5); // 10s, 20s, 40s, 80s, 160s, max 300s
+          _nextAllowedRun =
+              DateTime.now().add(Duration(seconds: backoffSeconds));
+
           AppLogger.e('SyncQueue: failed to process action ${action.id}: $e',
               tag: 'SyncQueue', error: e);
           final failedLog = SyncLogItem(
@@ -186,9 +211,7 @@ class SyncQueueService {
         }
       }
     } finally {
-      _isFlushing = false;
       _isProcessing = false;
-      _firstUnflushedAt = null;
       _updatePendingCount();
       AppLogger.i('SyncQueue: processing finished.', tag: 'SyncQueue');
     }

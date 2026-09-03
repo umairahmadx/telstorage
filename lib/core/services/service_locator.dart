@@ -24,6 +24,7 @@ import 'navigation_service.dart';
 import 'transfer_queue_service.dart';
 import 'transfer_concurrency_coordinator.dart';
 import 'app_cache_manager.dart';
+import 'image_viewer_cache_service.dart';
 import 'lru_folder_cache_service.dart';
 import 'telegram_rate_limiter.dart';
 import '../../features/storage/data/repositories/storage_repository.dart';
@@ -121,6 +122,7 @@ class ServiceLocator {
   NavigationService get navigation => _navigation;
   TransferQueueService get transferQueue => _transferQueue;
   AppCacheManager get cacheManager => _cacheManager;
+  ImageViewerCacheService get imageViewerCache => ImageViewerCacheService.instance;
   ErrorLogService get errorLogService => ErrorLogService.instance;
 
 

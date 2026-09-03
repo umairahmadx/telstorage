@@ -9,11 +9,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../../core/models/file_record.dart';
 import '../../../../../core/navigation/navigation_intent.dart';
+import '../../../../../core/services/image_viewer_cache_service.dart';
 import '../../../../../core/services/service_locator.dart';
 import '../../../../../core/theme/app_theme.dart';
 import '../../../../../shared/widgets/dialogs/app_dialogs.dart';
 import '../../../../../shared/widgets/mobile_shell.dart';
 import '../../../../../shared/widgets/share_link_sheet.dart';
+import 'package:telstorage/features/viewer/presentation/screens/image_viewer/image_viewer_screen.dart';
 import 'viewmodel/home_view_model.dart';
 import 'widgets/home_greeting_card.dart';
 import 'widgets/recent_files_section.dart';
@@ -76,6 +78,22 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       },
     );
+  }
+
+  void _handleFileTap(FileRecord file, List<FileRecord> recentFiles) {
+    if (ImageViewerCacheService.isImageRecord(file)) {
+      final images =
+          recentFiles.where(ImageViewerCacheService.isImageRecord).toList();
+      final initialIndex =
+          images.indexWhere((img) => img.fileId == file.fileId);
+      ImageViewerScreen.open(
+        context,
+        images: images,
+        initialIndex: initialIndex >= 0 ? initialIndex : 0,
+      );
+    } else {
+      _showFileDetail(file);
+    }
   }
 
   /// Displays web share link configuration bottom sheet.
@@ -194,6 +212,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   RecentFilesSection(
                     files: state.recentFiles,
                     onMore: _showFileDetail,
+                    onFileTap: (f) => _handleFileTap(f, state.recentFiles),
                   ),
                   const SizedBox(height: 40),
                 ],

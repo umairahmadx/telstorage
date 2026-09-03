@@ -143,6 +143,15 @@ class AppCacheManager {
           }
         }
       }
+      final imageCacheDir = Directory('${tempDir.path}/image_cache');
+      if (imageCacheDir.existsSync()) {
+        for (final file in imageCacheDir.listSync(followLinks: false)) {
+          if (file is File) {
+            thumbBytes += file.lengthSync();
+            thumbCount++;
+          }
+        }
+      }
 
       // 2. Database & Folder Partition Cache
       int dbBytes = 0;
@@ -163,7 +172,8 @@ class AppCacheManager {
         for (final entity in tempDir.listSync(followLinks: false)) {
           if (entity is File &&
               !entity.path.contains('thumbnails') &&
-              !entity.path.contains('video_thumbs')) {
+              !entity.path.contains('video_thumbs') &&
+              !entity.path.contains('image_cache')) {
             tempBytes += entity.lengthSync();
           }
         }
@@ -207,6 +217,19 @@ class AppCacheManager {
     }
   }
 
+  /// Clears only the full-resolution image viewer cache partition.
+  Future<void> clearImageCache() async {
+    if (kIsWeb) return;
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final imageCacheDir = Directory('${tempDir.path}/image_cache');
+      if (imageCacheDir.existsSync()) imageCacheDir.deleteSync(recursive: true);
+      AppLogger.i('Image cache partition cleared', tag: 'AppCacheManager');
+    } catch (e) {
+      AppLogger.e('Error clearing image cache: $e', tag: 'AppCacheManager');
+    }
+  }
+
   /// Clears in-flight chunk downloads and temp transfer files.
   Future<void> clearTempCache() async {
     if (kIsWeb) return;
@@ -216,7 +239,8 @@ class AppCacheManager {
         for (final entity in tempDir.listSync(followLinks: false)) {
           if (entity is File &&
               !entity.path.contains('thumbnails') &&
-              !entity.path.contains('video_thumbs')) {
+              !entity.path.contains('video_thumbs') &&
+              !entity.path.contains('image_cache')) {
             entity.deleteSync();
           }
         }
@@ -237,13 +261,14 @@ class AppCacheManager {
   /// Clears all segregated local caches.
   Future<void> clearAllCache() async {
     await clearThumbnailCache();
+    await clearImageCache();
     await clearTempCache();
     await clearFolderPartitionCache();
     AppLogger.i('All local cache partitions successfully flushed',
         tag: 'AppCacheManager');
   }
 
-  /// Enforces user-configured cache ceiling using LRU eviction on oldest thumbnail files.
+  /// Enforces user-configured cache ceiling using LRU eviction on oldest thumbnail and image files.
   Future<void> enforceCacheLimit([int? overrideLimitMb]) async {
     if (kIsWeb) return;
     try {
@@ -260,11 +285,19 @@ class AppCacheManager {
 
       final tempDir = await getTemporaryDirectory();
       final thumbDir = Directory('${tempDir.path}/thumbnails');
+      final imageCacheDir = Directory('${tempDir.path}/image_cache');
 
+      final List<File> files = [];
       if (thumbDir.existsSync()) {
-        final files = thumbDir.listSync().whereType<File>().toList()
-          ..sort(
-              (a, b) => a.lastModifiedSync().compareTo(b.lastModifiedSync()));
+        files.addAll(thumbDir.listSync().whereType<File>());
+      }
+      if (imageCacheDir.existsSync()) {
+        files.addAll(imageCacheDir.listSync().whereType<File>());
+      }
+
+      if (files.isNotEmpty) {
+        files.sort(
+            (a, b) => a.lastModifiedSync().compareTo(b.lastModifiedSync()));
 
         int freedBytes = 0;
         final targetBytesToFree = stats.totalBytes - (maxBytes * 0.85).toInt();

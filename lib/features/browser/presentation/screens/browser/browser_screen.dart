@@ -6,9 +6,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:telstorage/core/services/folder_traversal_service.dart';
+import 'package:telstorage/core/services/image_viewer_cache_service.dart';
 import 'package:telstorage/core/services/service_locator.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
 import 'package:telstorage/core/utils/connectivity.dart';
+import 'package:telstorage/features/viewer/presentation/screens/image_viewer/image_viewer_screen.dart';
 import 'package:telstorage/shared/widgets/app_search_field.dart';
 import 'package:telstorage/shared/widgets/bars/app_batch_action_bar.dart';
 import 'package:telstorage/shared/widgets/dialogs/app_dialogs.dart';
@@ -360,6 +362,17 @@ class _BrowserScreenState extends State<BrowserScreen> {
                   context
                       .read<BrowserBloc>()
                       .add(ToggleItemSelection(file.fileId, isFolder: false));
+                } else if (ImageViewerCacheService.isImageRecord(file)) {
+                  final images = state.files
+                      .where(ImageViewerCacheService.isImageRecord)
+                      .toList();
+                  final initialIndex =
+                      images.indexWhere((img) => img.fileId == file.fileId);
+                  ImageViewerScreen.open(
+                    context,
+                    images: images,
+                    initialIndex: initialIndex >= 0 ? initialIndex : 0,
+                  );
                 } else {
                   BrowserDialogs.showFileDetail(context, file);
                 }

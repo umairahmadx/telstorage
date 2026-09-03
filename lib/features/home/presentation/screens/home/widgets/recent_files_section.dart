@@ -19,11 +19,15 @@ class RecentFilesSection extends StatelessWidget {
   /// Callback when user taps more options button on a file.
   final ValueChanged<FileRecord> onMore;
 
+  /// Callback when user taps a file tile directly. Defaults to onMore if null.
+  final ValueChanged<FileRecord>? onFileTap;
+
   /// Constructs RecentFilesSection.
   const RecentFilesSection({
     super.key,
     required this.files,
     required this.onMore,
+    this.onFileTap,
   });
 
   @override
@@ -59,7 +63,7 @@ class RecentFilesSection extends StatelessWidget {
               return AppFileTile(
                 key: ValueKey(file.fileId),
                 file: file,
-                onTap: () => onMore(file),
+                onTap: () => (onFileTap ?? onMore)(file),
                 onActionTap: () => onMore(file),
               );
             },

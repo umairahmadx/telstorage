@@ -6,6 +6,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'core/routing/app_router.dart';
+import 'core/services/app_cache_manager.dart';
 import 'core/services/theme_service.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/viewmodels/auth_view_model.dart';
@@ -14,10 +15,36 @@ import 'features/downloads/presentation/screens/downloads/viewmodel/downloads_vi
 import 'features/home/presentation/screens/home/viewmodel/home_view_model.dart';
 import 'features/upload/presentation/viewmodels/upload_view_model.dart';
 
-/// Root Application Widget configuring theme listeners and Bloc providers.
-class TelStorageApp extends StatelessWidget {
+/// Root Application Widget configuring theme listeners, Bloc providers, and lifecycle cache eviction.
+class TelStorageApp extends StatefulWidget {
   /// Constructs TelStorageApp.
   const TelStorageApp({super.key});
+
+  @override
+  State<TelStorageApp> createState() => _TelStorageAppState();
+}
+
+class _TelStorageAppState extends State<TelStorageApp>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      AppCacheManager.instance.clearImageCache();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

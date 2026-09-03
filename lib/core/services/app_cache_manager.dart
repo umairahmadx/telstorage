@@ -18,6 +18,12 @@ class CachePartitionStats {
   /// Count of cached thumbnail files.
   final int thumbnailCount;
 
+  /// Full-resolution image viewer cache size in bytes.
+  final int imageCacheBytes;
+
+  /// Count of cached full-resolution image files.
+  final int imageCacheCount;
+
   /// Local database & partition metadata size in bytes.
   final int databaseBytes;
 
@@ -31,13 +37,16 @@ class CachePartitionStats {
   const CachePartitionStats({
     required this.thumbnailBytes,
     required this.thumbnailCount,
+    this.imageCacheBytes = 0,
+    this.imageCacheCount = 0,
     required this.databaseBytes,
     required this.tempBytes,
     required this.limitMb,
   });
 
   /// Total combined cache size in bytes.
-  int get totalBytes => thumbnailBytes + databaseBytes + tempBytes;
+  int get totalBytes =>
+      thumbnailBytes + imageCacheBytes + databaseBytes + tempBytes;
 
   /// Total combined cache size in megabytes.
   double get totalMb => totalBytes / (1024 * 1024);
@@ -47,6 +56,9 @@ class CachePartitionStats {
 
   /// Formatted thumbnail cache string.
   String get formattedThumbnails => _formatBytes(thumbnailBytes);
+
+  /// Formatted image cache string.
+  String get formattedImageCache => _formatBytes(imageCacheBytes);
 
   /// Formatted database cache string.
   String get formattedDatabase => _formatBytes(databaseBytes);
@@ -66,7 +78,7 @@ class CachePartitionStats {
   }
 }
 
-/// Central controller managing disk partitions, LRU evictions, and user cache budgets.
+/// Central service calculating live cache utilization, limits, and cleanup routines.
 class AppCacheManager {
   AppCacheManager._();
 
@@ -110,6 +122,8 @@ class AppCacheManager {
       return CachePartitionStats(
         thumbnailBytes: 0,
         thumbnailCount: 0,
+        imageCacheBytes: 0,
+        imageCacheCount: 0,
         databaseBytes: 0,
         tempBytes: 0,
         limitMb: limitMb,
@@ -143,17 +157,21 @@ class AppCacheManager {
           }
         }
       }
+
+      // 2. Full-Resolution Image Cache Partition
+      int imgBytes = 0;
+      int imgCount = 0;
       final imageCacheDir = Directory('${tempDir.path}/image_cache');
       if (imageCacheDir.existsSync()) {
         for (final file in imageCacheDir.listSync(followLinks: false)) {
           if (file is File) {
-            thumbBytes += file.lengthSync();
-            thumbCount++;
+            imgBytes += file.lengthSync();
+            imgCount++;
           }
         }
       }
 
-      // 2. Database & Folder Partition Cache
+      // 3. Database & Folder Partition Cache
       int dbBytes = 0;
       if (appDocDir.existsSync()) {
         for (final file in appDocDir.listSync(followLinks: false)) {
@@ -166,7 +184,7 @@ class AppCacheManager {
         }
       }
 
-      // 3. Temporary / Transfer Chunk Cache
+      // 4. Temporary / Transfer Chunk Cache
       int tempBytes = 0;
       if (tempDir.existsSync()) {
         for (final entity in tempDir.listSync(followLinks: false)) {
@@ -182,6 +200,8 @@ class AppCacheManager {
       return CachePartitionStats(
         thumbnailBytes: thumbBytes,
         thumbnailCount: thumbCount,
+        imageCacheBytes: imgBytes,
+        imageCacheCount: imgCount,
         databaseBytes: dbBytes,
         tempBytes: tempBytes,
         limitMb: limitMb,
@@ -193,6 +213,8 @@ class AppCacheManager {
       return CachePartitionStats(
         thumbnailBytes: 0,
         thumbnailCount: 0,
+        imageCacheBytes: 0,
+        imageCacheCount: 0,
         databaseBytes: 0,
         tempBytes: 0,
         limitMb: limitMb,

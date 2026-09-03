@@ -73,6 +73,9 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
   final Set<String> _savedFileIds = {};
   bool _isSaving = false;
 
+  // Active touch pointers tracking for multi-touch pinch priority
+  int _pointerCount = 0;
+
   @override
   void initState() {
     super.initState();
@@ -127,7 +130,7 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
   }
 
   void _handleVerticalDragUpdate(DragUpdateDetails details) {
-    if (_isZoomed) return;
+    if (_isZoomed || _pointerCount >= 2) return;
     setState(() {
       _isDragging = true;
       _dragOffset += details.primaryDelta ?? 0.0;
@@ -135,7 +138,7 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
   }
 
   void _handleVerticalDragEnd(DragEndDetails details) {
-    if (_isZoomed) return;
+    if (_isZoomed || _pointerCount >= 2) return;
     final velocity = details.primaryVelocity ?? 0.0;
 
     if (_dragOffset.abs() > 120 || velocity.abs() > 600) {
@@ -192,34 +195,56 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Viewport with vertical drag-to-dismiss transform
-          GestureDetector(
-            onVerticalDragUpdate:
-                _isZoomed ? null : _handleVerticalDragUpdate,
-            onVerticalDragEnd:
-                _isZoomed ? null : _handleVerticalDragEnd,
-            child: Transform.translate(
-              offset: Offset(0, _dragOffset),
-              child: PageView.builder(
-                controller: _pageController,
-                physics: _isZoomed
-                    ? const NeverScrollableScrollPhysics()
-                    : const BouncingScrollPhysics(),
-                itemCount: widget.images.length,
-                onPageChanged: _handlePageChanged,
-                itemBuilder: (context, index) {
-                  return ImageZoomPage(
-                    key: ValueKey(widget.images[index].fileId),
-                    file: widget.images[index],
-                    onZoomChanged: (zoomed) {
-                      setState(() {
-                        _isZoomed = zoomed;
-                        if (zoomed) _toolbarsVisible = false;
-                      });
-                    },
-                    onToggleImmersive: _toggleToolbars,
-                  );
-                },
+          // Viewport with vertical drag-to-dismiss transform & multi-touch pinch priority
+          Listener(
+            onPointerDown: (_) {
+              _pointerCount++;
+              if (_pointerCount >= 2 && mounted) {
+                setState(() {
+                  _dragOffset = 0.0;
+                  _isDragging = false;
+                });
+              }
+            },
+            onPointerUp: (_) {
+              _pointerCount = (_pointerCount - 1).clamp(0, 10);
+              if (mounted) setState(() {});
+            },
+            onPointerCancel: (_) {
+              _pointerCount = (_pointerCount - 1).clamp(0, 10);
+              if (mounted) setState(() {});
+            },
+            child: GestureDetector(
+              onVerticalDragUpdate:
+                  (_isZoomed || _pointerCount >= 2) ? null : _handleVerticalDragUpdate,
+              onVerticalDragEnd:
+                  (_isZoomed || _pointerCount >= 2) ? null : _handleVerticalDragEnd,
+              child: Transform.translate(
+                offset: Offset(0, _dragOffset),
+                child: PageView.builder(
+                  controller: _pageController,
+                  physics: (_isZoomed || _pointerCount >= 2)
+                      ? const NeverScrollableScrollPhysics()
+                      : const BouncingScrollPhysics(),
+                  itemCount: widget.images.length,
+                  onPageChanged: _handlePageChanged,
+                  itemBuilder: (context, index) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                      child: ImageZoomPage(
+                        key: ValueKey(widget.images[index].fileId),
+                        file: widget.images[index],
+                        onZoomChanged: (zoomed) {
+                          setState(() {
+                            _isZoomed = zoomed;
+                            if (zoomed) _toolbarsVisible = false;
+                          });
+                        },
+                        onToggleImmersive: _toggleToolbars,
+                      ),
+                    );
+                  },
+                ),
               ),
             ),
           ),
@@ -244,6 +269,7 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
               isSaved: _savedFileIds.contains(_currentFile.fileId),
               isSaving: _isSaving,
               onSave: _handleSave,
+              onShare: _handleShare,
             ),
         ],
       ),

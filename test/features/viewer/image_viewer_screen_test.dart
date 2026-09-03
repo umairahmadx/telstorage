@@ -9,10 +9,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:telstorage/core/models/file_record.dart';
+import 'package:telstorage/core/theme/app_icons.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
 import 'package:telstorage/features/viewer/presentation/screens/image_viewer/image_viewer_screen.dart';
 import 'package:telstorage/features/viewer/presentation/screens/image_viewer/widgets/image_viewer_bottom_bar.dart';
 import 'package:telstorage/features/viewer/presentation/screens/image_viewer/widgets/image_viewer_top_bar.dart';
+import 'package:telstorage/features/viewer/presentation/screens/image_viewer/widgets/image_zoom_page.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -210,6 +212,55 @@ void main() {
       // ImageViewerScreen should be dismissed
       expect(find.byType(ImageViewerScreen), findsNothing);
       expect(find.text('Open Viewer'), findsOneWidget);
+    });
+
+    testWidgets('TC-05: Bottom bar renders Download and Share buttons side-by-side without labels',
+        (tester) async {
+      await tester.pumpWidget(buildTestViewer(initialIndex: 0));
+      await tester.pump();
+
+      // Ensure old label is gone
+      expect(find.text('Save to Device'), findsNothing);
+
+      // Verify download and share icons are present in bottom bar
+      final bottomBar = find.byType(ImageViewerBottomBar);
+      expect(bottomBar, findsOneWidget);
+
+      expect(
+        find.descendant(of: bottomBar, matching: find.byIcon(AppIcons.download)),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: bottomBar, matching: find.byIcon(AppIcons.share)),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('TC-06: PageView pages have horizontal padding creating image gutter',
+        (tester) async {
+      await tester.pumpWidget(buildTestViewer(initialIndex: 0));
+      await tester.pump();
+
+      // Check for horizontal padding wrapping ImageZoomPage
+      final paddingFinder = find.ancestor(
+        of: find.byType(ImageZoomPage).first,
+        matching: find.byType(Padding),
+      );
+      expect(paddingFinder, findsWidgets);
+
+      final paddingWidget = tester.widget<Padding>(paddingFinder.first);
+      expect(paddingWidget.padding, const EdgeInsets.symmetric(horizontal: 8.0));
+    });
+
+    testWidgets('TC-07: ImageZoomPage does not render bottom status pill or text',
+        (tester) async {
+      await tester.pumpWidget(buildTestViewer(initialIndex: 0));
+      await tester.pump();
+
+      // No status text pill or text should appear
+      expect(find.text('Reading file index…'), findsNothing);
+      expect(find.text('Loading…'), findsNothing);
+      expect(find.text('Ready'), findsNothing);
     });
   });
 }

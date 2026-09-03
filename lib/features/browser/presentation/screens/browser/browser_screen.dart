@@ -4,6 +4,7 @@
  */
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:telstorage/core/services/folder_traversal_service.dart';
 import 'package:telstorage/core/services/image_viewer_cache_service.dart';
@@ -106,8 +107,10 @@ class _BrowserScreenState extends State<BrowserScreen> {
                   ? IconButton(
                       icon: Icon(Icons.arrow_back_rounded,
                           color: colors.textPrimary),
-                      onPressed: () =>
-                          context.read<BrowserBloc>().add(NavigateUp()),
+                      onPressed: () {
+                        HapticFeedback.lightImpact();
+                        context.read<BrowserBloc>().add(NavigateUp());
+                      },
                     )
                   : IconButton(
                       icon: const Icon(Icons.menu_rounded),
@@ -258,6 +261,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
             label: Text(label),
             selected: isSelected,
             onSelected: (_) {
+              HapticFeedback.selectionClick();
               context.read<BrowserBloc>().add(LoadDirectory(
                     folderId: state.currentFolderId,
                     category: cat,

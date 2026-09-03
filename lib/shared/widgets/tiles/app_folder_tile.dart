@@ -4,6 +4,7 @@
  */
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:telstorage/core/models/folder_record.dart';
 import 'package:telstorage/core/theme/app_icons.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
@@ -55,7 +56,12 @@ class AppFolderTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: AppSurfaceCard(
-        onTap: onTap,
+        onTap: onTap != null
+            ? () {
+                HapticFeedback.lightImpact();
+                onTap!();
+              }
+            : null,
         onLongPress: onLongPress,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         borderRadius: borderRadius ?? BorderRadius.circular(12),

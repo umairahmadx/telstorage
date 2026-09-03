@@ -26,6 +26,9 @@ class ImageViewerBottomBar extends StatelessWidget {
   /// Callback to save image to device.
   final VoidCallback onSave;
 
+  /// Callback to share image directly.
+  final VoidCallback onShare;
+
   /// Constructs ImageViewerBottomBar.
   const ImageViewerBottomBar({
     super.key,
@@ -34,6 +37,7 @@ class ImageViewerBottomBar extends StatelessWidget {
     this.isSaved = false,
     this.isSaving = false,
     required this.onSave,
+    required this.onShare,
   });
 
   @override
@@ -89,36 +93,82 @@ class ImageViewerBottomBar extends StatelessWidget {
                 ),
               ],
             ),
-            FilledButton.icon(
-              onPressed: isSaving ? null : onSave,
-              style: FilledButton.styleFrom(
-                backgroundColor: isSaved
-                    ? colors.success.withValues(alpha: 0.18)
-                    : colors.accentPrimary,
-                foregroundColor: isSaved ? colors.success : colors.bgPrimary,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-              icon: isSaving
-                  ? SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: colors.bgPrimary,
-                      ),
-                    )
-                  : Icon(
-                      isSaved ? AppIcons.statusDone : AppIcons.download,
-                      size: 18,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Download action icon button
+                Container(
+                  width: 44,
+                  height: 44,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    color: isSaved
+                        ? colors.success.withValues(alpha: 0.18)
+                        : colors.bgSurface.withValues(alpha: 0.85),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isSaved
+                          ? colors.success.withValues(alpha: 0.4)
+                          : colors.borderSubtle.withValues(alpha: 0.5),
                     ),
-              label: Text(
-                isSaved ? 'Saved' : 'Save to Device',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-              ),
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: isSaving ? null : onSave,
+                      customBorder: const CircleBorder(),
+                      child: Center(
+                        child: isSaving
+                            ? SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: colors.accentPrimary,
+                                ),
+                              )
+                            : Icon(
+                                isSaved
+                                    ? AppIcons.statusDone
+                                    : AppIcons.download,
+                                size: 20,
+                                color: isSaved
+                                    ? colors.success
+                                    : colors.textPrimary,
+                              ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // Share action icon button
+                Container(
+                  width: 44,
+                  height: 44,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    color: colors.bgSurface.withValues(alpha: 0.85),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: colors.borderSubtle.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: onShare,
+                      customBorder: const CircleBorder(),
+                      child: Center(
+                        child: Icon(
+                          AppIcons.share,
+                          size: 20,
+                          color: colors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

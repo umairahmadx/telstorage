@@ -217,11 +217,22 @@ class MobileShellState extends State<MobileShell> {
 
   /// Switches active tab.
   void switchTab(int index) {
-    if (index == _currentIndex || index < 0 || index > 4) return;
+    if (index < 0 || index > 4) return;
     if (index == 2) {
       _showAddMenu();
       return;
     }
+    if (index == 1 && _currentIndex == 1) {
+      final browserBloc = context.read<BrowserBloc>();
+      final browserState = browserBloc.state;
+      if (browserState.currentFolderId != null ||
+          browserState.category != null) {
+        HapticFeedback.lightImpact();
+        browserBloc.add(LoadDirectory());
+      }
+      return;
+    }
+    if (index == _currentIndex) return;
     HapticFeedback.selectionClick();
     setState(() => _currentIndex = index);
   }

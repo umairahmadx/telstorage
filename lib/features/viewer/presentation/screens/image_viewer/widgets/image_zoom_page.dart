@@ -50,8 +50,6 @@ class _ImageZoomPageState extends State<ImageZoomPage>
   // Progressive image state
   File? _cachedFullFile;
   bool _isDownloading = false;
-  double _downloadProgress = 0.0;
-  String _statusText = '';
 
   // Thumbnail fallback data
   Uint8List? _thumbBytes;
@@ -150,6 +148,21 @@ class _ImageZoomPageState extends State<ImageZoomPage>
         setState(() {
           _thumbPath = path;
         });
+      } else if (mounted && widget.file.thumbnailFileId != null) {
+        // 3. Priority network thumbnail fetch if not on disk
+        ServiceLocator.instance.thumbnailRepository
+            .getThumbnailData(widget.file)
+            .then((data) {
+          if (mounted && data != null) {
+            setState(() {
+              if (data is Uint8List) {
+                _thumbBytes = data;
+              } else if (data is String) {
+                _thumbPath = data;
+              }
+            });
+          }
+        });
       }
     });
   }
@@ -171,21 +184,11 @@ class _ImageZoomPageState extends State<ImageZoomPage>
     if (mounted) {
       setState(() {
         _isDownloading = true;
-        _downloadProgress = 0.05;
-        _statusText = 'Loading…';
       });
     }
 
     final downloaded = await cacheService.downloadImageToCache(
       widget.file,
-      onProgress: (progress, status) {
-        if (mounted) {
-          setState(() {
-            _downloadProgress = progress;
-            _statusText = status;
-          });
-        }
-      },
     );
 
     if (mounted) {
@@ -205,106 +208,66 @@ class _ImageZoomPageState extends State<ImageZoomPage>
       onTap: widget.onToggleImmersive,
       onDoubleTapDown: _handleDoubleTapDown,
       onDoubleTap: _handleDoubleTap,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Main Pan & Zoom Viewport
-          InteractiveViewer(
-            transformationController: _transformationController,
-            minScale: 1.0,
-            maxScale: 5.0,
-            clipBehavior: Clip.none,
-            child: Center(
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  // Layer 1: Instant 0ms Thumbnail Base
-                  if (_thumbBytes != null)
-                    Image.memory(
-                      _thumbBytes!,
-                      fit: BoxFit.contain,
-                    )
-                  else if (_thumbPath != null && File(_thumbPath!).existsSync())
-                    Image.file(
-                      File(_thumbPath!),
-                      fit: BoxFit.contain,
-                    )
-                  else
-                    SizedBox(
-                      width: 120,
-                      height: 120,
-                      child: Center(
-                        child: Icon(
-                          Icons.image_outlined,
-                          size: 48,
-                          color: colors.textTertiary,
-                        ),
-                      ),
-                    ),
-
-                  // Layer 2: Crystal-clear High-Res Image with Smooth Crossfade
-                  if (_cachedFullFile != null)
-                    AnimatedOpacity(
-                      opacity: 1.0,
-                      duration: const Duration(milliseconds: 250),
-                      curve: Curves.easeIn,
-                      child: Image.file(
-                        _cachedFullFile!,
+      child: InteractiveViewer(
+        transformationController: _transformationController,
+        minScale: 1.0,
+        maxScale: 5.0,
+        clipBehavior: Clip.none,
+        child: Center(
+          child: _cachedFullFile != null
+              ? Image.file(
+                  _cachedFullFile!,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                )
+              : Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    if (_thumbBytes != null)
+                      Image.memory(
+                        _thumbBytes!,
                         fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-
-          // Layer 3: Floating Non-Intrusive Download Progress Indicator
-          if (_isDownloading && _cachedFullFile == null)
-            Positioned(
-              bottom: 120,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: colors.bgPrimary.withValues(alpha: 0.75),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: colors.borderSubtle.withValues(alpha: 0.4),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
+                      )
+                    else if (_thumbPath != null &&
+                        File(_thumbPath!).existsSync())
+                      Image.file(
+                        File(_thumbPath!),
+                        fit: BoxFit.contain,
+                      )
+                    else
                       SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          value: _downloadProgress > 0 ? _downloadProgress : null,
-                          strokeWidth: 2,
-                          color: colors.accentPrimary,
+                        width: 120,
+                        height: 120,
+                        child: Center(
+                          child: Icon(
+                            Icons.image_outlined,
+                            size: 48,
+                            color: colors.textTertiary,
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Text(
-                        _downloadProgress > 0.05
-                            ? '${(_downloadProgress * 100).toInt()}%'
-                            : _statusText,
-                        style: TextStyle(
-                          color: colors.textPrimary,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                    if (_isDownloading)
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: colors.bgPrimary.withValues(alpha: 0.65),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: colors.accentPrimary,
+                            ),
+                          ),
                         ),
                       ),
-                    ],
-                  ),
+                  ],
                 ),
-              ),
-            ),
-        ],
+        ),
       ),
     );
   }

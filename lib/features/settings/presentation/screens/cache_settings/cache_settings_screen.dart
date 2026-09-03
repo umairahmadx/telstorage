@@ -194,6 +194,20 @@ class _CacheSettingsScreenState extends State<CacheSettingsScreen> {
                 ),
                 const SizedBox(height: 12),
                 CachePartitionCard(
+                  icon: Icons.image_outlined,
+                  iconColor: colors.accentPrimary,
+                  title: 'Full-Resolution Images',
+                  subtitle:
+                      '${_stats?.imageCacheCount ?? 0} cached full-size photos',
+                  sizeText: _stats?.formattedImageCache ?? '0 B',
+                  onClear: () => _clearPartition(
+                    title: 'Full-Resolution Image Cache',
+                    onClear: ServiceLocator
+                        .instance.cacheManager.clearImageCache,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                CachePartitionCard(
                   icon: Icons.folder_copy_outlined,
                   iconColor: colors.fileZip,
                   title: 'Database & Folder Partitions',

@@ -4,6 +4,7 @@
  */
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:telstorage/core/models/folder_record.dart';
 import 'package:telstorage/core/theme/app_icons.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
@@ -55,7 +56,10 @@ class AppFolderGridTile extends StatelessWidget {
       borderRadius: borderRadius,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: onTap,
+        onTap: () {
+          HapticFeedback.lightImpact();
+          onTap();
+        },
         onLongPress: onLongPress,
         borderRadius: borderRadius,
         child: Container(

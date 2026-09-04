@@ -13,6 +13,7 @@ import 'browser_batch_helper.dart';
 import 'browser_event.dart';
 import 'browser_filter_helper.dart';
 import 'browser_mutation_helper.dart';
+import 'browser_partition_helper.dart';
 import 'browser_state.dart';
 
 export 'browser_event.dart';
@@ -21,6 +22,7 @@ export 'browser_state.dart';
 /// ViewModel orchestrating file and folder navigation, search, and operations.
 class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
   final StorageRepositoryContract _repository;
+  final bool _isCustomRepo;
   StreamSubscription? _foldersSubscription;
   StreamSubscription? _filesSubscription;
   StreamSubscription? _domainEventSubscription;
@@ -28,6 +30,7 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
   /// Constructs BrowserBloc and registers event handlers.
   BrowserBloc([StorageRepositoryContract? repository])
       : _repository = repository ?? ServiceLocator.instance.storageRepository,
+        _isCustomRepo = repository != null,
         super(BrowserState()) {
     on<LoadDirectory>(_onLoadDirectory);
     on<SearchQueryChanged>(_onSearchQueryChanged);
@@ -64,7 +67,7 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
 
   /// Sets up reactive database and event bus listeners.
   void _initSubscriptions() {
-    if (!ServiceLocator.instance.isInitialized) return;
+    if (_isCustomRepo || !ServiceLocator.instance.isInitialized) return;
 
     _foldersSubscription = ServiceLocator.instance.hive.foldersListenable.value
         .watch()
@@ -95,14 +98,38 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
       clearFolderId: event.folderId == null,
       category: event.category,
       clearCategory: event.category == null,
+      clearErrorMessage: true,
     ));
 
     try {
+      if (_isCustomRepo) {
+        _reloadContents(emit, isOffline: false);
+        return;
+      }
+
       if (!ServiceLocator.instance.isInitialized) {
         await ServiceLocator.instance.init();
       }
 
       final isOffline = !await Connectivity.hasConnection();
+      final isReady =
+          await BrowserPartitionHelper.ensureDirectoryPartitionReady(
+        folderId: event.folderId,
+        isOffline: isOffline,
+      );
+
+      if (!isReady) {
+        emit(state.copyWith(
+          isLoading: false,
+          isInitialized: true,
+          isOffline: true,
+          folders: [],
+          files: [],
+          errorMessage: 'No internet connection',
+        ));
+        return;
+      }
+
       _reloadContents(emit, isOffline: isOffline);
     } catch (e) {
       emit(state.copyWith(
@@ -147,13 +174,11 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
   }
 
   void _onGroupOptionChanged(
-      GroupOptionChanged event, Emitter<BrowserState> emit) {
-    emit(state.copyWith(groupOption: event.option));
-  }
+          GroupOptionChanged event, Emitter<BrowserState> emit) =>
+      emit(state.copyWith(groupOption: event.option));
 
-  void _onToggleViewMode(ToggleViewMode event, Emitter<BrowserState> emit) {
-    emit(state.copyWith(isGridView: !state.isGridView));
-  }
+  void _onToggleViewMode(ToggleViewMode event, Emitter<BrowserState> emit) =>
+      emit(state.copyWith(isGridView: !state.isGridView));
 
   void _onToggleItemSelection(
       ToggleItemSelection event, Emitter<BrowserState> emit) {
@@ -180,9 +205,8 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
     ));
   }
 
-  void _onClearSelection(ClearSelection event, Emitter<BrowserState> emit) {
-    emit(state.copyWith(selectedFolderIds: {}, selectedFileIds: {}));
-  }
+  void _onClearSelection(ClearSelection event, Emitter<BrowserState> emit) =>
+      emit(state.copyWith(selectedFolderIds: {}, selectedFileIds: {}));
 
   void _onToggleSelectAll(ToggleSelectAll event, Emitter<BrowserState> emit) {
     final res = BrowserBatchHelper.toggleSelectAll(
@@ -228,9 +252,7 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
       ExportFolderAsZip event, Emitter<BrowserState> emit) async {
     try {
       await BrowserBatchHelper.executeExportFolderAsZip(
-        folder: event.folder,
-        repository: _repository,
-      );
+          folder: event.folder, repository: _repository);
     } catch (e) {
       emit(state.copyWith(errorMessage: '$e'.replaceAll('Exception: ', '')));
     }
@@ -239,11 +261,8 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
   Future<void> _onEnqueueDownload(
       EnqueueDownload event, Emitter<BrowserState> emit) async {
     try {
-      await _repository.enqueueDownload(
-        event.file,
-        subpath: event.subpath,
-        policy: event.policy,
-      );
+      await _repository.enqueueDownload(event.file,
+          subpath: event.subpath, policy: event.policy);
     } catch (e) {
       emit(state.copyWith(errorMessage: 'Download failed to start: $e'));
     }
@@ -252,12 +271,10 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
   Future<void> _onEnqueueShare(
       EnqueueShare event, Emitter<BrowserState> emit) async {
     try {
-      await _repository.enqueueWebShare(
-        event.file,
-        password: event.password,
-        expiryDays: event.expiryDays,
-        vanitySlug: event.vanitySlug,
-      );
+      await _repository.enqueueWebShare(event.file,
+          password: event.password,
+          expiryDays: event.expiryDays,
+          vanitySlug: event.vanitySlug);
     } catch (e) {
       emit(state.copyWith(errorMessage: 'Sharing failed to start: $e'));
     }
@@ -267,8 +284,8 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
     if (state.category != null) {
       add(LoadDirectory(folderId: state.currentFolderId));
     } else if (state.currentFolderId != null) {
-      final folder = _repository.getFolder(state.currentFolderId!);
-      add(LoadDirectory(folderId: folder?.parentId));
+      add(LoadDirectory(
+          folderId: _repository.getFolder(state.currentFolderId!)?.parentId));
     }
   }
 
@@ -421,20 +438,18 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
     }
   }
 
-  void _onSetClipboard(SetClipboard event, Emitter<BrowserState> emit) {
-    emit(state.copyWith(
-      clipboardMode: event.mode,
-      clipboardFileIds: event.fileIds,
-      clipboardFolderIds: event.folderIds,
-      clipboardSourceFolderId: event.sourceFolderId,
-      selectedFolderIds: {},
-      selectedFileIds: {},
-    ));
-  }
+  void _onSetClipboard(SetClipboard event, Emitter<BrowserState> emit) =>
+      emit(state.copyWith(
+        clipboardMode: event.mode,
+        clipboardFileIds: event.fileIds,
+        clipboardFolderIds: event.folderIds,
+        clipboardSourceFolderId: event.sourceFolderId,
+        selectedFolderIds: {},
+        selectedFileIds: {},
+      ));
 
-  void _onClearClipboard(ClearClipboard event, Emitter<BrowserState> emit) {
-    emit(state.copyWith(clearClipboard: true));
-  }
+  void _onClearClipboard(ClearClipboard event, Emitter<BrowserState> emit) =>
+      emit(state.copyWith(clearClipboard: true));
 
   Future<void> _onPasteClipboard(
       PasteClipboard event, Emitter<BrowserState> emit) async {

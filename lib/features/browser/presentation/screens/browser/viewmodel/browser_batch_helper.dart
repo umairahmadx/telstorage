@@ -53,6 +53,11 @@ abstract final class BrowserBatchHelper {
       throw Exception('Cannot download while offline');
     }
 
+    for (final folderId in state.selectedFolderIds) {
+      await ServiceLocator.instance.syncService
+          .ensureFolderTreeSynced(folderId);
+    }
+
     final allFolders = repository.currentFolders;
     final allFiles = repository.currentFiles;
 
@@ -114,6 +119,8 @@ abstract final class BrowserBatchHelper {
       throw Exception('Cannot download folder while offline');
     }
 
+    await ServiceLocator.instance.syncService.ensureFolderTreeSynced(folder.id);
+
     final allFolders = repository.currentFolders;
     final allFiles = repository.currentFiles;
 
@@ -172,6 +179,8 @@ abstract final class BrowserBatchHelper {
     if (!await Connectivity.hasConnection()) {
       throw Exception('Cannot export ZIP while offline');
     }
+
+    await ServiceLocator.instance.syncService.ensureFolderTreeSynced(folder.id);
 
     final allFolders = repository.currentFolders;
     final allFiles = repository.currentFiles;

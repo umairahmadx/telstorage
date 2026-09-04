@@ -105,6 +105,7 @@ Future<void> main() async {
   );
   await HiveService.openBoxDefensively(AppConstants.webSharesBox);
   await HiveService.openBoxDefensively(AppConstants.uploadChunksBox);
+  await HiveService.openBoxDefensively<int>(AppConstants.partitionSyncBox);
 
 
   // Initialize ErrorLogService & Hive Box

@@ -55,6 +55,9 @@ class AppConstants {
   /// Hive box storing persistent diagnostic error and warning logs.
   static const String errorLogsBox = 'error_logs';
 
+  /// Hive box storing folder partition message IDs for ETag sync validation.
+  static const String partitionSyncBox = 'partition_sync_state';
+
 
 
 

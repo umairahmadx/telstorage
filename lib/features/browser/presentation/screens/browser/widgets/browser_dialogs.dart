@@ -244,7 +244,26 @@ abstract final class BrowserDialogs {
   }
 
   /// Displays the share link bottom sheet for [folder] packaged as a ZIP.
-  static void shareFolder(BuildContext context, FolderRecord folder) {
+  static Future<void> shareFolder(
+      BuildContext context, FolderRecord folder) async {
+    try {
+      await ServiceLocator.instance.syncService
+          .ensureFolderTreeSynced(folder.id);
+    } catch (e) {
+      if (context.mounted) {
+        final colors = Theme.of(context).extension<AppColorsExtension>()!;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content:
+                Text(e is OfflineException ? 'No internet connection' : '$e'),
+            backgroundColor: colors.error,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (!context.mounted) return;
     final cleanName = FolderTraversalService.sanitizeSegment(folder.name);
     final repo = ServiceLocator.instance.storageRepository;
     final items = FolderTraversalService.resolveDescendants(

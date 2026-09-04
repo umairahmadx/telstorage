@@ -64,7 +64,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
 
     return BlocConsumer<BrowserBloc, BrowserState>(
       listener: (context, state) {
-        if (state.errorMessage != null) {
+        if (state.errorMessage != null &&
+            state.errorMessage != 'No internet connection') {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(state.errorMessage!),
@@ -286,6 +287,20 @@ class _BrowserScreenState extends State<BrowserScreen> {
   /// Builds directory files & folders content list or grid.
   Widget _buildContent(BrowserState state) {
     if (state.folders.isEmpty && state.files.isEmpty) {
+      if (state.isOffline && state.errorMessage == 'No internet connection') {
+        return AppEmptyState(
+          icon: Icons.wifi_off_rounded,
+          title: 'No internet connection',
+          subtitle: 'Connect to the internet to load this folder.',
+          buttonText: 'Retry',
+          onAction: () {
+            context.read<BrowserBloc>().add(LoadDirectory(
+                  folderId: state.currentFolderId,
+                  category: state.category,
+                ));
+          },
+        );
+      }
       return const AppEmptyState(
         icon: Icons.folder_open_rounded,
         title: 'Folder is empty',

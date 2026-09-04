@@ -132,6 +132,8 @@ class HiveService {
   Box<FileRecord> get _files => Hive.box<FileRecord>(AppConstants.filesBox);
   Box<FolderRecord> get _folders =>
       Hive.box<FolderRecord>(AppConstants.foldersBox);
+  Box<int> get _partitionSyncBox =>
+      Hive.box<int>(AppConstants.partitionSyncBox);
 
   ValueListenable<Box<FileRecord>> get filesListenable => _files.listenable();
   ValueListenable<Box<FolderRecord>> get foldersListenable =>
@@ -239,10 +241,61 @@ class HiveService {
     return _files.values.fold(0.0, (sum, file) => sum + file.sizeMb);
   }
 
+  // ── High-Throughput Batch Writes ─────────────────────────
+
+  Future<void> saveFilesBatch(List<FileRecord> records) async {
+    if (records.isEmpty) return;
+    final Map<String, FileRecord> entries = {
+      for (final r in records) r.fileId: r,
+    };
+    await _files.putAll(entries);
+  }
+
+  Future<void> saveFoldersBatch(List<FolderRecord> records) async {
+    if (records.isEmpty) return;
+    final Map<String, FolderRecord> entries = {
+      for (final r in records) r.id: r,
+    };
+    await _folders.putAll(entries);
+  }
+
+  Future<void> replaceFilesInFolder(
+      String? folderId, List<FileRecord> newRecords) async {
+    final existingIds = _files.values
+        .where((f) => f.folderId == folderId)
+        .map((f) => f.fileId)
+        .toList();
+    if (existingIds.isNotEmpty) {
+      await _files.deleteAll(existingIds);
+    }
+    await saveFilesBatch(newRecords);
+  }
+
+  // ── Partition Sync ETag State ─────────────────────────────
+
+  int? getFolderPartitionMessageId(String folderId) {
+    if (!Hive.isBoxOpen(AppConstants.partitionSyncBox)) return null;
+    return _partitionSyncBox.get(folderId);
+  }
+
+  Future<void> setFolderPartitionMessageId(
+      String folderId, int messageId) async {
+    if (!Hive.isBoxOpen(AppConstants.partitionSyncBox)) return;
+    await _partitionSyncBox.put(folderId, messageId);
+  }
+
+  Future<void> removeFolderPartitionMessageId(String folderId) async {
+    if (!Hive.isBoxOpen(AppConstants.partitionSyncBox)) return;
+    await _partitionSyncBox.delete(folderId);
+  }
+
   // ── Clear All ────────────────────────────────────────────
 
   Future<void> clearAll() async {
     await _files.clear();
     await _folders.clear();
+    if (Hive.isBoxOpen(AppConstants.partitionSyncBox)) {
+      await _partitionSyncBox.clear();
+    }
   }
 }

@@ -274,6 +274,7 @@ class StorageRepository implements StorageRepositoryContract {
       }
       for (final id in folderIds) {
         await _hive.deleteFolder(id);
+        await _hive.removeFolderPartitionMessageId(id);
       }
       await _pendingBox.put(pending.id, pending);
       _syncQueue.processQueue();

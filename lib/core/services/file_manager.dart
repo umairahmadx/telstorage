@@ -99,6 +99,45 @@ class FileManagerService {
     }
 
     final meta = await _meta.fetch();
+    final handledFileIds =
+        fileSnapshots.map((s) => s['fileId'] as String).toSet();
+
+    // Clean up uncached folder partitions and remote files on Telegram
+    for (final id in idsToDelete) {
+      final partMsgId = meta.folderPartitionsMap[id];
+      if (partMsgId != null) {
+        final partition = await _meta.fetchFolderPartition(id);
+        if (partition != null) {
+          for (final ref in partition.files) {
+            if (!handledFileIds.contains(ref.fileId)) {
+              await _deleteRemoteFileMessages(
+                ref.metadataMessageId,
+                ref.metaFileId,
+              );
+              meta.totalFiles = (meta.totalFiles - 1).clamp(0, 10000000);
+              meta.storageUsedMb = (meta.storageUsedMb - (ref.sizeMb ?? 0.0))
+                  .clamp(0.0, 10000000.0);
+              final category = _category(ref.mimeType ?? '');
+              final catStat = meta.categories[category];
+              if (catStat != null) {
+                catStat.count = (catStat.count - 1).clamp(0, 10000000);
+                catStat.sizeMb = (catStat.sizeMb - (ref.sizeMb ?? 0.0))
+                    .clamp(0.0, 10000000.0);
+              }
+              handledFileIds.add(ref.fileId);
+            }
+          }
+        }
+        if (partMsgId > 0) {
+          try {
+            await _telegram.deleteMessage(partMsgId);
+          } catch (_) {}
+        }
+        meta.folderPartitionsMap.remove(id);
+      }
+      await _hive.removeFolderPartitionMessageId(id);
+    }
+
     meta.folders.removeWhere((f) => idsToDelete.contains(f.id));
     meta.recentFiles.removeWhere(
         (f) => f.folderId != null && idsToDelete.contains(f.folderId));
@@ -268,23 +307,7 @@ class FileManagerService {
     required String mimeType,
     String? folderId,
   }) async {
-    if (metadataMessageId != null && metadataMessageId > 0) {
-      try {
-        final fileMeta =
-            await _fetchFileMeta(metadataMessageId, metadataFileId);
-        final chunks = fileMeta['chunks'] as List? ?? [];
-        for (final chunk in chunks) {
-          try {
-            await _telegram.deleteMessage(chunk['message_id'] as int);
-          } catch (_) {}
-        }
-        await _telegram.deleteMessage(metadataMessageId);
-      } catch (e) {
-        AppLogger.w(
-            'Could not clean up remote Telegram messages for $fileId: $e',
-            tag: 'FileManager');
-      }
-    }
+    await _deleteRemoteFileMessages(metadataMessageId, metadataFileId);
 
     try {
       final meta = await _meta.fetch();
@@ -298,6 +321,48 @@ class FileManagerService {
           tag: 'FileManager');
       rethrow;
     }
+  }
+
+  Future<void> _deleteRemoteFileMessages(
+    int? metadataMessageId,
+    String? metadataFileId,
+  ) async {
+    if (metadataMessageId != null && metadataMessageId > 0) {
+      try {
+        final fileMeta =
+            await _fetchFileMeta(metadataMessageId, metadataFileId);
+        final chunks = fileMeta['chunks'] as List? ?? [];
+        for (final chunk in chunks) {
+          try {
+            await _telegram.deleteMessage(chunk['message_id'] as int);
+          } catch (_) {}
+        }
+        await _telegram.deleteMessage(metadataMessageId);
+      } catch (e) {
+        AppLogger.w(
+            'Could not clean up remote Telegram messages: $e',
+            tag: 'FileManager');
+      }
+    }
+  }
+
+  String _category(String mimeType) {
+    if (mimeType.startsWith('image/')) return 'images';
+    if (mimeType.startsWith('video/')) return 'videos';
+    if (mimeType.startsWith('audio/')) return 'audio';
+    final isDoc = mimeType == 'application/pdf' ||
+        mimeType.contains('document') ||
+        mimeType.contains('text') ||
+        mimeType.contains('sheet') ||
+        mimeType.contains('presentation');
+    if (isDoc) return 'documents';
+    final isArchive = mimeType.contains('zip') ||
+        mimeType.contains('compressed') ||
+        mimeType.contains('tar') ||
+        mimeType.contains('rar') ||
+        mimeType.contains('7z');
+    if (isArchive) return 'archives';
+    return 'others';
   }
 
   Future<void> copyFile({

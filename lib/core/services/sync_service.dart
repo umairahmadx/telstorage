@@ -147,64 +147,32 @@ class SyncService {
             continue;
           }
           await _hive.deleteFolder(local.id);
+          await _hive.removeFolderPartitionMessageId(local.id);
           removed++;
           AppLogger.d('Removed stale folder: ${local.name}',
               tag: 'SyncService');
         }
       }
 
-      // ── Files: build index from folder partitions ──────────────────────────
-      final List<FileRef> fileRefs = [];
-      for (final folderId in appMeta.folderPartitionsMap.keys) {
-        if (pendingDeletedFolderIds.contains(folderId)) continue;
-        final partition = await _metadata.fetchFolderPartition(folderId);
-        if (partition != null) {
-          fileRefs.addAll(partition.files);
-        }
-      }
-      AppLogger.d('${fileRefs.length} file(s) on Telegram', tag: 'SyncService');
-
-      // Add/update files in local Hive
-      for (var i = 0; i < fileRefs.length; i++) {
-        final ref = fileRefs[i];
-        if (pendingDeletedFileIds.contains(ref.fileId)) {
-          AppLogger.d('Skipping pending deleted file: ${ref.name}',
-              tag: 'SyncService');
-          continue;
-        }
-
-        onProgress?.call(
-          0.1 + (i / fileRefs.length * 0.75),
-          'Syncing ${i + 1}/${fileRefs.length}: ${ref.name}',
-        );
-
+      // ── Fast Bootstrap: Seed Recent Files ──────────────────────────────────
+      onProgress?.call(0.3, 'Seeding recent files...');
+      final List<FileRecord> recentRecords = [];
+      for (final ref in appMeta.recentFiles) {
+        if (pendingDeletedFileIds.contains(ref.fileId)) continue;
         final existing = _hive.getFile(ref.fileId);
-        if (existing != null) {
-          bool updated = false;
-          if (!pendingRenamedOrMovedFileIds.contains(ref.fileId)) {
-            if (existing.name != ref.name ||
-                existing.folderId != ref.folderId) {
-              existing.name = ref.name;
-              existing.folderId = ref.folderId;
-              updated = true;
-            }
-          }
-          if (existing.thumbnailFileId != ref.thumbnailFileId &&
-              ref.thumbnailFileId != null) {
-            existing.thumbnailFileId = ref.thumbnailFileId;
-            updated = true;
-          }
-          if (updated) {
-            await existing.save();
-            AppLogger.d('Updated file: ${ref.name}', tag: 'SyncService');
-          }
-          continue;
-        }
+        final name = pendingRenamedOrMovedFileIds.contains(ref.fileId) &&
+                existing != null
+            ? existing.name
+            : ref.name;
+        final folderId = pendingRenamedOrMovedFileIds.contains(ref.fileId) &&
+                existing != null
+            ? existing.folderId
+            : ref.folderId;
 
-        final record = FileRecord(
+        recentRecords.add(FileRecord(
           fileId: ref.fileId,
-          name: ref.name,
-          folderId: ref.folderId,
+          name: name,
+          folderId: folderId,
           metadataMessageId: ref.metadataMessageId ?? 0,
           metadataFileId: ref.metaFileId,
           sizeMb: ref.sizeMb ?? 0.0,
@@ -214,36 +182,19 @@ class SyncService {
               : DateTime.now(),
           chunkCount: ref.chunkCount ?? 1,
           sha256Hash: ref.sha256 ?? '',
-          thumbnailFileId: ref.thumbnailFileId,
-        );
-        await _hive.saveFile(record);
-        added++;
-        AppLogger.d('Synced: ${ref.name}', tag: 'SyncService');
+          thumbnailFileId: ref.thumbnailFileId ?? existing?.thumbnailFileId,
+        ));
+      }
+      if (recentRecords.isNotEmpty) {
+        await _hive.saveFilesBatch(recentRecords);
+        AppLogger.d('Seeded ${recentRecords.length} recent files into local cache',
+            tag: 'SyncService');
       }
 
-      // ── Files: remove stale ───────────────────────────────────────────────
-      onProgress?.call(0.9, 'Cleaning up stale entries...');
-      final telegramFileIds = fileRefs.map((r) => r.fileId).toSet();
-      final localFiles = _hive.allFiles;
-      for (final local in localFiles) {
-        if (!telegramFileIds.contains(local.fileId)) {
-          if (pendingProtectedFileIds.contains(local.fileId) ||
-              pendingDeletedFileIds.contains(local.fileId)) {
-            AppLogger.d('Preserving local optimistic file: ${local.name}',
-                tag: 'SyncService');
-            continue;
-          }
-          if (DateTime.now().difference(local.uploadedAt).inMinutes < 15) {
-            AppLogger.d(
-                'Preserving recently uploaded local file: ${local.name}',
-                tag: 'SyncService');
-            continue;
-          }
-          await _hive.deleteFile(local.fileId);
-          removed++;
-          AppLogger.d('Removed stale file: ${local.name}', tag: 'SyncService');
-        }
-      }
+      // ── Fast Bootstrap: Sync Root Folder Partition ────────────────────────
+      onProgress?.call(0.6, 'Syncing root directory...');
+      await syncFolderPartition(AppConstants.rootFolderPartitionId,
+          meta: appMeta);
 
       onProgress?.call(1.0, 'Sync complete!');
       AppLogger.i(
@@ -256,6 +207,198 @@ class SyncService {
       rethrow;
     }
   }
+
+  /// Syncs an individual folder partition on-demand with O(1) ETag caching.
+  Future<bool> syncFolderPartition(
+    String folderId, {
+    AppMetadata? meta,
+  }) async {
+    if (!await Connectivity.hasConnection()) {
+      throw OfflineException('Cannot sync folder: no internet connection.');
+    }
+
+    final appMeta = meta ?? await _metadata.fetch();
+    final cloudMessageId = appMeta.folderPartitionsMap[folderId];
+    final localMessageId = _hive.getFolderPartitionMessageId(folderId);
+
+    // ETag Match: 0ms cache hit with zero network calls
+    if (cloudMessageId != null && localMessageId == cloudMessageId) {
+      AppLogger.d(
+          'Partition $folderId up to date (ETag: $cloudMessageId)',
+          tag: 'SyncService');
+      return false;
+    }
+
+    final targetFolderId =
+        folderId == AppConstants.rootFolderPartitionId ? null : folderId;
+
+    final pendingSets = _getPendingSets();
+
+    if (cloudMessageId == null) {
+      // No partition in cloud yet (empty or newly created)
+      _cleanStaleLocalFilesInFolder(targetFolderId, const {}, pendingSets);
+      await _hive.setFolderPartitionMessageId(folderId, 0);
+      return true;
+    }
+
+    final partition = await _metadata.fetchFolderPartition(folderId);
+    if (partition == null) {
+      _cleanStaleLocalFilesInFolder(targetFolderId, const {}, pendingSets);
+      await _hive.setFolderPartitionMessageId(folderId, cloudMessageId);
+      return true;
+    }
+
+    final List<FileRecord> records = [];
+    final Set<String> partitionFileIds = {};
+
+    for (final ref in partition.files) {
+      partitionFileIds.add(ref.fileId);
+      if (pendingSets.deletedFileIds.contains(ref.fileId)) continue;
+
+      final existing = _hive.getFile(ref.fileId);
+      final name = pendingSets.renamedOrMovedFileIds.contains(ref.fileId) &&
+              existing != null
+          ? existing.name
+          : ref.name;
+      final fId = pendingSets.renamedOrMovedFileIds.contains(ref.fileId) &&
+              existing != null
+          ? existing.folderId
+          : targetFolderId;
+
+      records.add(FileRecord(
+        fileId: ref.fileId,
+        name: name,
+        folderId: fId,
+        metadataMessageId: ref.metadataMessageId ?? 0,
+        metadataFileId: ref.metaFileId,
+        sizeMb: ref.sizeMb ?? 0.0,
+        mimeType: ref.mimeType ?? 'application/octet-stream',
+        uploadedAt: ref.uploadedAt != null
+            ? DateTime.tryParse(ref.uploadedAt!) ?? DateTime.now()
+            : DateTime.now(),
+        chunkCount: ref.chunkCount ?? 1,
+        sha256Hash: ref.sha256 ?? '',
+        thumbnailFileId: ref.thumbnailFileId ?? existing?.thumbnailFileId,
+      ));
+    }
+
+    await _cleanStaleLocalFilesInFolder(
+        targetFolderId, partitionFileIds, pendingSets);
+    await _hive.saveFilesBatch(records);
+    await _hive.setFolderPartitionMessageId(folderId, cloudMessageId);
+
+    AppLogger.i(
+        'Synced partition $folderId: ${records.length} files (ETag: $cloudMessageId)',
+        tag: 'SyncService');
+    return true;
+  }
+
+  /// Ensures a folder and all of its descendant subfolders are indexed into Hive.
+  Future<void> ensureFolderTreeSynced(String folderId) async {
+    final folderIds = _collectDescendantFolderIds(folderId);
+    folderIds.add(folderId);
+
+    for (final fId in folderIds) {
+      final isCached = _hive.getFolderPartitionMessageId(fId) != null;
+      if (!isCached) {
+        if (!await Connectivity.hasConnection()) {
+          throw OfflineException('No internet connection');
+        }
+        await syncFolderPartition(fId);
+      }
+    }
+  }
+
+  Set<String> _collectDescendantFolderIds(String parentId) {
+    final result = <String>{};
+    final all = _hive.allFolders;
+    void find(String pId) {
+      for (final f in all) {
+        if (f.parentId == pId && !result.contains(f.id)) {
+          result.add(f.id);
+          find(f.id);
+        }
+      }
+    }
+
+    find(parentId);
+    return result;
+  }
+
+  Future<void> _cleanStaleLocalFilesInFolder(
+    String? folderId,
+    Set<String> validPartitionFileIds,
+    _PendingSets pendingSets,
+  ) async {
+    final localFiles =
+        _hive.allFiles.where((f) => f.folderId == folderId).toList();
+    for (final local in localFiles) {
+      if (!validPartitionFileIds.contains(local.fileId)) {
+        if (pendingSets.protectedFileIds.contains(local.fileId) ||
+            pendingSets.deletedFileIds.contains(local.fileId)) {
+          continue;
+        }
+        if (DateTime.now().difference(local.uploadedAt).inMinutes < 15) {
+          continue;
+        }
+        await _hive.deleteFile(local.fileId);
+        AppLogger.d('Cleaned stale file: ${local.name}', tag: 'SyncService');
+      }
+    }
+  }
+
+  _PendingSets _getPendingSets() {
+    final pendingDeletedFileIds = <String>{};
+    final pendingProtectedFileIds = <String>{};
+    final pendingRenamedOrMovedFileIds = <String>{};
+
+    try {
+      if (Hive.isBoxOpen(AppConstants.pendingActionsBox)) {
+        final pendingBox =
+            Hive.box<PendingAction>(AppConstants.pendingActionsBox);
+        for (final action in pendingBox.values) {
+          final p = action.payload;
+          final actionType = action.actionType;
+
+          if (actionType == AppConstants.actionDeleteFile &&
+              p['fileId'] != null) {
+            pendingDeletedFileIds.add(p['fileId'].toString());
+          } else if (actionType == AppConstants.actionRenameFile ||
+              actionType == AppConstants.actionMoveFile) {
+            if (p['fileId'] != null) {
+              pendingRenamedOrMovedFileIds.add(p['fileId'].toString());
+              pendingProtectedFileIds.add(p['fileId'].toString());
+            }
+          } else if (actionType == AppConstants.actionCopyFile &&
+              p['newFileId'] != null) {
+            pendingProtectedFileIds.add(p['newFileId'].toString());
+          } else if (actionType == AppConstants.actionAddFileMeta &&
+              p['fileMeta'] is Map &&
+              p['fileMeta']['file_id'] != null) {
+            pendingProtectedFileIds.add(p['fileMeta']['file_id'].toString());
+          }
+        }
+      }
+    } catch (_) {}
+
+    return _PendingSets(
+      deletedFileIds: pendingDeletedFileIds,
+      protectedFileIds: pendingProtectedFileIds,
+      renamedOrMovedFileIds: pendingRenamedOrMovedFileIds,
+    );
+  }
+}
+
+class _PendingSets {
+  final Set<String> deletedFileIds;
+  final Set<String> protectedFileIds;
+  final Set<String> renamedOrMovedFileIds;
+
+  _PendingSets({
+    required this.deletedFileIds,
+    required this.protectedFileIds,
+    required this.renamedOrMovedFileIds,
+  });
 }
 
 class SyncResult {

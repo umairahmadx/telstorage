@@ -213,6 +213,7 @@ class _ImageZoomPageState extends State<ImageZoomPage>
         minScale: 1.0,
         maxScale: 5.0,
         clipBehavior: Clip.none,
+        panEnabled: _isZoomed,
         child: Center(
           child: _cachedFullFile != null
               ? Image.file(

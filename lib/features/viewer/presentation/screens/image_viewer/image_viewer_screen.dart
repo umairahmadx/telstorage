@@ -9,9 +9,11 @@ import 'package:telstorage/core/services/image_viewer_cache_service.dart';
 import 'package:telstorage/core/services/service_locator.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
 import 'package:telstorage/shared/widgets/dialogs/app_dialogs.dart';
+import 'widgets/dominant_vertical_drag_gesture_recognizer.dart';
 import 'widgets/image_viewer_bottom_bar.dart';
 import 'widgets/image_viewer_top_bar.dart';
 import 'widgets/image_zoom_page.dart';
+import 'widgets/responsive_page_scroll_physics.dart';
 
 /// Fullscreen progressive image gallery viewer.
 class ImageViewerScreen extends StatefulWidget {
@@ -75,6 +77,9 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
 
   // Active touch pointers tracking for multi-touch pinch priority
   int _pointerCount = 0;
+
+  // Track page where drag started for responsive threshold snapping
+  double? _dragStartPage;
 
   @override
   void initState() {
@@ -214,36 +219,61 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
               _pointerCount = (_pointerCount - 1).clamp(0, 10);
               if (mounted) setState(() {});
             },
-            child: GestureDetector(
-              onVerticalDragUpdate:
-                  (_isZoomed || _pointerCount >= 2) ? null : _handleVerticalDragUpdate,
-              onVerticalDragEnd:
-                  (_isZoomed || _pointerCount >= 2) ? null : _handleVerticalDragEnd,
+            child: RawGestureDetector(
+              gestures: {
+                DominantVerticalDragGestureRecognizer:
+                    GestureRecognizerFactoryWithHandlers<
+                        DominantVerticalDragGestureRecognizer>(
+                  () => DominantVerticalDragGestureRecognizer(),
+                  (instance) {
+                    instance
+                      ..onUpdate = (_isZoomed || _pointerCount >= 2)
+                          ? null
+                          : _handleVerticalDragUpdate
+                      ..onEnd = (_isZoomed || _pointerCount >= 2)
+                          ? null
+                          : _handleVerticalDragEnd;
+                  },
+                ),
+              },
               child: Transform.translate(
                 offset: Offset(0, _dragOffset),
-                child: PageView.builder(
-                  controller: _pageController,
-                  physics: (_isZoomed || _pointerCount >= 2)
-                      ? const NeverScrollableScrollPhysics()
-                      : const BouncingScrollPhysics(),
-                  itemCount: widget.images.length,
-                  onPageChanged: _handlePageChanged,
-                  itemBuilder: (context, index) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                      child: ImageZoomPage(
-                        key: ValueKey(widget.images[index].fileId),
-                        file: widget.images[index],
-                        onZoomChanged: (zoomed) {
-                          setState(() {
-                            _isZoomed = zoomed;
-                            if (zoomed) _toolbarsVisible = false;
-                          });
-                        },
-                        onToggleImmersive: _toggleToolbars,
-                      ),
-                    );
+                child: NotificationListener<ScrollNotification>(
+                  onNotification: (notification) {
+                    if (notification is ScrollStartNotification) {
+                      _dragStartPage = _pageController.page?.roundToDouble() ??
+                          _currentIndex.toDouble();
+                    }
+                    return false;
                   },
+                  child: PageView.builder(
+                    controller: _pageController,
+                    pageSnapping: false,
+                    physics: (_isZoomed || _pointerCount >= 2)
+                        ? const NeverScrollableScrollPhysics()
+                        : ResponsivePageScrollPhysics(
+                            parent: const BouncingScrollPhysics(),
+                            getDragStartPage: () => _dragStartPage,
+                          ),
+                    itemCount: widget.images.length,
+                    onPageChanged: _handlePageChanged,
+                    itemBuilder: (context, index) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                        child: ImageZoomPage(
+                          key: ValueKey(widget.images[index].fileId),
+                          file: widget.images[index],
+                          onZoomChanged: (zoomed) {
+                            setState(() {
+                              _isZoomed = zoomed;
+                              if (zoomed) _toolbarsVisible = false;
+                            });
+                          },
+                          onToggleImmersive: _toggleToolbars,
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ),
             ),

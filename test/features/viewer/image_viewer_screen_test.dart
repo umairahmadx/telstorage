@@ -262,5 +262,73 @@ void main() {
       expect(find.text('Loading…'), findsNothing);
       expect(find.text('Ready'), findsNothing);
     });
+
+    testWidgets('TC-08: Gentle horizontal drag (<50% page width) commits page advance',
+        (tester) async {
+      await tester.pumpWidget(buildTestViewer(initialIndex: 0));
+      await tester.pump();
+
+      expect(find.text('vacation_beach.jpg'), findsOneWidget);
+      expect(find.text('1 of 3'), findsOneWidget);
+
+      // Drag 180px horizontally (22.5% of 800px screen) with zero fling velocity
+      await tester.drag(find.byType(PageView), const Offset(-180, 0));
+      await tester.pumpAndSettle();
+
+      // With ResponsivePageScrollPhysics, 22.5% (>18% threshold) commits to page 1
+      expect(find.text('mountain_sunset.png'), findsOneWidget);
+      expect(find.text('2 of 3'), findsOneWidget);
+    });
+
+    testWidgets('TC-09: Diagonal swipe with horizontal dominance triggers page change',
+        (tester) async {
+      await tester.pumpWidget(buildTestViewer(initialIndex: 0));
+      await tester.pump();
+
+      expect(find.text('vacation_beach.jpg'), findsOneWidget);
+
+      // Simulate natural thumb arc: 300px horizontal and 50px vertical
+      await tester.drag(find.byType(PageView), const Offset(-300, 50));
+      await tester.pumpAndSettle();
+
+      // Should advance to next image, not trigger dismiss
+      expect(find.text('mountain_sunset.png'), findsOneWidget);
+      expect(find.text('2 of 3'), findsOneWidget);
+      expect(find.byType(ImageViewerScreen), findsOneWidget);
+    });
+
+    testWidgets('TC-10: Dominant vertical drag dismisses ImageViewerScreen',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: testTheme,
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: ElevatedButton(
+                onPressed: () => ImageViewerScreen.open(
+                  context,
+                  images: sampleImages,
+                  initialIndex: 0,
+                ),
+                child: const Text('Open Viewer'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open Viewer'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ImageViewerScreen), findsOneWidget);
+
+      // Drag vertically downwards (>120px threshold) to dismiss
+      await tester.drag(find.byType(PageView), const Offset(0, 200));
+      await tester.pumpAndSettle();
+
+      // Screen should be dismissed back to parent
+      expect(find.byType(ImageViewerScreen), findsNothing);
+      expect(find.text('Open Viewer'), findsOneWidget);
+    });
   });
 }

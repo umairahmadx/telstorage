@@ -5,6 +5,7 @@
 
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:telstorage/core/services/telegram_rate_limiter.dart';
 import 'package:telstorage/core/services/telegram_service.dart';
 import 'package:telstorage/core/services/thumbnail_repository.dart';
 
@@ -21,9 +22,9 @@ class FakeTelegramService implements TelegramService {
 
   @override
   Future<Uint8List> downloadByFileId(
-    String fileId, {
-    void Function(double progress)? onProgress,
-  }) async =>
+    String fileId, [
+    RequestPriority priority = RequestPriority.normal,
+  ]) async =>
       Uint8List(10);
 
   @override

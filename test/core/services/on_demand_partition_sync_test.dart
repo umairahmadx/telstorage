@@ -16,6 +16,7 @@ import 'package:telstorage/core/services/file_manager.dart';
 import 'package:telstorage/core/services/hive_service.dart';
 import 'package:telstorage/core/services/metadata_service.dart';
 import 'package:telstorage/core/services/sync_service.dart';
+import 'package:telstorage/core/services/telegram_rate_limiter.dart';
 import 'package:telstorage/core/services/telegram_service.dart';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -30,7 +31,10 @@ class MockTelegramService extends TelegramService {
   }
 
   @override
-  Future<Uint8List> downloadByFileId(String fileId) async {
+  Future<Uint8List> downloadByFileId(
+    String fileId, [
+    RequestPriority priority = RequestPriority.normal,
+  ]) async {
     return Uint8List.fromList(utf8.encode(jsonEncode({'chunks': []})));
   }
 }

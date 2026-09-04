@@ -82,3 +82,10 @@ Every completion report must conclude with one of three explicit states:
 - **`Not done yet`**: State exactly what is missing (e.g., missing red run, unverified delegation, scope check).
 
 Do not pad with ambiguous hedging once a fix has legitimately earned `Holds up`.
+
+---
+
+## 10. Parallel Analysis & Test Execution
+
+- When verifying changes, `flutter analyze` and `flutter test` should always be executed concurrently in parallel background tasks rather than sequentially.
+- Parallel execution maximizes verification throughput and efficiency.

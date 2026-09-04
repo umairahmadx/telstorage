@@ -40,6 +40,7 @@ Welcome to the TelStorage project rules repository. These rules govern code arch
    - Repo-wide search scope evidence with literal commands.
    - Full test suite execution and ban on absolute language.
    - Explicit 3-state closure reports (`Holds up`, `Holds up with a named residual risk`, `Not done yet`).
+   - Parallel background execution of `flutter analyze` and `flutter test`.
 
 8. [**Security, Data Integrity & Telegram Architecture Rules**](file:///c:/Users/umair-dell/StudioProjects/telstorage/.agents/rules/security_data_integrity_rules.md)
    - Zero secret/payload logging and `.gitignore` credential hygiene.

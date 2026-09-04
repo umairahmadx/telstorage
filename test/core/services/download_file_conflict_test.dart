@@ -16,6 +16,7 @@ import 'package:telstorage/core/services/download_queue_service.dart';
 import 'package:telstorage/core/services/download_service.dart';
 import 'package:telstorage/core/services/hive_service.dart';
 import 'package:telstorage/core/services/service_locator.dart';
+import 'package:telstorage/core/services/telegram_rate_limiter.dart';
 import 'package:telstorage/core/services/transfer_queue_service.dart';
 import 'package:telstorage/core/utils/connectivity.dart';
 import 'package:telstorage/core/utils/native_save_helper.dart';
@@ -24,8 +25,9 @@ class _MockDownloadService implements DownloadService {
   @override
   Future<Uint8List> downloadFile(
     FileRecord record,
-    Function(double progress, String status) onProgress,
-  ) async {
+    Function(double progress, String status) onProgress, {
+    RequestPriority priority = RequestPriority.normal,
+  }) async {
     return Uint8List.fromList([1, 2, 3, 4]);
   }
 

@@ -17,6 +17,7 @@ import 'package:telstorage/core/services/download_service.dart';
 import 'package:telstorage/core/services/download_service_contract.dart';
 import 'package:telstorage/core/services/folder_traversal_service.dart';
 import 'package:telstorage/core/services/service_locator.dart';
+import 'package:telstorage/core/services/telegram_rate_limiter.dart';
 import 'package:telstorage/core/services/telegram_service.dart';
 import 'package:telstorage/core/services/transfer_queue_service.dart';
 import 'package:telstorage/core/services/zip_archive_service.dart';
@@ -30,8 +31,9 @@ class _MockDownloadService implements DownloadServiceContract {
   @override
   Future<Uint8List> downloadFile(
     FileRecord file,
-    void Function(double progress, String status) onProgress,
-  ) async {
+    void Function(double progress, String status) onProgress, {
+    RequestPriority priority = RequestPriority.normal,
+  }) async {
     if (customDownload != null) {
       return await customDownload!(file);
     }

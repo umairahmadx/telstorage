@@ -54,6 +54,13 @@ class ThumbnailRepository {
     _activeDownloads.clear();
   }
 
+  /// Evicts a thumbnail from memory and deletes its cached disk files.
+  Future<void> evict(String fileId) async {
+    _memoryCache.remove(fileId);
+    _activeDownloads.remove(fileId);
+    await ThumbnailHelper.deleteCachedThumbnail(fileId);
+  }
+
   /// Current number of items in memory cache.
   int get memoryCacheCount => _memoryCache.length;
 

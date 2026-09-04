@@ -161,7 +161,7 @@ class MyApp extends StatelessWidget {
         mimeType: 'image/jpeg',
       );
       expect(result, isNotNull);
-      expect(result!.extension, 'webp');
+      expect(result!.extension, 'jpg');
 
       final decoded = img.decodeImage(result.bytes);
       expect(decoded, isNotNull);
@@ -171,7 +171,7 @@ class MyApp extends StatelessWidget {
     });
 
     test(
-        'TC-13: ThumbnailGenerator.generate returns extension webp for all supported types',
+        'TC-13: ThumbnailGenerator.generate returns extension jpg for all supported types',
         () async {
       final testImage = img.Image(width: 400, height: 300);
       final imageBytes = Uint8List.fromList(img.encodeJpg(testImage));
@@ -183,7 +183,7 @@ class MyApp extends StatelessWidget {
       );
 
       expect(result, isNotNull);
-      expect(result!.extension, 'webp');
+      expect(result!.extension, 'jpg');
       expect(result.bytes.length,
           lessThanOrEqualTo(ThumbnailGenerator.maxByteSize));
     });
@@ -209,7 +209,7 @@ class MyApp extends StatelessWidget {
       );
 
       expect(result, isNotNull);
-      expect(result!.extension, 'webp');
+      expect(result!.extension, 'jpg');
       expect(result.bytes.length,
           lessThanOrEqualTo(ThumbnailGenerator.maxByteSize));
     });

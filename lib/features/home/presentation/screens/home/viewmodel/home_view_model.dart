@@ -283,7 +283,7 @@ class HomeCubit extends Cubit<HomeState> {
     }
   }
 
-  /// Backward-compatible unified refresh method for existing callers and tests.
+  /// Unified refresh method for callers and tests.
   Future<void> refreshData() async {
     await refreshLocalData();
     await enrichRemoteData(force: true);

@@ -1,6 +1,6 @@
 /*
  * File: thumbnail_helper_native.dart
- * Description: Platform file helper caching 400px WebP media thumbnails to device disk.
+ * Description: Platform file helper caching 400px JPEG media thumbnails to device disk.
  */
 
 import 'dart:io';
@@ -29,8 +29,6 @@ class ThumbnailHelper {
 
   static Future<String?> cachedThumbnailPath(String fileId) async {
     final tempDir = await getTemporaryDirectory();
-    final webpFile = File('${tempDir.path}/thumbnails/$fileId.webp');
-    if (webpFile.existsSync()) return webpFile.path;
     final jpgFile = File('${tempDir.path}/thumbnails/$fileId.jpg');
     return jpgFile.existsSync() ? jpgFile.path : null;
   }
@@ -39,15 +37,13 @@ class ThumbnailHelper {
     final tempDir = await getTemporaryDirectory();
     final directory = Directory('${tempDir.path}/thumbnails');
     await directory.create(recursive: true);
-    final file = File('${directory.path}/$fileId.webp');
+    final file = File('${directory.path}/$fileId.jpg');
     await file.writeAsBytes(bytes);
     return file.path;
   }
 
   static Future<String?> cachedVideoThumbnailPath(String fileId) async {
     final tempDir = await getTemporaryDirectory();
-    final webpFile = File('${tempDir.path}/video_thumbs/$fileId.webp');
-    if (webpFile.existsSync()) return webpFile.path;
     final jpgFile = File('${tempDir.path}/video_thumbs/$fileId.jpg');
     return jpgFile.existsSync() ? jpgFile.path : null;
   }
@@ -60,11 +56,21 @@ class ThumbnailHelper {
     final thumbnail = await VideoThumbnail.thumbnailFile(
       video: videoPath,
       thumbnailPath: directory.path,
-      imageFormat: ImageFormat.WEBP,
+      imageFormat: ImageFormat.JPEG,
       maxWidth: 400,
       quality: 80,
     );
     return thumbnail.path;
+  }
+
+  static Future<void> deleteCachedThumbnail(String fileId) async {
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final jpgFile = File('${tempDir.path}/thumbnails/$fileId.jpg');
+      if (jpgFile.existsSync()) await jpgFile.delete();
+      final vJpgFile = File('${tempDir.path}/video_thumbs/$fileId.jpg');
+      if (vJpgFile.existsSync()) await vJpgFile.delete();
+    } catch (_) {}
   }
 
   static ImageProvider? imageProviderFromPath(String path) =>

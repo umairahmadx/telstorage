@@ -1,6 +1,6 @@
 /*
  * File: thumbnail_widget.dart
- * Description: Renders high-res 400px WebP media previews with universal smart extension badging and zero-extension fallbacks.
+ * Description: Renders high-res 400px JPEG media previews with universal smart extension badging and zero-extension fallbacks.
  */
 
 import 'dart:typed_data';
@@ -152,7 +152,7 @@ class SmartBadgeInfo {
   }
 }
 
-/// Widget displaying 400px WebP media thumbnails with smart universal fallback badging.
+/// Widget displaying 400px JPEG media thumbnails with smart universal fallback badging.
 class ThumbnailWidget extends StatefulWidget {
   /// FileRecord metadata containing fileId and thumbnailFileId.
   final FileRecord file;

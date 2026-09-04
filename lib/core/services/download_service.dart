@@ -142,7 +142,7 @@ class DownloadService implements DownloadServiceContract {
         final archive = ZipDecoder().decodeBytes(assembled);
         if (archive.isEmpty) throw Exception('ZIP archive is empty');
 
-        finalBytes = Uint8List.fromList(archive.first.content as List<int>);
+        finalBytes = archive.first.content;
 
         onProgress(0.96, 'Verifying extracted file…');
         final extractedHash = await _sha256Chunked(finalBytes, (_) {});

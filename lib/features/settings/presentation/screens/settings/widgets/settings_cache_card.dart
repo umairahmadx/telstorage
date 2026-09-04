@@ -77,7 +77,7 @@ class _SettingsCacheCardState extends State<SettingsCacheCard> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '$formattedSize • WebP Thumbnails & Partitions',
+                  '$formattedSize • JPEG Thumbnails & Partitions',
                   style: TextStyle(
                     color: colors.textSecondary,
                     fontSize: 12,

@@ -309,18 +309,24 @@ class AppCacheManager {
       final thumbDir = Directory('${tempDir.path}/thumbnails');
       final imageCacheDir = Directory('${tempDir.path}/image_cache');
 
-      final List<File> files = [];
-      if (thumbDir.existsSync()) {
-        files.addAll(thumbDir.listSync().whereType<File>());
-      }
+      final List<File> imageFiles = [];
       if (imageCacheDir.existsSync()) {
-        files.addAll(imageCacheDir.listSync().whereType<File>());
+        imageFiles.addAll(imageCacheDir.listSync().whereType<File>());
+        imageFiles.sort(
+            (a, b) => a.lastModifiedSync().compareTo(b.lastModifiedSync()));
       }
+
+      final List<File> thumbFiles = [];
+      if (thumbDir.existsSync()) {
+        thumbFiles.addAll(thumbDir.listSync().whereType<File>());
+        thumbFiles.sort(
+            (a, b) => a.lastModifiedSync().compareTo(b.lastModifiedSync()));
+      }
+
+      // Evict large full-resolution image files first, then thumbnails
+      final List<File> files = [...imageFiles, ...thumbFiles];
 
       if (files.isNotEmpty) {
-        files.sort(
-            (a, b) => a.lastModifiedSync().compareTo(b.lastModifiedSync()));
-
         int freedBytes = 0;
         final targetBytesToFree = stats.totalBytes - (maxBytes * 0.85).toInt();
 

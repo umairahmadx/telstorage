@@ -204,8 +204,9 @@ class UploadService implements UploadServiceContract {
         }
 
         // ── Step 1.5: Generate and Upload Thumbnail ────────────────────────────
-        String? thumbnailFileId =
-            ChunkResumeService.instance.getCachedThumbnailFileId(hash);
+        final resume = ChunkResumeService.instance;
+        String? thumbnailFileId = resume.getCachedThumbnailFileId(hash);
+        int? thumbnailMessageId = resume.getCachedThumbnailMessageId(hash);
 
         if (thumbnailFileId == null) {
           try {
@@ -238,9 +239,12 @@ class UploadService implements UploadServiceContract {
                 '.thumb_$name.$ext',
               );
               thumbnailFileId = thumbUpload['file_id'] as String?;
+              thumbnailMessageId = thumbUpload['message_id'] as int?;
               if (thumbnailFileId != null) {
-                await ChunkResumeService.instance
-                    .saveThumbnailFileId(hash, thumbnailFileId);
+                await resume.saveThumbnailFileId(hash, thumbnailFileId);
+              }
+              if (thumbnailMessageId != null) {
+                await resume.saveThumbnailMessageId(hash, thumbnailMessageId);
               }
             }
           } catch (e) {
@@ -350,6 +354,8 @@ class UploadService implements UploadServiceContract {
           'chunks': chunkInfos.map((c) => c.toJson()).toList(),
           'uploaded_at': DateTime.now().toIso8601String(),
           if (thumbnailFileId != null) 'thumbnail_file_id': thumbnailFileId,
+          if (thumbnailMessageId != null)
+            'thumbnail_message_id': thumbnailMessageId,
         };
 
         final metaResult = await _telegram.uploadBytesWithFileId(

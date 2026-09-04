@@ -49,9 +49,17 @@ class ChunkResumeService {
   String? getCachedThumbnailFileId(String hash) =>
       _box?.get('thumb_$hash') as String?;
 
+  /// Retrieves cached thumbnail message ID if already uploaded before an interruption.
+  int? getCachedThumbnailMessageId(String hash) =>
+      _box?.get('thumb_msg_$hash') as int?;
+
   /// Caches uploaded thumbnail file ID.
   Future<void> saveThumbnailFileId(String hash, String fileId) async =>
       await _box?.put('thumb_$hash', fileId);
+
+  /// Caches uploaded thumbnail message ID.
+  Future<void> saveThumbnailMessageId(String hash, int messageId) async =>
+      await _box?.put('thumb_msg_$hash', messageId);
 
   /// Purges cached chunk and thumbnail records on successful file completion.
   Future<void> clearFileCache(String hash) async {
@@ -59,6 +67,7 @@ class ChunkResumeService {
     if (box != null) {
       await box.delete('chunks_$hash');
       await box.delete('thumb_$hash');
+      await box.delete('thumb_msg_$hash');
     }
   }
 }

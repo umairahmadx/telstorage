@@ -130,7 +130,7 @@ class AppConstants {
   /// Maximum pixel width/height dimension for generated thumbnails (400px).
   static const int thumbnailMaxDimension = 400;
 
-  /// Default compression quality percentage for thumbnail JPEG/WebP generation (80%).
+  /// Default compression quality percentage for thumbnail JPEG generation (80%).
   static const int thumbnailQuality = 80;
 
   /// Strict 50 KB ceiling limit for thumbnail file byte size (51,200 bytes).

@@ -239,7 +239,7 @@ class _CacheSettingsScreenState extends State<CacheSettingsScreen> {
                 CachePartitionCard(
                   icon: Icons.photo_library_outlined,
                   iconColor: colors.fileVideo,
-                  title: '400px WebP Thumbnails',
+                  title: '400px JPEG Thumbnails',
                   subtitle:
                       '${_stats?.thumbnailCount ?? 0} cached media previews (<=50KB)',
                   sizeText: _stats?.formattedThumbnails ?? '0 B',

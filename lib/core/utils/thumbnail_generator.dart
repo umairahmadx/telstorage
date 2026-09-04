@@ -58,7 +58,7 @@ class ThumbnailResult {
   /// Binary payload of the compressed thumbnail.
   final Uint8List bytes;
 
-  /// Target file extension (e.g. 'webp').
+  /// Target file extension (e.g. 'jpg').
   final String extension;
 
   /// Constructs ThumbnailResult.
@@ -139,7 +139,7 @@ class ThumbnailGenerator {
     return null;
   }
 
-  /// Generates a 400px WebP thumbnail with max 50KB size for the given file data.
+  /// Generates a 400px JPEG thumbnail with max 50KB size for the given file data.
   static Future<ThumbnailResult?> generate({
     required Uint8List bytes,
     required String filename,
@@ -147,7 +147,7 @@ class ThumbnailGenerator {
   }) async {
     try {
       Uint8List? thumbBytes;
-      const ext = 'webp';
+      const ext = 'jpg';
       final lowerName = filename.toLowerCase();
       final fileExt = lowerName.contains('.') ? lowerName.split('.').last : '';
 
@@ -263,7 +263,7 @@ class ThumbnailGenerator {
     return null;
   }
 
-  /// Extracts WebP video frame thumbnail scaled to max 400px at 80% quality.
+  /// Extracts JPEG video frame thumbnail scaled to max 400px at 80% quality.
   static Future<Uint8List?> generateVideoThumbnail(
     Uint8List videoBytes,
     String filename,
@@ -273,7 +273,7 @@ class ThumbnailGenerator {
     try {
       final uint8list = await VideoThumbnail.thumbnailData(
         video: sourcePath,
-        imageFormat: ImageFormat.WEBP,
+        imageFormat: ImageFormat.JPEG,
         maxWidth: maxDimension,
         quality: quality,
       );

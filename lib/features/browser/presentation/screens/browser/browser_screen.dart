@@ -64,6 +64,9 @@ class _BrowserScreenState extends State<BrowserScreen> {
 
     return BlocConsumer<BrowserBloc, BrowserState>(
       listener: (context, state) {
+        if (state.searchQuery.isEmpty && _searchCtrl.text.isNotEmpty) {
+          _searchCtrl.clear();
+        }
         if (state.errorMessage != null &&
             state.errorMessage != 'No internet connection') {
           ScaffoldMessenger.of(context).showSnackBar(

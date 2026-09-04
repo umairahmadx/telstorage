@@ -271,6 +271,9 @@ class StorageRepository implements StorageRepositoryContract {
       // Optimistic local deletion includes every descendant file and folder.
       for (final file in files) {
         await _hive.deleteFile(file.fileId);
+        try {
+          ServiceLocator.instance.thumbnailRepository.evict(file.fileId);
+        } catch (_) {}
       }
       for (final id in folderIds) {
         await _hive.deleteFolder(id);
@@ -466,6 +469,9 @@ class StorageRepository implements StorageRepositoryContract {
       };
 
       await _hive.deleteFile(fileId);
+      try {
+        ServiceLocator.instance.thumbnailRepository.evict(fileId);
+      } catch (_) {}
 
       final pending = PendingAction(
         id: const Uuid().v4(),

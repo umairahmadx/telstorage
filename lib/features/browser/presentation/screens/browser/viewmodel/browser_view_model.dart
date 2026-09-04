@@ -91,11 +91,13 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
   /// Handles directory loading and offline synchronization check.
   Future<void> _onLoadDirectory(
       LoadDirectory event, Emitter<BrowserState> emit) async {
+    final isFolderChange = event.folderId != state.currentFolderId;
+    final activeQuery = isFolderChange ? '' : state.searchQuery;
     final local = BrowserFilterHelper.loadAndFilterContents(
       repository: _repository,
       folderId: event.folderId,
       category: event.category,
-      searchQuery: state.searchQuery,
+      searchQuery: activeQuery,
       sortOption: state.sortOption,
       sortAscending: state.sortAscending,
     );
@@ -106,6 +108,7 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
       clearFolderId: event.folderId == null,
       category: event.category,
       clearCategory: event.category == null,
+      searchQuery: activeQuery,
       folders: local.folders,
       files: local.files,
       folderItemCounts: local.folderItemCounts,

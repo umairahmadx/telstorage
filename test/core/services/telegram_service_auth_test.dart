@@ -6,10 +6,19 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:telstorage/core/events/domain_event_bus.dart';
+import 'package:telstorage/core/services/telegram_rate_limiter.dart';
 import 'package:telstorage/core/services/telegram_service.dart';
 
 void main() {
   group('TelegramService 401 Unauthorized Token Revocation Tests', () {
+    setUp(() {
+      TelegramRateLimiter.instance.reset();
+    });
+
+    tearDown(() {
+      TelegramRateLimiter.instance.reset();
+    });
+
     test(
         'TC-01: HTTP 401 throws TelegramAuthException and fires AuthTokenRevokedEvent without retrying',
         () async {
@@ -43,8 +52,8 @@ void main() {
         capturedEvent = event;
       });
 
-      expect(
-        () => service.downloadByFileId('test_file_id'),
+      await expectLater(
+        service.downloadByFileId('test_file_id'),
         throwsA(isA<TelegramAuthException>()),
       );
 

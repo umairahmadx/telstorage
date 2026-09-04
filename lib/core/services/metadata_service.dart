@@ -55,7 +55,15 @@ class MetadataService {
     if (cachedFileId != null) {
       AppLogger.d('Using cached file_id: $cachedFileId',
           tag: 'MetadataService');
-      return await _downloadMeta(cachedFileId);
+      try {
+        return await _downloadMeta(cachedFileId);
+      } catch (e) {
+        AppLogger.w(
+          'Cached metadata file_id invalid ($e), falling back to discovery',
+          tag: 'MetadataService',
+        );
+        await _storage.delete(key: AppConstants.keyMetadataFileId);
+      }
     }
 
     // Slow path: discover via the channel's pinned message

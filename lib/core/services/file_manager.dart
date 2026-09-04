@@ -10,8 +10,11 @@ import '../models/app_metadata.dart';
 import '../models/folder_record.dart';
 import '../models/file_record.dart';
 import '../utils/app_logger.dart';
+import '../utils/thumbnail_helper_native.dart'
+    if (dart.library.js_interop) '../utils/thumbnail_helper_web.dart';
 import 'hive_service.dart';
 import 'metadata_service.dart';
+import 'service_locator.dart';
 import 'telegram_service.dart';
 
 class FolderNotEmptyException implements Exception {
@@ -49,7 +52,10 @@ class FileManagerService {
 
   Future<void> renameFolder(String folderId, String newName) async {
     final meta = await _meta.fetch();
-    final folder = meta.folders.firstWhere((f) => f.id == folderId);
+    final folder = meta.folders.where((f) => f.id == folderId).firstOrNull;
+    if (folder == null) {
+      throw Exception('Folder "$folderId" not found in remote metadata');
+    }
     folder.name = newName;
 
     await _meta.update(meta);
@@ -58,7 +64,10 @@ class FileManagerService {
 
   Future<void> moveFolder(String folderId, String? parentId) async {
     final meta = await _meta.fetch();
-    final folder = meta.folders.firstWhere((f) => f.id == folderId);
+    final folder = meta.folders.where((f) => f.id == folderId).firstOrNull;
+    if (folder == null) {
+      throw Exception('Folder "$folderId" not found in remote metadata');
+    }
     folder.parentId = parentId;
 
     await _meta.update(meta);
@@ -114,6 +123,14 @@ class FileManagerService {
                 ref.metadataMessageId,
                 ref.metaFileId,
               );
+              try {
+                if (ServiceLocator.instance.isInitialized) {
+                  await ServiceLocator.instance.thumbnailRepository
+                      .evict(ref.fileId);
+                } else {
+                  await ThumbnailHelper.deleteCachedThumbnail(ref.fileId);
+                }
+              } catch (_) {}
               meta.totalFiles = (meta.totalFiles - 1).clamp(0, 10000000);
               meta.storageUsedMb = (meta.storageUsedMb - (ref.sizeMb ?? 0.0))
                   .clamp(0.0, 10000000.0);
@@ -273,6 +290,12 @@ class FileManagerService {
           await _telegram.deleteMessage(chunk['message_id'] as int);
         } catch (_) {}
       }
+      final thumbMsgId = fileMeta['thumbnail_message_id'] as int?;
+      if (thumbMsgId != null && thumbMsgId > 0) {
+        try {
+          await _telegram.deleteMessage(thumbMsgId);
+        } catch (_) {}
+      }
     }
 
     if (record.metadataMessageId > 0) {
@@ -296,6 +319,13 @@ class FileManagerService {
     }
 
     await _hive.deleteFile(fileId);
+    try {
+      if (ServiceLocator.instance.isInitialized) {
+        await ServiceLocator.instance.thumbnailRepository.evict(fileId);
+      } else {
+        await ThumbnailHelper.deleteCachedThumbnail(fileId);
+      }
+    } catch (_) {}
     AppLogger.i('File $fileId deleted successfully', tag: 'FileManager');
   }
 
@@ -308,6 +338,13 @@ class FileManagerService {
     String? folderId,
   }) async {
     await _deleteRemoteFileMessages(metadataMessageId, metadataFileId);
+    try {
+      if (ServiceLocator.instance.isInitialized) {
+        await ServiceLocator.instance.thumbnailRepository.evict(fileId);
+      } else {
+        await ThumbnailHelper.deleteCachedThumbnail(fileId);
+      }
+    } catch (_) {}
 
     try {
       final meta = await _meta.fetch();
@@ -335,6 +372,12 @@ class FileManagerService {
         for (final chunk in chunks) {
           try {
             await _telegram.deleteMessage(chunk['message_id'] as int);
+          } catch (_) {}
+        }
+        final thumbMsgId = fileMeta['thumbnail_message_id'] as int?;
+        if (thumbMsgId != null && thumbMsgId > 0) {
+          try {
+            await _telegram.deleteMessage(thumbMsgId);
           } catch (_) {}
         }
         await _telegram.deleteMessage(metadataMessageId);

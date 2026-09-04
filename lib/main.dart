@@ -137,8 +137,8 @@ Future<void> main() async {
   // Initialize Theme Service
   await ThemeService.instance.init();
 
-  // Clear full-resolution image download cache on startup
-  await AppCacheManager.instance.clearImageCache();
+  // Enforce user cache budget limit on startup
+  await AppCacheManager.instance.enforceCacheLimit();
 
   runApp(const TelStorageApp());
 }

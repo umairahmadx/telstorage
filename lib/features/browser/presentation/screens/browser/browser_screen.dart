@@ -161,7 +161,9 @@ class _BrowserScreenState extends State<BrowserScreen> {
 
                     // Main content area
                     Expanded(
-                      child: state.isLoading && !state.isInitialized
+                      child: (state.isLoading &&
+                              state.folders.isEmpty &&
+                              state.files.isEmpty)
                           ? const Center(child: CircularProgressIndicator())
                           : _buildContent(state),
                     ),

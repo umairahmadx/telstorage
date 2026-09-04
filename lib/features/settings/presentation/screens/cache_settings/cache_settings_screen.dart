@@ -133,6 +133,63 @@ class _CacheSettingsScreenState extends State<CacheSettingsScreen> {
     }
   }
 
+  Future<void> _resetChannelData() async {
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Wipe & Reset Channel Data?'),
+        content: const Text(
+          'DANGER: This will delete remote metadata and partition indexes from Telegram, clear all local databases, and reset your channel to a pristine 0-file fresh state.\n\nThis cannot be undone. Are you sure?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: colors.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Wipe Everything'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Resetting channel and clearing data...'),
+          backgroundColor: colors.bgSurfaceInset,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+
+      final res = await ServiceLocator.instance.accountResetService
+          .resetChannelAndLocalData();
+
+      if (mounted) {
+        if (res.isSuccess) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                  'Channel reset to pristine state successfully!'),
+              backgroundColor: colors.success,
+            ),
+          );
+          await _loadStats();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Reset failed: ${res.failureOrNull}'),
+              backgroundColor: colors.error,
+            ),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
@@ -249,6 +306,24 @@ class _CacheSettingsScreenState extends State<CacheSettingsScreen> {
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                   onPressed: _clearAll,
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: colors.error,
+                    side:
+                        BorderSide(color: colors.error.withValues(alpha: 0.8)),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  icon: const Icon(Icons.restore_from_trash_rounded),
+                  label: const Text(
+                    'Reset Channel & Start Fresh',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: _resetChannelData,
                 ),
                 const SizedBox(height: 40),
               ],

@@ -127,9 +127,12 @@ class SyncService {
           added++;
           AppLogger.d('Added folder: ${folder.name}', tag: 'SyncService');
         } else if (!pendingRenamedOrMovedFolderIds.contains(folder.id) &&
-            (local.name != folder.name || local.parentId != folder.parentId)) {
+            (local.name != folder.name ||
+                local.parentId != folder.parentId ||
+                local.itemCount != folder.itemCount)) {
           local.name = folder.name;
           local.parentId = folder.parentId;
+          local.itemCount = folder.itemCount;
           await local.save();
           AppLogger.d('Updated folder: ${folder.name}', tag: 'SyncService');
         }
@@ -263,7 +266,7 @@ class SyncService {
       final fId = pendingSets.renamedOrMovedFileIds.contains(ref.fileId) &&
               existing != null
           ? existing.folderId
-          : targetFolderId;
+          : (ref.folderId ?? targetFolderId);
 
       records.add(FileRecord(
         fileId: ref.fileId,

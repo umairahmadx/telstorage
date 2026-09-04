@@ -94,4 +94,50 @@ class MetadataPartitionService {
       } catch (_) {}
     }
   }
+
+  /// Remove a FileRef from a folder partition file on Telegram.
+  Future<void> removeFileRefFromPartition(
+    AppMetadata meta,
+    String folderId,
+    String fileId,
+  ) async {
+    FolderPartition? existingPartition =
+        LruFolderCacheService.instance.get(folderId);
+    if (existingPartition == null &&
+        meta.folderPartitionsMap.containsKey(folderId)) {
+      try {
+        existingPartition =
+            await fetchFolderPartition(folderId, () async => meta);
+      } catch (_) {}
+    }
+    if (existingPartition == null) return;
+
+    final updatedFiles = List<FileRef>.from(existingPartition.files)
+      ..removeWhere((f) => f.fileId == fileId);
+
+    final bytes = Uint8List.fromList(utf8.encode(jsonEncode({
+      'folder_id': folderId,
+      'files': updatedFiles.map((r) => r.toJson()).toList(),
+      'updated_at': DateTime.now().toIso8601String(),
+    })));
+
+    final result = await _telegram.uploadBytesWithFileId(
+      bytes,
+      'folder_$folderId.json',
+    );
+    final msgId = result['message_id'] as int;
+
+    LruFolderCacheService.instance.put(
+      folderId,
+      FolderPartition(
+          folderId: folderId, messageId: msgId, files: updatedFiles),
+    );
+    meta.folderPartitionsMap[folderId] = msgId;
+
+    if (existingPartition.messageId > 0) {
+      try {
+        await _telegram.deleteMessage(existingPartition.messageId);
+      } catch (_) {}
+    }
+  }
 }

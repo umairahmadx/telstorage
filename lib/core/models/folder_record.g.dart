@@ -21,13 +21,14 @@ class FolderRecordAdapter extends TypeAdapter<FolderRecord> {
       name: fields[1] as String,
       parentId: fields[2] as String?,
       createdAt: fields[3] as DateTime,
+      itemCount: (fields[4] as int?) ?? 0,
     );
   }
 
   @override
   void write(BinaryWriter writer, FolderRecord obj) {
     writer
-      ..writeByte(4)
+      ..writeByte(5)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -35,7 +36,9 @@ class FolderRecordAdapter extends TypeAdapter<FolderRecord> {
       ..writeByte(2)
       ..write(obj.parentId)
       ..writeByte(3)
-      ..write(obj.createdAt);
+      ..write(obj.createdAt)
+      ..writeByte(4)
+      ..write(obj.itemCount);
   }
 
   @override

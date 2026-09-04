@@ -11,7 +11,6 @@ import '../constants/app_constants.dart';
 import '../models/app_metadata.dart';
 import '../models/folder_partition.dart';
 import '../utils/app_logger.dart';
-import 'lru_folder_cache_service.dart';
 import 'metadata_partition_service.dart';
 import 'telegram_service.dart';
 
@@ -162,6 +161,11 @@ class MetadataService {
 
         final fId = ref.folderId ?? AppConstants.rootFolderPartitionId;
         await _partitionService.saveFileRefsToPartition(latestMeta, fId, [ref]);
+        if (ref.folderId != null) {
+          for (final f in latestMeta.folders) {
+            if (f.id == ref.folderId) f.itemCount++;
+          }
+        }
 
         latestMeta.recentFiles
             .removeWhere((f) => f.fileId == fileData['file_id']);
@@ -243,12 +247,11 @@ class MetadataService {
       final previousFolderId = oldFolderId ?? ref.folderId ?? 'root';
 
       if (previousFolderId != newFolderId) {
-        final oldPartition = await fetchFolderPartition(previousFolderId);
-        if (oldPartition != null) {
-          final oldFiles = List<FileRef>.from(oldPartition.files)
-            ..removeWhere((f) => f.fileId == ref.fileId);
-          await _partitionService.saveFileRefsToPartition(
-              latestMeta, previousFolderId, oldFiles);
+        await _partitionService.removeFileRefFromPartition(
+            latestMeta, previousFolderId, ref.fileId);
+        for (final f in latestMeta.folders) {
+          if (f.id == previousFolderId && f.itemCount > 0) f.itemCount--;
+          if (f.id == newFolderId) f.itemCount++;
         }
       }
       await _partitionService
@@ -304,33 +307,11 @@ class MetadataService {
       latestMeta.recentFiles.removeWhere((f) => f.fileId == fileId);
 
       final fId = folderId ?? 'root';
-      final existingPartition = await fetchFolderPartition(fId);
-      if (existingPartition != null) {
-        final updatedFiles = List<FileRef>.from(existingPartition.files)
-          ..removeWhere((f) => f.fileId == fileId);
-
-        final bytes = Uint8List.fromList(utf8.encode(jsonEncode({
-          'folder_id': fId,
-          'files': updatedFiles.map((r) => r.toJson()).toList(),
-          'updated_at': DateTime.now().toIso8601String(),
-        })));
-
-        final result = await _telegram.uploadBytesWithFileId(
-          bytes,
-          'folder_$fId.json',
-        );
-        final msgId = result['message_id'] as int;
-
-        LruFolderCacheService.instance.put(
-          fId,
-          FolderPartition(folderId: fId, messageId: msgId, files: updatedFiles),
-        );
-        latestMeta.folderPartitionsMap[fId] = msgId;
-
-        if (existingPartition.messageId > 0) {
-          try {
-            await _telegram.deleteMessage(existingPartition.messageId);
-          } catch (_) {}
+      await _partitionService.removeFileRefFromPartition(
+          latestMeta, fId, fileId);
+      if (folderId != null) {
+        for (final f in latestMeta.folders) {
+          if (f.id == folderId && f.itemCount > 0) f.itemCount--;
         }
       }
 

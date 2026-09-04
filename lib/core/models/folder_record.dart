@@ -23,11 +23,15 @@ class FolderRecord extends HiveObject {
   @HiveField(3)
   DateTime createdAt;
 
+  @HiveField(4)
+  int itemCount;
+
   FolderRecord({
     required this.id,
     required this.name,
     this.parentId,
     required this.createdAt,
+    this.itemCount = 0,
   });
 
   factory FolderRecord.fromFolder(Folder folder) {
@@ -36,6 +40,7 @@ class FolderRecord extends HiveObject {
       name: folder.name,
       parentId: folder.parentId,
       createdAt: folder.createdAt,
+      itemCount: folder.itemCount,
     );
   }
 
@@ -45,6 +50,7 @@ class FolderRecord extends HiveObject {
       name: name,
       parentId: parentId,
       createdAt: createdAt,
+      itemCount: itemCount,
     );
   }
 }

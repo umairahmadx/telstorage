@@ -55,6 +55,12 @@ class LoadDirectory extends BrowserEvent {
   LoadDirectory({this.folderId, this.category});
 }
 
+/// Refreshes directory items from local cache without triggering cloud partition sync.
+class LocalContentsChanged extends BrowserEvent {
+  /// Constructs a LocalContentsChanged event.
+  const LocalContentsChanged();
+}
+
 /// Updates the current search filter query.
 class SearchQueryChanged extends BrowserEvent {
   /// Search query string.

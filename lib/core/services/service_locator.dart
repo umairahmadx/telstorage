@@ -27,6 +27,7 @@ import 'app_cache_manager.dart';
 import 'image_viewer_cache_service.dart';
 import 'lru_folder_cache_service.dart';
 import 'telegram_rate_limiter.dart';
+import 'account_reset_service.dart';
 import '../../features/storage/data/repositories/storage_repository.dart';
 import 'upload_service_contract.dart';
 import 'download_service_contract.dart';
@@ -63,6 +64,7 @@ class ServiceLocator {
   late WebShareQueueService _webShareQueue;
   late DownloadFileUseCase _downloadFileUseCase;
   late GenerateWebShareUseCase _generateWebShareUseCase;
+  late AccountResetService _accountResetService;
 
   // These are always available as they don't depend on user credentials for creation
   final NavigationService _navigation = NavigationService.instance;
@@ -73,6 +75,7 @@ class ServiceLocator {
   HiveService get hive => _hive;
   MetadataService get metadata => _metadata;
   SyncService get syncService => _syncService;
+  AccountResetService get accountResetService => _accountResetService;
 
   UploadServiceContract get uploadServiceContract => _uploadService;
   DownloadServiceContract get downloadServiceContract => _downloadService;
@@ -171,6 +174,11 @@ class ServiceLocator {
           WebShareQueueService(_downloadService, AppConstants.webSharesBox);
       _downloadFileUseCase = DownloadFileUseCase(_storageRepository);
       _generateWebShareUseCase = GenerateWebShareUseCase(_storageRepository);
+      _accountResetService = AccountResetService(
+        telegram: _telegram,
+        metadata: _metadata,
+        hive: _hive,
+      );
 
       await NotificationService.instance.init();
       await NotificationService.instance.requestPermissions();

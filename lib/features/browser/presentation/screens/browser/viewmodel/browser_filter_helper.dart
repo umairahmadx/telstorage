@@ -47,7 +47,8 @@ abstract final class BrowserFilterHelper {
 
     final Map<String, int> counts = {};
     for (final f in rawFolders) {
-      counts[f.id] = repository.getFilesInFolderCount(f.id);
+      final localCount = repository.getFilesInFolderCount(f.id);
+      counts[f.id] = localCount > 0 ? localCount : f.itemCount;
     }
 
     return (

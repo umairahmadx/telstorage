@@ -33,6 +33,7 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
         _isCustomRepo = repository != null,
         super(BrowserState()) {
     on<LoadDirectory>(_onLoadDirectory);
+    on<LocalContentsChanged>(_onLocalContentsChanged);
     on<SearchQueryChanged>(_onSearchQueryChanged);
     on<SortOptionChanged>(_onSortOptionChanged);
     on<GroupOptionChanged>(_onGroupOptionChanged);
@@ -71,33 +72,43 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
 
     _foldersSubscription = ServiceLocator.instance.hive.foldersListenable.value
         .watch()
-        .listen((_) => _refreshIfInitialized());
+        .listen((_) => add(const LocalContentsChanged()));
     _filesSubscription = ServiceLocator.instance.hive.filesListenable.value
         .watch()
-        .listen((_) => _refreshIfInitialized());
+        .listen((_) => add(const LocalContentsChanged()));
     _domainEventSubscription = DomainEventBus.instance
         .on<FileUploadedEvent>()
-        .listen((_) => _refreshIfInitialized());
+        .listen((_) => add(const LocalContentsChanged()));
   }
 
-  void _refreshIfInitialized() {
+  void _onLocalContentsChanged(
+      LocalContentsChanged event, Emitter<BrowserState> emit) {
     if (state.isInitialized) {
-      add(LoadDirectory(
-        folderId: state.currentFolderId,
-        category: state.category,
-      ));
+      _reloadContents(emit, isOffline: state.isOffline);
     }
   }
 
   /// Handles directory loading and offline synchronization check.
   Future<void> _onLoadDirectory(
       LoadDirectory event, Emitter<BrowserState> emit) async {
+    final local = BrowserFilterHelper.loadAndFilterContents(
+      repository: _repository,
+      folderId: event.folderId,
+      category: event.category,
+      searchQuery: state.searchQuery,
+      sortOption: state.sortOption,
+      sortAscending: state.sortAscending,
+    );
+
     emit(state.copyWith(
       isLoading: true,
       currentFolderId: event.folderId,
       clearFolderId: event.folderId == null,
       category: event.category,
       clearCategory: event.category == null,
+      folders: local.folders,
+      files: local.files,
+      folderItemCounts: local.folderItemCounts,
       clearErrorMessage: true,
     ));
 
@@ -155,7 +166,9 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
       files: result.files,
       folderItemCounts: result.folderItemCounts,
       isOffline: isOffline,
-      pendingActionsCount: ServiceLocator.instance.syncQueue.pendingCount,
+      pendingActionsCount: ServiceLocator.instance.isInitialized
+          ? ServiceLocator.instance.syncQueue.pendingCount
+          : 0,
     ));
   }
 
@@ -186,17 +199,9 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
     final selectedFiles = Set<String>.from(state.selectedFileIds);
 
     if (event.isFolder) {
-      if (selectedFolders.contains(event.id)) {
-        selectedFolders.remove(event.id);
-      } else {
-        selectedFolders.add(event.id);
-      }
+      if (!selectedFolders.remove(event.id)) selectedFolders.add(event.id);
     } else {
-      if (selectedFiles.contains(event.id)) {
-        selectedFiles.remove(event.id);
-      } else {
-        selectedFiles.add(event.id);
-      }
+      if (!selectedFiles.remove(event.id)) selectedFiles.add(event.id);
     }
 
     emit(state.copyWith(
@@ -289,6 +294,14 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
     }
   }
 
+  void _handleMutationResult(String? err, Emitter<BrowserState> emit) {
+    if (err != null) {
+      emit(state.copyWith(isLoading: false, errorMessage: err));
+    } else {
+      _reloadContents(emit, isOffline: state.isOffline);
+    }
+  }
+
   Future<void> _onCreateFolder(
       CreateFolder event, Emitter<BrowserState> emit) async {
     emit(state.copyWith(isLoading: true));
@@ -297,11 +310,7 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
       parentId: state.currentFolderId,
       repository: _repository,
     );
-    if (err != null) {
-      emit(state.copyWith(isLoading: false, errorMessage: err));
-    } else {
-      _reloadContents(emit, isOffline: state.isOffline);
-    }
+    _handleMutationResult(err, emit);
   }
 
   Future<void> _onRenameFolder(
@@ -312,11 +321,7 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
       newName: event.newName,
       repository: _repository,
     );
-    if (err != null) {
-      emit(state.copyWith(isLoading: false, errorMessage: err));
-    } else {
-      _reloadContents(emit, isOffline: state.isOffline);
-    }
+    _handleMutationResult(err, emit);
   }
 
   Future<void> _onDeleteFolder(
@@ -326,11 +331,7 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
       folderId: event.folderId,
       repository: _repository,
     );
-    if (err != null) {
-      emit(state.copyWith(isLoading: false, errorMessage: err));
-    } else {
-      _reloadContents(emit, isOffline: state.isOffline);
-    }
+    _handleMutationResult(err, emit);
   }
 
   Future<void> _onRenameFile(
@@ -341,11 +342,7 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
       newName: event.newName,
       repository: _repository,
     );
-    if (err != null) {
-      emit(state.copyWith(isLoading: false, errorMessage: err));
-    } else {
-      _reloadContents(emit, isOffline: state.isOffline);
-    }
+    _handleMutationResult(err, emit);
   }
 
   Future<void> _onMoveFile(MoveFile event, Emitter<BrowserState> emit) async {
@@ -369,11 +366,7 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
       targetFolderId: event.targetFolderId,
       repository: _repository,
     );
-    if (err != null) {
-      emit(state.copyWith(isLoading: false, errorMessage: err));
-    } else {
-      _reloadContents(emit, isOffline: state.isOffline);
-    }
+    _handleMutationResult(err, emit);
   }
 
   Future<void> _onDeleteFile(
@@ -383,11 +376,7 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
       fileId: event.fileId,
       repository: _repository,
     );
-    if (err != null) {
-      emit(state.copyWith(isLoading: false, errorMessage: err));
-    } else {
-      _reloadContents(emit, isOffline: state.isOffline);
-    }
+    _handleMutationResult(err, emit);
   }
 
   Future<void> _onBatchDelete(

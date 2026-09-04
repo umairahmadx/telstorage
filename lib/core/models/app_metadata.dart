@@ -151,12 +151,14 @@ class Folder {
   String name;
   String? parentId; // null = root
   DateTime createdAt;
+  int itemCount;
 
   Folder({
     required this.id,
     required this.name,
     this.parentId,
     required this.createdAt,
+    this.itemCount = 0,
   });
 
   factory Folder.fromJson(Map<String, dynamic> json) {
@@ -165,6 +167,7 @@ class Folder {
       name: json['name'] as String,
       parentId: json['parent_id'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
+      itemCount: (json['item_count'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -174,6 +177,7 @@ class Folder {
       'name': name,
       'parent_id': parentId,
       'created_at': createdAt.toIso8601String(),
+      'item_count': itemCount,
     };
   }
 }

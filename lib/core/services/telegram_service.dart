@@ -195,9 +195,12 @@ class TelegramService {
   }
 
   /// Download file bytes by file_id with Web proxy fallback
-  Future<Uint8List> downloadByFileId(String fileId) async {
+  Future<Uint8List> downloadByFileId(
+    String fileId, [
+    RequestPriority priority = RequestPriority.normal,
+  ]) async {
     return _withRetry(() async {
-      await TelegramRateLimiter.instance.acquire();
+      await TelegramRateLimiter.instance.acquire(priority);
       try {
         AppLogger.d('Downloading file with file_id: $fileId',
             tag: 'TelegramService');

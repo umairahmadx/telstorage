@@ -11,6 +11,7 @@ import '../models/file_record.dart';
 import '../utils/app_logger.dart';
 import '../utils/thumbnail_helper_native.dart'
     if (dart.library.js_interop) '../utils/thumbnail_helper_web.dart';
+import 'telegram_rate_limiter.dart';
 import 'telegram_service.dart';
 
 /// Central repository managing high-speed LRU memory and disk cached media thumbnails.
@@ -57,8 +58,11 @@ class ThumbnailRepository {
   int get memoryCacheCount => _memoryCache.length;
 
   /// Retrieves thumbnail data (memory bytes on fast-hit, cached disk path on native), downloading if necessary.
-  Future<dynamic> getThumbnailData(FileRecord file) async {
+  Future<dynamic> getThumbnailData(FileRecord file, {bool isPriority = false}) async {
     if (file.thumbnailFileId == null) return null;
+
+    final reqPriority =
+        isPriority ? RequestPriority.immediate : RequestPriority.normal;
 
     // 1. Fast path: Check synchronous in-memory LRU cache
     final memHit = getMemoryCachedBytes(file.fileId);
@@ -72,7 +76,8 @@ class ThumbnailRepository {
     if (kIsWeb) {
       final downloadFuture = () async {
         try {
-          final bytes = await _telegram.downloadByFileId(file.thumbnailFileId!);
+          final bytes =
+              await _telegram.downloadByFileId(file.thumbnailFileId!, reqPriority);
           addToMemoryCache(file.fileId, bytes);
           return bytes;
         } catch (e) {

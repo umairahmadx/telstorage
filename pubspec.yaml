@@ -85,6 +85,9 @@ dependencies:
   # PDF Rendering
   pdfx: ^2.6.0
 
+  # Native Photo Gallery & Zoom
+  photo_view: ^0.15.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

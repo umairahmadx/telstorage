@@ -8,11 +8,14 @@ import '../models/download_conflict_policy.dart';
 import '../models/file_record.dart';
 import 'download_service.dart';
 
+import 'telegram_rate_limiter.dart';
+
 abstract class DownloadServiceContract {
   Future<Uint8List> downloadFile(
     FileRecord record,
-    void Function(double progress, String status) onProgress,
-  );
+    void Function(double progress, String status) onProgress, {
+    RequestPriority priority = RequestPriority.normal,
+  });
   Future<SaveResult> saveAndOpen(
     Uint8List bytes,
     String filename, {

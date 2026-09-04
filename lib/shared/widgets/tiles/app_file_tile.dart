@@ -103,10 +103,13 @@ class AppFileTile extends StatelessWidget {
             SizedBox(
               width: 44,
               height: 44,
-              child: ThumbnailWidget(
-                file: file,
-                width: 44,
-                height: 44,
+              child: Hero(
+                tag: 'image_hero_${file.fileId}',
+                child: ThumbnailWidget(
+                  file: file,
+                  width: 44,
+                  height: 44,
+                ),
               ),
             ),
             const SizedBox(width: 14),

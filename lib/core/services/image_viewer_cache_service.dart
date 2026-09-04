@@ -15,6 +15,7 @@ import '../utils/thumbnail_helper_native.dart'
     if (dart.library.js_interop) '../utils/thumbnail_helper_web.dart';
 import 'app_cache_manager.dart';
 import 'service_locator.dart';
+import 'telegram_rate_limiter.dart';
 
 /// Singleton service responsible for caching full-resolution images for the in-app viewer.
 class ImageViewerCacheService {
@@ -89,6 +90,7 @@ class ImageViewerCacheService {
   /// Asynchronously downloads the full-resolution image and caches it on disk.
   Future<File?> downloadImageToCache(
     FileRecord file, {
+    bool isPriority = false,
     void Function(double progress, String status)? onProgress,
   }) async {
     if (kIsWeb) return null;
@@ -109,9 +111,15 @@ class ImageViewerCacheService {
       try {
         onProgress?.call(0.05, 'Starting…');
         final bytes = await ServiceLocator.instance.downloadService
-            .downloadFile(file, (pct, status) {
-          onProgress?.call(pct, status);
-        });
+            .downloadFile(
+          file,
+          (pct, status) {
+            onProgress?.call(pct, status);
+          },
+          priority: isPriority
+              ? RequestPriority.immediate
+              : RequestPriority.background,
+        );
 
         final targetFile = await getCacheTargetFile(file);
         final tempStaging = File('${targetFile.path}.tmp');
@@ -152,7 +160,7 @@ class ImageViewerCacheService {
     if (kIsWeb || !isImageRecord(file)) return;
     getCachedImageFile(file).then((existing) {
       if (existing == null && !_inFlightDownloads.containsKey(file.fileId)) {
-        downloadImageToCache(file).catchError((_) => null);
+        downloadImageToCache(file, isPriority: false).catchError((_) => null);
       }
     });
   }
@@ -190,7 +198,7 @@ class ImageViewerCacheService {
         );
       }
 
-      final downloaded = await downloadImageToCache(file);
+      final downloaded = await downloadImageToCache(file, isPriority: true);
       if (downloaded != null) {
         await SharePlus.instance.share(ShareParams(
           files: [XFile(downloaded.path)],
@@ -214,7 +222,7 @@ class ImageViewerCacheService {
   Future<bool> saveToDevice(FileRecord file, BuildContext context) async {
     try {
       File? sourceFile = await getCachedImageFile(file);
-      sourceFile ??= await downloadImageToCache(file);
+      sourceFile ??= await downloadImageToCache(file, isPriority: true);
 
       if (sourceFile == null || !sourceFile.existsSync()) {
         if (context.mounted) {

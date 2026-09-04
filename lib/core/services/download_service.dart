@@ -17,6 +17,7 @@ import '../utils/web_download.dart'
     if (dart.library.io) '../utils/web_download_stub.dart';
 import '../utils/native_save_helper.dart'
     if (dart.library.js_interop) '../utils/native_save_stub.dart';
+import 'telegram_rate_limiter.dart';
 import 'telegram_service.dart';
 import 'download_service_contract.dart';
 
@@ -57,15 +58,16 @@ class DownloadService implements DownloadServiceContract {
   @override
   Future<Uint8List> downloadFile(
     FileRecord record,
-    Function(double progress, String status) onProgress,
-  ) async {
+    Function(double progress, String status) onProgress, {
+    RequestPriority priority = RequestPriority.normal,
+  }) async {
     try {
       onProgress(0.0, 'Reading file index…');
       AppLogger.d('Downloading: ${record.name}', tag: 'DownloadService');
 
       // Step 1: Fetch per-file metadata JSON
       final Uint8List metaBytes =
-          await _telegram.downloadByFileId(record.metadataFileId!);
+          await _telegram.downloadByFileId(record.metadataFileId!, priority);
 
       // Step 2: Parse metadata
       final fileMeta =
@@ -100,7 +102,7 @@ class DownloadService implements DownloadServiceContract {
         await Future.wait(batch.map((chunkIdx) async {
           final part = chunks[chunkIdx];
           final Uint8List partBytes =
-              await _telegram.downloadByFileId(part.fileId!);
+              await _telegram.downloadByFileId(part.fileId!, priority);
           downloadedParts[chunkIdx] = partBytes;
 
           completedChunks++;

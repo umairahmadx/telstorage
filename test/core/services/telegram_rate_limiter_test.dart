@@ -57,5 +57,32 @@ void main() {
       expect(limiter.isPaused, isFalse);
       expect(limiter.remainingCooldown, equals(Duration.zero));
     });
+
+    test('TC-04: acquire prioritizes immediate over normal and background requests', () {
+      final limiter = TelegramRateLimiter.instance;
+      // Pause limiter so items accumulate in the queue without draining
+      limiter.report429(10);
+
+      // 1. Initial request takes the active in-flight slot (which is paused by 429)
+      limiter.acquire(RequestPriority.background);
+
+      // 2. Queue up remaining requests in reverse priority order while active slot is waiting
+      limiter.acquire(RequestPriority.background);
+      limiter.acquire(RequestPriority.normal);
+      limiter.acquire(RequestPriority.immediate);
+
+      // 3 items should now be waiting in the queue
+      expect(limiter.queueLength, equals(3));
+
+      // Items in queue must be strictly prioritized: immediate, normal, background
+      expect(
+        limiter.queuedPriorities,
+        equals([
+          RequestPriority.immediate,
+          RequestPriority.normal,
+          RequestPriority.background,
+        ]),
+      );
+    });
   });
 }

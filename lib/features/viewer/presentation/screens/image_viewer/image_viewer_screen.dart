@@ -4,6 +4,9 @@
  */
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:photo_view/photo_view.dart';
+import 'package:photo_view/photo_view_gallery.dart';
 import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/services/image_viewer_cache_service.dart';
 import 'package:telstorage/core/services/service_locator.dart';
@@ -92,6 +95,7 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
 
   @override
   void dispose() {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _pageController.dispose();
     super.dispose();
   }
@@ -132,6 +136,24 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
     setState(() {
       _toolbarsVisible = !_toolbarsVisible;
     });
+    if (_toolbarsVisible) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    } else {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    }
+  }
+
+  void _handleScaleStateChanged(PhotoViewScaleState scaleState) {
+    final isZoomed = scaleState.isScaleStateZooming;
+    if (isZoomed != _isZoomed) {
+      setState(() {
+        _isZoomed = isZoomed;
+        if (isZoomed) {
+          _toolbarsVisible = false;
+          SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+        }
+      });
+    }
   }
 
   void _handleVerticalDragUpdate(DragUpdateDetails details) {
@@ -246,10 +268,10 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
                     }
                     return false;
                   },
-                  child: PageView.builder(
-                    controller: _pageController,
+                  child: PhotoViewGallery.builder(
+                    pageController: _pageController,
                     pageSnapping: false,
-                    physics: (_isZoomed || _pointerCount >= 2)
+                    scrollPhysics: (_isZoomed || _pointerCount >= 2)
                         ? const NeverScrollableScrollPhysics()
                         : ResponsivePageScrollPhysics(
                             parent: const BouncingScrollPhysics(),
@@ -257,20 +279,29 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
                           ),
                     itemCount: widget.images.length,
                     onPageChanged: _handlePageChanged,
-                    itemBuilder: (context, index) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                        child: ImageZoomPage(
-                          key: ValueKey(widget.images[index].fileId),
-                          file: widget.images[index],
-                          onZoomChanged: (zoomed) {
-                            setState(() {
-                              _isZoomed = zoomed;
-                              if (zoomed) _toolbarsVisible = false;
-                            });
-                          },
-                          onToggleImmersive: _toggleToolbars,
+                    scaleStateChangedCallback: _handleScaleStateChanged,
+                    backgroundDecoration:
+                        const BoxDecoration(color: Colors.transparent),
+                    builder: (context, index) {
+                      final file = widget.images[index];
+                      return PhotoViewGalleryPageOptions.customChild(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                          child: ImageZoomPage(
+                            key: ValueKey(file.fileId),
+                            file: file,
+                            isActive: index == _currentIndex,
+                            onToggleImmersive: _toggleToolbars,
+                          ),
                         ),
+                        childSize: MediaQuery.of(context).size,
+                        initialScale: PhotoViewComputedScale.contained,
+                        minScale: PhotoViewComputedScale.contained * 0.8,
+                        maxScale: PhotoViewComputedScale.covered * 3.5,
+                        heroAttributes: PhotoViewHeroAttributes(
+                          tag: 'image_hero_${file.fileId}',
+                        ),
+                        onTapUp: (_, __, ___) => _toggleToolbars(),
                       );
                     },
                   ),

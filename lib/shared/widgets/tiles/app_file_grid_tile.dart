@@ -74,10 +74,13 @@ class AppFileGridTile extends StatelessWidget {
                     Center(
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(14),
-                        child: ThumbnailWidget(
-                          file: file,
-                          width: double.infinity,
-                          height: double.infinity,
+                        child: Hero(
+                          tag: 'image_hero_${file.fileId}',
+                          child: ThumbnailWidget(
+                            file: file,
+                            width: double.infinity,
+                            height: double.infinity,
+                          ),
                         ),
                       ),
                     ),

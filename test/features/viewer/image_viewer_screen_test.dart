@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:photo_view/photo_view_gallery.dart';
 import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/theme/app_icons.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
@@ -329,6 +330,31 @@ void main() {
       // Screen should be dismissed back to parent
       expect(find.byType(ImageViewerScreen), findsNothing);
       expect(find.text('Open Viewer'), findsOneWidget);
+    });
+
+    testWidgets('TC-11: Renders PhotoViewGallery with custom child ImageZoomPage',
+        (tester) async {
+      await tester.pumpWidget(buildTestViewer(initialIndex: 0));
+      await tester.pump();
+
+      expect(find.byType(PhotoViewGallery), findsOneWidget);
+      final gallery =
+          tester.widget<PhotoViewGallery>(find.byType(PhotoViewGallery));
+      expect(gallery.pageSnapping, isFalse);
+      expect(gallery.itemCount, equals(sampleImages.length));
+    });
+
+    testWidgets('TC-12: Hero animation tag matches active fileId pattern',
+        (tester) async {
+      await tester.pumpWidget(buildTestViewer(initialIndex: 0));
+      await tester.pump();
+
+      final heroFinder = find.byWidgetPredicate(
+        (widget) =>
+            widget is Hero &&
+            widget.tag == 'image_hero_${sampleImages[0].fileId}',
+      );
+      expect(heroFinder, findsOneWidget);
     });
   });
 }

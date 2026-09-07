@@ -28,6 +28,9 @@ class ImageZoomPage extends StatefulWidget {
   /// Callback to toggle immersive toolbar visibility on single tap.
   final VoidCallback? onToggleImmersive;
 
+  /// Callback when image is double-tapped.
+  final ValueChanged<TapDownDetails>? onDoubleTap;
+
   /// Constructs ImageZoomPage.
   const ImageZoomPage({
     super.key,
@@ -35,6 +38,7 @@ class ImageZoomPage extends StatefulWidget {
     this.isActive = true,
     this.onZoomChanged,
     this.onToggleImmersive,
+    this.onDoubleTap,
   });
 
   @override
@@ -49,6 +53,9 @@ class _ImageZoomPageState extends State<ImageZoomPage> {
   // Thumbnail fallback data
   Uint8List? _thumbBytes;
   String? _thumbPath;
+
+  // Track double tap position
+  TapDownDetails? _doubleTapDetails;
 
   @override
   void initState() {
@@ -147,6 +154,13 @@ class _ImageZoomPageState extends State<ImageZoomPage> {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: widget.onToggleImmersive,
+      onDoubleTapDown: (details) => _doubleTapDetails = details,
+      onDoubleTap: () {
+        final details = _doubleTapDetails;
+        if (details != null && widget.onDoubleTap != null) {
+          widget.onDoubleTap!(details);
+        }
+      },
       child: Center(
         child: _cachedFullFile != null
             ? Image.file(

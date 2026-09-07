@@ -16,6 +16,7 @@ import 'package:telstorage/features/viewer/presentation/screens/image_viewer/ima
 import 'package:telstorage/features/viewer/presentation/screens/image_viewer/widgets/image_viewer_bottom_bar.dart';
 import 'package:telstorage/features/viewer/presentation/screens/image_viewer/widgets/image_viewer_top_bar.dart';
 import 'package:telstorage/features/viewer/presentation/screens/image_viewer/widgets/image_zoom_page.dart';
+import 'package:telstorage/features/viewer/presentation/screens/image_viewer/widgets/responsive_page_scroll_physics.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -356,5 +357,88 @@ void main() {
       );
       expect(heroFinder, findsOneWidget);
     });
+
+    testWidgets('TC-13: Double tap toggles zoom scale between 1.0x and 2.5x',
+        (tester) async {
+      await tester.pumpWidget(buildTestViewer(initialIndex: 0));
+      await tester.pump();
+
+      // Initially at normal scale, toolbars visible
+      expect(
+        tester.widget<ImageViewerTopBar>(find.byType(ImageViewerTopBar)).isVisible,
+        isTrue,
+      );
+
+      // Perform double-tap on active image
+      final imagePageFinder = find.byType(ImageZoomPage).first;
+      await tester.tap(imagePageFinder);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(imagePageFinder);
+      await tester.pumpAndSettle();
+
+      // Toolbars should be hidden in zoomed mode
+      expect(
+        tester.widget<ImageViewerTopBar>(find.byType(ImageViewerTopBar)).isVisible,
+        isFalse,
+      );
+
+      // Verify Transform scale is zoomed to 2.5x
+      final transformFinder = find.descendant(
+        of: find.byType(PhotoViewGallery),
+        matching: find.byType(Transform),
+      );
+      expect(transformFinder, findsWidgets);
+
+      bool foundZoomedTransform = false;
+      for (final element in transformFinder.evaluate()) {
+        final transform = element.widget as Transform;
+        final scaleX = transform.transform.getMaxScaleOnAxis();
+        if ((scaleX - 2.5).abs() < 0.1) {
+          foundZoomedTransform = true;
+          break;
+        }
+      }
+      expect(foundZoomedTransform, isTrue,
+          reason: 'Expected active image to have zoomed to 2.5x scale');
+
+      // Double tap again to zoom out to 1.0x
+      await tester.tap(imagePageFinder);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(imagePageFinder);
+      await tester.pumpAndSettle();
+
+      bool foundNormalTransform = false;
+      for (final element in transformFinder.evaluate()) {
+        final transform = element.widget as Transform;
+        final scaleX = transform.transform.getMaxScaleOnAxis();
+        if ((scaleX - 1.0).abs() < 0.1) {
+          foundNormalTransform = true;
+          break;
+        }
+      }
+      expect(foundNormalTransform, isTrue,
+          reason: 'Expected active image to return to 1.0x scale');
+    });
+
+    testWidgets('TC-14: Normal and sub-1.0x scale does not lock horizontal swiping',
+        (tester) async {
+      await tester.pumpWidget(buildTestViewer(initialIndex: 0));
+      await tester.pump();
+
+      expect(find.text('vacation_beach.jpg'), findsOneWidget);
+
+      // Verify gallery scrollPhysics allows scrolling at normal/sub-1.0x scale
+      final galleryFinder = find.byType(PhotoViewGallery);
+      final gallery = tester.widget<PhotoViewGallery>(galleryFinder);
+      expect(gallery.scrollPhysics, isA<ResponsivePageScrollPhysics>());
+
+      // Advance page via horizontal swipe
+      await tester.fling(find.byType(PageView), const Offset(-400, 0), 1000);
+      await tester.pumpAndSettle();
+
+      expect(find.text('mountain_sunset.png'), findsOneWidget);
+      expect(find.text('2 of 3'), findsOneWidget);
+    });
   });
 }
+

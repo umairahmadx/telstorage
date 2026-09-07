@@ -4,7 +4,6 @@
  */
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 import 'package:telstorage/core/models/file_record.dart';
@@ -60,7 +59,8 @@ class ImageViewerScreen extends StatefulWidget {
   State<ImageViewerScreen> createState() => _ImageViewerScreenState();
 }
 
-class _ImageViewerScreenState extends State<ImageViewerScreen> {
+class _ImageViewerScreenState extends State<ImageViewerScreen>
+    with TickerProviderStateMixin {
   late final PageController _pageController;
   late int _currentIndex;
 
@@ -84,23 +84,70 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
   // Track page where drag started for responsive threshold snapping
   double? _dragStartPage;
 
+  // Per-page photo view controllers to handle programmatic zoom
+  final Map<int, PhotoViewController> _photoControllers = {};
+
+  // Animation controller for smooth double-tap zoom
+  late final AnimationController _zoomAnimationController;
+  Animation<double>? _zoomScaleAnimation;
+  Animation<Offset>? _zoomPositionAnimation;
+  PhotoViewController? _animatingController;
+
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
     _pageController = PageController(initialPage: _currentIndex);
+    _zoomAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+    )..addListener(_handleZoomAnimationTick);
     _prefetchAdjacent(_currentIndex);
     _checkIfCurrentFileSaved();
   }
 
+  void _handleZoomAnimationTick() {
+    final controller = _animatingController;
+    if (controller != null) {
+      final scale = _zoomScaleAnimation?.value;
+      final pos = _zoomPositionAnimation?.value;
+      if (scale != null) controller.scale = scale;
+      if (pos != null) controller.position = pos;
+    }
+  }
+
   @override
   void dispose() {
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    _zoomAnimationController.dispose();
+    for (final controller in _photoControllers.values) {
+      controller.dispose();
+    }
+    _photoControllers.clear();
     _pageController.dispose();
     super.dispose();
   }
 
   FileRecord get _currentFile => widget.images[_currentIndex];
+
+  PhotoViewController _getPhotoViewController(int index) {
+    return _photoControllers.putIfAbsent(index, () {
+      final controller = PhotoViewController();
+      controller.outputStateStream.listen((value) {
+        if (index == _currentIndex && !_zoomAnimationController.isAnimating) {
+          final isZoomed = (value.scale ?? 1.0) > 1.05;
+          if (isZoomed != _isZoomed && mounted) {
+            setState(() {
+              _isZoomed = isZoomed;
+              if (isZoomed) {
+                _toolbarsVisible = false;
+              }
+            });
+          }
+        }
+      });
+      return controller;
+    });
+  }
 
   void _prefetchAdjacent(int index) {
     final cache = ImageViewerCacheService.instance;
@@ -124,6 +171,9 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
   }
 
   void _handlePageChanged(int index) {
+    if (_currentIndex != index) {
+      _photoControllers[_currentIndex]?.reset();
+    }
     setState(() {
       _currentIndex = index;
       _isZoomed = false;
@@ -136,24 +186,76 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
     setState(() {
       _toolbarsVisible = !_toolbarsVisible;
     });
-    if (_toolbarsVisible) {
-      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    } else {
-      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    }
   }
 
   void _handleScaleStateChanged(PhotoViewScaleState scaleState) {
-    final isZoomed = scaleState.isScaleStateZooming;
+    // Only lock horizontal gestures when zoomed in, never when zoomed out
+    final isZoomed = scaleState == PhotoViewScaleState.zoomedIn;
     if (isZoomed != _isZoomed) {
       setState(() {
         _isZoomed = isZoomed;
         if (isZoomed) {
           _toolbarsVisible = false;
-          SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
         }
       });
     }
+  }
+
+  void _handleDoubleTap(TapDownDetails details, PhotoViewController controller) {
+    if (_zoomAnimationController.isAnimating) return;
+
+    final currentScale = controller.scale ?? 1.0;
+    final currentPosition = controller.position;
+    final screenSize = MediaQuery.of(context).size;
+
+    final double targetScale;
+    final Offset targetPosition;
+
+    if (currentScale > 1.05) {
+      // Zoom out to 1.0x centered
+      targetScale = 1.0;
+      targetPosition = Offset.zero;
+    } else {
+      // Zoom in to 2.5x focused on tapped focal point
+      targetScale = 2.5;
+      final dx = details.localPosition.dx - (screenSize.width / 2.0);
+      final dy = details.localPosition.dy - (screenSize.height / 2.0);
+
+      final computedWidth = screenSize.width * targetScale;
+      final computedHeight = screenSize.height * targetScale;
+      final maxPanX = (computedWidth - screenSize.width) / 2.0;
+      final maxPanY = (computedHeight - screenSize.height) / 2.0;
+
+      final targetX = (-dx * (targetScale - 1.0)).clamp(-maxPanX, maxPanX);
+      final targetY = (-dy * (targetScale - 1.0)).clamp(-maxPanY, maxPanY);
+      targetPosition = Offset(targetX, targetY);
+    }
+
+    _animatingController = controller;
+    final curve = CurvedAnimation(
+      parent: _zoomAnimationController,
+      curve: Curves.easeInOutCubic,
+    );
+    _zoomScaleAnimation = Tween<double>(
+      begin: currentScale,
+      end: targetScale,
+    ).animate(curve);
+    _zoomPositionAnimation = Tween<Offset>(
+      begin: currentPosition,
+      end: targetPosition,
+    ).animate(curve);
+
+    _zoomAnimationController.forward(from: 0.0).then((_) {
+      final isZoomed = targetScale > 1.05;
+      if (mounted) {
+        setState(() {
+          _isZoomed = isZoomed;
+          if (isZoomed) {
+            _toolbarsVisible = false;
+          }
+        });
+      }
+    });
   }
 
   void _handleVerticalDragUpdate(DragUpdateDetails details) {
@@ -284,7 +386,9 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
                         const BoxDecoration(color: Colors.transparent),
                     builder: (context, index) {
                       final file = widget.images[index];
+                      final controller = _getPhotoViewController(index);
                       return PhotoViewGalleryPageOptions.customChild(
+                        controller: controller,
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 8.0),
                           child: ImageZoomPage(
@@ -292,16 +396,17 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
                             file: file,
                             isActive: index == _currentIndex,
                             onToggleImmersive: _toggleToolbars,
+                            onDoubleTap: (details) =>
+                                _handleDoubleTap(details, controller),
                           ),
                         ),
                         childSize: MediaQuery.of(context).size,
                         initialScale: PhotoViewComputedScale.contained,
-                        minScale: PhotoViewComputedScale.contained * 0.8,
+                        minScale: PhotoViewComputedScale.contained,
                         maxScale: PhotoViewComputedScale.covered * 3.5,
                         heroAttributes: PhotoViewHeroAttributes(
                           tag: 'image_hero_${file.fileId}',
                         ),
-                        onTapUp: (_, __, ___) => _toggleToolbars(),
                       );
                     },
                   ),

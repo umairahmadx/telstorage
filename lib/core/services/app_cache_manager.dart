@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/app_logger.dart';
 import 'lru_folder_cache_service.dart';
+import 'video_chunk_cache_manager.dart';
 
 /// Data model representing storage utilization across segregated cache partitions.
 class CachePartitionStats {
@@ -196,6 +197,7 @@ class AppCacheManager {
           }
         }
       }
+      tempBytes += await VideoChunkCacheManager.instance.getTotalVideoCacheBytes();
 
       return CachePartitionStats(
         thumbnailBytes: thumbBytes,
@@ -267,6 +269,7 @@ class AppCacheManager {
           }
         }
       }
+      await VideoChunkCacheManager.instance.clearVideoCache();
       AppLogger.i('Temporary chunk cache cleared', tag: 'AppCacheManager');
     } catch (e) {
       AppLogger.e('Error clearing temp cache: $e', tag: 'AppCacheManager');

@@ -12,6 +12,7 @@ import 'package:telstorage/core/services/service_locator.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
 import 'package:telstorage/core/utils/connectivity.dart';
 import 'package:telstorage/features/viewer/presentation/screens/image_viewer/image_viewer_screen.dart';
+import 'package:telstorage/features/viewer/presentation/screens/video_player/video_player_screen.dart';
 import 'package:telstorage/shared/widgets/app_search_field.dart';
 import 'package:telstorage/shared/widgets/bars/app_batch_action_bar.dart';
 import 'package:telstorage/shared/widgets/dialogs/app_dialogs.dart';
@@ -395,6 +396,17 @@ class _BrowserScreenState extends State<BrowserScreen> {
                   ImageViewerScreen.open(
                     context,
                     images: images,
+                    initialIndex: initialIndex >= 0 ? initialIndex : 0,
+                  );
+                } else if (VideoPlayerScreen.isVideoRecord(file)) {
+                  final videos = state.files
+                      .where(VideoPlayerScreen.isVideoRecord)
+                      .toList();
+                  final initialIndex =
+                      videos.indexWhere((vid) => vid.fileId == file.fileId);
+                  VideoPlayerScreen.open(
+                    context,
+                    videos: videos,
                     initialIndex: initialIndex >= 0 ? initialIndex : 0,
                   );
                 } else {

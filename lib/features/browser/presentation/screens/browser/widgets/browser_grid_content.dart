@@ -6,6 +6,7 @@
 import 'package:flutter/material.dart';
 import 'package:telstorage/core/services/image_viewer_cache_service.dart';
 import 'package:telstorage/features/viewer/presentation/screens/image_viewer/image_viewer_screen.dart';
+import 'package:telstorage/features/viewer/presentation/screens/video_player/video_player_screen.dart';
 import 'package:telstorage/shared/widgets/tiles/app_file_grid_tile.dart';
 import 'package:telstorage/shared/widgets/tiles/app_folder_grid_tile.dart';
 import 'package:telstorage/shared/widgets/typography/app_section_label.dart';
@@ -133,6 +134,17 @@ class BrowserGridContent extends StatelessWidget {
                         ImageViewerScreen.open(
                           context,
                           images: images,
+                          initialIndex: initialIndex >= 0 ? initialIndex : 0,
+                        );
+                      } else if (VideoPlayerScreen.isVideoRecord(file)) {
+                        final videos = state.files
+                            .where(VideoPlayerScreen.isVideoRecord)
+                            .toList();
+                        final initialIndex = videos
+                            .indexWhere((vid) => vid.fileId == file.fileId);
+                        VideoPlayerScreen.open(
+                          context,
+                          videos: videos,
                           initialIndex: initialIndex >= 0 ? initialIndex : 0,
                         );
                       } else {

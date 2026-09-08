@@ -25,6 +25,8 @@ import 'transfer_queue_service.dart';
 import 'transfer_concurrency_coordinator.dart';
 import 'app_cache_manager.dart';
 import 'image_viewer_cache_service.dart';
+import 'video_chunk_cache_manager.dart';
+import 'video_stream_server.dart';
 import 'lru_folder_cache_service.dart';
 import 'telegram_rate_limiter.dart';
 import 'account_reset_service.dart';
@@ -126,6 +128,8 @@ class ServiceLocator {
   TransferQueueService get transferQueue => _transferQueue;
   AppCacheManager get cacheManager => _cacheManager;
   ImageViewerCacheService get imageViewerCache => ImageViewerCacheService.instance;
+  VideoStreamServer get videoStreamServer => VideoStreamServer.instance;
+  VideoChunkCacheManager get videoChunkCache => VideoChunkCacheManager.instance;
   ErrorLogService get errorLogService => ErrorLogService.instance;
 
 
@@ -206,6 +210,7 @@ class ServiceLocator {
     TelegramRateLimiter.instance.reset();
     TransferConcurrencyCoordinator.instance.reset();
     TransferQueueService.instance.clear();
+    unawaited(VideoStreamServer.instance.stop());
     if (_initialized) {
       _thumbnailRepository.clearMemoryCache();
     }

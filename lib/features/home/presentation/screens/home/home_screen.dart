@@ -16,6 +16,7 @@ import '../../../../../shared/widgets/dialogs/app_dialogs.dart';
 import '../../../../../shared/widgets/mobile_shell.dart';
 import '../../../../../shared/widgets/share_link_sheet.dart';
 import 'package:telstorage/features/viewer/presentation/screens/image_viewer/image_viewer_screen.dart';
+import 'package:telstorage/features/viewer/presentation/screens/video_player/video_player_screen.dart';
 import 'viewmodel/home_view_model.dart';
 import 'widgets/home_greeting_card.dart';
 import 'widgets/recent_files_section.dart';
@@ -89,6 +90,16 @@ class _HomeScreenState extends State<HomeScreen> {
       ImageViewerScreen.open(
         context,
         images: images,
+        initialIndex: initialIndex >= 0 ? initialIndex : 0,
+      );
+    } else if (VideoPlayerScreen.isVideoRecord(file)) {
+      final videos =
+          recentFiles.where(VideoPlayerScreen.isVideoRecord).toList();
+      final initialIndex =
+          videos.indexWhere((vid) => vid.fileId == file.fileId);
+      VideoPlayerScreen.open(
+        context,
+        videos: videos,
         initialIndex: initialIndex >= 0 ? initialIndex : 0,
       );
     } else {

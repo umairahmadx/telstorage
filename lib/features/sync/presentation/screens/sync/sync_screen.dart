@@ -25,6 +25,15 @@ class _SyncScreenState extends State<SyncScreen> {
   /// Flag tracking device connectivity.
   bool _isDeviceOnline = true;
 
+  /// Flag tracking if manual synchronization is actively executing.
+  bool _isSyncing = false;
+
+  /// Progress fraction of the ongoing sync (0.0 to 1.0).
+  double _syncProgress = 0.0;
+
+  /// Status description of the current sync phase.
+  String _syncStatus = '';
+
   @override
   void initState() {
     super.initState();
@@ -38,6 +47,111 @@ class _SyncScreenState extends State<SyncScreen> {
       setState(() {
         _isDeviceOnline = online;
       });
+    }
+  }
+
+  /// Executes full two-way synchronization when "Sync Now" is pressed.
+  Future<void> _handleSyncNow(SyncQueueService syncQueue) async {
+    if (_isSyncing) return;
+    await _checkConnection();
+    if (!_isDeviceOnline) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cannot sync: device is offline.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() {
+      _isSyncing = true;
+      _syncProgress = 0.0;
+      _syncStatus = 'Starting synchronization…';
+    });
+
+    final syncLogId = 'sync_${DateTime.now().millisecondsSinceEpoch}';
+
+    try {
+      // Step 1: Flush pending offline mutations to Telegram in batch
+      if (syncQueue.pendingCount > 0) {
+        setState(() {
+          _syncProgress = 0.1;
+          _syncStatus = 'Processing pending actions…';
+        });
+        await syncQueue.processQueue(force: true);
+      }
+
+      // Step 2: Pull cloud updates from Telegram
+      setState(() {
+        _syncProgress = 0.2;
+        _syncStatus = 'Connecting to Telegram…';
+      });
+
+      final syncService = ServiceLocator.instance.syncService;
+      final result = await syncService.syncFromTelegram(
+        onProgress: (progress, status) {
+          if (mounted) {
+            setState(() {
+              _syncProgress = 0.2 + (progress * 0.8);
+              _syncStatus = status;
+            });
+          }
+        },
+      );
+
+      syncQueue.recordLog(SyncLogItem(
+        id: syncLogId,
+        actionType: 'cloud_sync',
+        description:
+            'Full Cloud Sync: +${result.added} added, -${result.removed} removed',
+        timestamp: DateTime.now(),
+        status: 'completed',
+      ));
+
+      if (mounted) {
+        setState(() {
+          _syncProgress = 1.0;
+          _syncStatus = 'All Changes Synced';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Sync complete! +${result.added} added, -${result.removed} removed.',
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      syncQueue.recordLog(SyncLogItem(
+        id: syncLogId,
+        actionType: 'cloud_sync',
+        description: 'Full Cloud Sync failed',
+        timestamp: DateTime.now(),
+        status: 'failed',
+        error: e.toString(),
+      ));
+
+      if (mounted) {
+        setState(() {
+          _syncStatus = 'Sync failed';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Sync failed: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSyncing = false;
+        });
+      }
     }
   }
 
@@ -66,8 +180,7 @@ class _SyncScreenState extends State<SyncScreen> {
         centerTitle: true,
         actions: [
           IconButton(
-            icon:
-                Icon(AppIcons.delete, color: colors.textSecondary),
+            icon: Icon(AppIcons.delete, color: colors.textSecondary),
             tooltip: 'Clear Logs',
             onPressed: () {
               syncQueue.clearLogs();
@@ -136,15 +249,22 @@ class _SyncScreenState extends State<SyncScreen> {
   /// Builds connection and pending items status banner.
   Widget _buildStatusCard(
       AppColorsExtension colors, SyncQueueService syncQueue, int pendingCount) {
-    final statusText = !_isDeviceOnline
-        ? 'Offline — Changes Queued'
-        : (pendingCount > 0
-            ? 'Syncing $pendingCount item(s)...'
-            : 'All Changes Synced');
+    final String statusText;
+    if (_isSyncing) {
+      statusText = _syncStatus.isNotEmpty ? _syncStatus : 'Syncing with cloud…';
+    } else if (!_isDeviceOnline) {
+      statusText = 'Offline — Changes Queued';
+    } else if (pendingCount > 0) {
+      statusText = 'Syncing $pendingCount item(s)...';
+    } else {
+      statusText = 'All Changes Synced';
+    }
 
     final statusColor = !_isDeviceOnline
         ? colors.error
-        : (pendingCount > 0 ? colors.accentPrimary : colors.success);
+        : ((pendingCount > 0 || _isSyncing)
+            ? colors.accentPrimary
+            : colors.success);
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -166,12 +286,24 @@ class _SyncScreenState extends State<SyncScreen> {
                   color: statusColor.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
-                  pendingCount > 0
-                      ? AppIcons.syncing
-                      : AppIcons.cloudDone,
-                  color: statusColor,
-                  size: 24,
+                child: Center(
+                  child: _isSyncing
+                      ? SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(statusColor),
+                          ),
+                        )
+                      : Icon(
+                          pendingCount > 0
+                              ? AppIcons.syncing
+                              : AppIcons.cloudDone,
+                          color: statusColor,
+                          size: 24,
+                        ),
                 ),
               ),
               const SizedBox(width: 14),
@@ -190,7 +322,9 @@ class _SyncScreenState extends State<SyncScreen> {
                     const SizedBox(height: 2),
                     Text(
                       _isDeviceOnline
-                          ? 'Background sync engine is active'
+                          ? (_isSyncing
+                              ? 'Synchronizing partitions and files'
+                              : 'Background sync engine is active')
                           : 'Will automatically sync when reconnected',
                       style:
                           TextStyle(fontSize: 12, color: colors.textSecondary),
@@ -200,22 +334,43 @@ class _SyncScreenState extends State<SyncScreen> {
               ),
             ],
           ),
+          if (_isSyncing) ...[
+            const SizedBox(height: 14),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: _syncProgress > 0 ? _syncProgress.clamp(0.0, 1.0) : null,
+                backgroundColor: colors.bgSurfaceInset,
+                valueColor: AlwaysStoppedAnimation<Color>(colors.accentPrimary),
+                minHeight: 4,
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () async {
-                await _checkConnection();
-                syncQueue.processQueue();
-              },
-              icon: Icon(AppIcons.syncing, size: 18, color: colors.bgPrimary),
+              onPressed: _isSyncing ? null : () => _handleSyncNow(syncQueue),
+              icon: _isSyncing
+                  ? SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(colors.bgPrimary),
+                      ),
+                    )
+                  : Icon(AppIcons.syncing, size: 18, color: colors.bgPrimary),
               label: Text(
-                'Sync Now',
+                _isSyncing ? 'Syncing…' : 'Sync Now',
                 style: TextStyle(
                     fontWeight: FontWeight.bold, color: colors.bgPrimary),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: colors.accentPrimary,
+                disabledBackgroundColor:
+                    colors.accentPrimary.withValues(alpha: 0.6),
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),

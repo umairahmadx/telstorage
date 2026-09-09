@@ -88,6 +88,14 @@ class SyncQueueService {
     logsNotifier.value = [];
   }
 
+  /// Adds or updates an activity log item in the logs stream.
+  void recordLog(SyncLogItem log) {
+    logsNotifier.value = [
+      log,
+      ...logsNotifier.value.where((l) => l.id != log.id),
+    ];
+  }
+
   Future<void> processQueue({bool force = false}) async {
     _updatePendingCount();
     if (_isProcessing) return;
@@ -129,7 +137,8 @@ class SyncQueueService {
       final actions = _pendingBox.values.toList()
         ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
-      for (final action in actions) {
+      int i = 0;
+      while (i < actions.length) {
         // If a 429 backoff was activated by a prior action in this batch, stop immediately
         if (TelegramRateLimiter.instance.isPaused) {
           AppLogger.w(
@@ -139,22 +148,94 @@ class SyncQueueService {
           break;
         }
 
+        final action = actions[i];
+
+        // ── Optimize: Batch contiguous file metadata additions ──────────────
+        if (action.actionType == AppConstants.actionAddFileMeta) {
+          final batch = <PendingAction>[action];
+          var j = i + 1;
+          while (j < actions.length &&
+              actions[j].actionType == AppConstants.actionAddFileMeta) {
+            batch.add(actions[j]);
+            j++;
+          }
+
+          final batchId = 'batch_${batch.first.id}';
+          final desc = batch.length > 1
+              ? 'Synced metadata for ${batch.length} files'
+              : 'Synced metadata for "${batch.first.payload['fileMeta']?['name'] ?? ''}"';
+          recordLog(SyncLogItem(
+            id: batchId,
+            actionType: AppConstants.actionAddFileMeta,
+            description: desc,
+            timestamp: DateTime.now(),
+            status: 'syncing',
+          ));
+
+          try {
+            final filesDataList = batch.map((a) {
+              return Map<String, dynamic>.from(a.payload['fileMeta'] as Map);
+            }).toList();
+
+            await _fileManager.metadataService.addBatchFiles(filesDataList);
+
+            for (final a in batch) {
+              await _pendingBox.delete(a.id);
+            }
+            _updatePendingCount();
+
+            _failureCount = 0;
+            _nextAllowedRun = null;
+
+            recordLog(SyncLogItem(
+              id: batchId,
+              actionType: AppConstants.actionAddFileMeta,
+              description: desc,
+              timestamp: DateTime.now(),
+              status: 'completed',
+            ));
+
+            AppLogger.d(
+              'SyncQueue: successfully processed batch of ${batch.length} file metadata items',
+              tag: 'SyncQueue',
+            );
+
+            i = j;
+            continue;
+          } catch (e) {
+            _failureCount++;
+            final backoffSeconds =
+                math.min(300, (1 << math.min(_failureCount, 5)) * 5);
+            _nextAllowedRun =
+                DateTime.now().add(Duration(seconds: backoffSeconds));
+
+            AppLogger.e('SyncQueue: failed to process batch: $e',
+                tag: 'SyncQueue', error: e);
+            recordLog(SyncLogItem(
+              id: batchId,
+              actionType: AppConstants.actionAddFileMeta,
+              description: desc,
+              timestamp: DateTime.now(),
+              status: 'failed',
+              error: e.toString(),
+            ));
+            break;
+          }
+        }
+
+        // ── Single Action Processing ─────────────────────────────────────────
         AppLogger.d(
             'SyncQueue: processing action ${action.actionType} (${action.id})',
             tag: 'SyncQueue');
         final desc = _getActionDescription(action);
 
-        final syncingLog = SyncLogItem(
+        recordLog(SyncLogItem(
           id: action.id,
           actionType: action.actionType,
           description: desc,
           timestamp: DateTime.now(),
           status: 'syncing',
-        );
-        logsNotifier.value = [
-          syncingLog,
-          ...logsNotifier.value.where((l) => l.id != action.id)
-        ];
+        ));
 
         try {
           await _executeAction(action);
@@ -165,17 +246,13 @@ class SyncQueueService {
           _failureCount = 0;
           _nextAllowedRun = null;
 
-          final completedLog = SyncLogItem(
+          recordLog(SyncLogItem(
             id: action.id,
             actionType: action.actionType,
             description: desc,
             timestamp: DateTime.now(),
             status: 'completed',
-          );
-          logsNotifier.value = [
-            completedLog,
-            ...logsNotifier.value.where((l) => l.id != action.id)
-          ];
+          ));
 
           AppLogger.d(
               'SyncQueue: successfully processed & deleted action ${action.id}',
@@ -183,24 +260,20 @@ class SyncQueueService {
         } catch (e) {
           _failureCount++;
           final backoffSeconds =
-              math.min(300, (1 << math.min(_failureCount, 5)) * 5); // 10s, 20s, 40s, 80s, 160s, max 300s
+              math.min(300, (1 << math.min(_failureCount, 5)) * 5);
           _nextAllowedRun =
               DateTime.now().add(Duration(seconds: backoffSeconds));
 
           AppLogger.e('SyncQueue: failed to process action ${action.id}: $e',
               tag: 'SyncQueue', error: e);
-          final failedLog = SyncLogItem(
+          recordLog(SyncLogItem(
             id: action.id,
             actionType: action.actionType,
             description: desc,
             timestamp: DateTime.now(),
             status: 'failed',
             error: e.toString(),
-          );
-          logsNotifier.value = [
-            failedLog,
-            ...logsNotifier.value.where((l) => l.id != action.id)
-          ];
+          ));
 
           if (e.toString().contains('not empty') ||
               e.toString().contains('FolderNotEmptyException')) {
@@ -209,6 +282,8 @@ class SyncQueueService {
           }
           break;
         }
+
+        i++;
       }
     } finally {
       _isProcessing = false;

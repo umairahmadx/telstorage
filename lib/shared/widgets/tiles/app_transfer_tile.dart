@@ -61,32 +61,33 @@ class AppTransferTile extends StatelessWidget {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
     final badge = SmartBadgeInfo.resolve(task.name, '', colors);
 
-    final subtitleParts = <String>[];
+    final String stageText;
+    final metricsParts = <String>[];
+
     if (task.status == TransferStatus.waiting ||
         task.status == TransferStatus.pending) {
+      stageText = task.currentStage ?? 'Waiting in queue…';
       if (task.sizeMb > 0) {
-        subtitleParts.add('${task.sizeMb.toStringAsFixed(1)} MB');
+        metricsParts.add(task.formattedSize);
       }
-      subtitleParts.add(task.currentStage ?? 'Waiting in queue…');
     } else {
       final pct = (task.progress * 100).toInt();
-      subtitleParts.add('$pct%');
+      metricsParts.add('$pct%');
       if (task.sizeMb > 0) {
-        final transferred = (task.progress * task.sizeMb).toStringAsFixed(1);
-        final total = task.sizeMb.toStringAsFixed(1);
-        subtitleParts.add('$transferred / $total MB');
+        metricsParts.add(task.formattedTransferredAndTotal);
       }
-      if (task.speedKbps > 0 &&
-          task.speedKbps.isFinite &&
-          !task.speedKbps.isNaN) {
-        subtitleParts
-            .add('${(task.speedKbps / 1024).toStringAsFixed(1)} MB/s');
+      final speed = task.formattedSpeed;
+      if (speed.isNotEmpty) {
+        metricsParts.add(speed);
       }
-      if (task.currentStage != null && task.currentStage!.isNotEmpty) {
-        subtitleParts.add(task.currentStage!);
+      if (task.eta != null && task.eta!.isNotEmpty) {
+        metricsParts.add(task.eta!);
       }
+      stageText = (task.currentStage != null && task.currentStage!.isNotEmpty)
+          ? task.currentStage!
+          : (task.type == TransferType.upload ? 'Uploading…' : 'Downloading…');
     }
-    final subtitle = subtitleParts.join(' • ');
+    final metricsText = metricsParts.join(' • ');
 
     final cachedThumb = ServiceLocator.instance.isInitialized
         ? ServiceLocator.instance.thumbnailRepository
@@ -116,6 +117,7 @@ class AppTransferTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 leadingWidget,
                 const SizedBox(width: 14),
@@ -135,14 +137,26 @@ class AppTransferTile extends StatelessWidget {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        subtitle,
+                        stageText,
                         style: TextStyle(
-                          color: colors.textSecondary,
-                          fontSize: 11,
+                          color: colors.accentPrimary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
                       ),
+                      if (metricsText.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          metricsText,
+                          style: TextStyle(
+                            color: colors.textSecondary,
+                            fontSize: 11,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ],
                   ),
                 ),

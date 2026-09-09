@@ -19,6 +19,8 @@ class _MockUploadService implements UploadService {
   int peakConcurrent = 0;
   final List<String> uploadedFiles = [];
   final Map<String, String?> uploadedFolderIds = {};
+  final Map<String, String?> uploadedFilePaths = {};
+  final Map<String, Uint8List?> uploadedBytes = {};
   final Duration delay = const Duration(milliseconds: 20);
 
   _MockUploadService();
@@ -28,13 +30,16 @@ class _MockUploadService implements UploadService {
 
   @override
   Future<Result<Map<String, dynamic>>> uploadFile(
-    Uint8List bytes,
+    Uint8List? bytes,
     String name,
     String? folderId,
     Function(double progress, String status) onProgress, {
+    String? filePath,
+    int? fileLength,
     bool skipGlobalMetadataUpdate = false,
     String? taskId,
     String? precomputedHash,
+    int? precomputedCrc,
     Uint8List? precomputedThumbnailBytes,
     String? thumbnailExtension,
   }) async {
@@ -49,6 +54,8 @@ class _MockUploadService implements UploadService {
 
     uploadedFiles.add(name);
     uploadedFolderIds[name] = folderId;
+    uploadedFilePaths[name] = filePath;
+    uploadedBytes[name] = bytes;
     concurrentActive--;
     return Success({'file_id': 'f_$name', 'name': name});
   }
@@ -318,6 +325,34 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
       expect(mockUploadService.uploadedFiles.length, equals(6));
+      await bloc.close();
+    });
+
+    test(
+        'Test 7: Large files with filesystem paths are uploaded via streaming filePath with null in-memory bytes',
+        () async {
+      final largeFile = File('${tempDir.path}/large_stream_video.mp4');
+      await largeFile.writeAsBytes(List.generate(50000, (i) => i % 256));
+
+      final task = UploadTask(
+        id: 'task_large_stream',
+        path: largeFile.path,
+        name: 'large_stream_video.mp4',
+        size: 50000,
+        isTemporaryCacheFile: false,
+      );
+
+      final bloc = UploadBloc();
+      bloc.add(AddUploads([task]));
+
+      while (!mockUploadService.uploadedFiles.contains('large_stream_video.mp4')) {
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(mockUploadService.uploadedFilePaths['large_stream_video.mp4'], equals(largeFile.path));
+      expect(mockUploadService.uploadedBytes['large_stream_video.mp4'], isNull);
+
       await bloc.close();
     });
   });

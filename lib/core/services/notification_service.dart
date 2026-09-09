@@ -67,6 +67,13 @@ class NotificationService {
       );
       _initialized = true;
       await _createNotificationChannel();
+
+      // Defensively stop any orphaned foreground service left from previous process termination
+      final androidPlugin = _notificationsPlugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+      await androidPlugin?.stopForegroundService();
+
       AppLogger.i('NotificationService initialized successfully',
           tag: 'NotificationService');
     } catch (e) {
@@ -294,12 +301,25 @@ class NotificationService {
                 ? 'Downloading Files...'
                 : 'Sharing Files...');
 
-        final speedText = task.speedKbps > 1024
-            ? '${(task.speedKbps / 1024).toStringAsFixed(1)} MB/s'
-            : '${task.speedKbps.toStringAsFixed(0)} KB/s';
+        final speedText = task.formattedSpeed;
+        final stageText =
+            (task.currentStage != null && task.currentStage!.isNotEmpty)
+                ? task.currentStage!
+                : (task.type == TransferType.upload
+                    ? 'Uploading'
+                    : 'Downloading');
+        final metricsParts = <String>['${(task.progress * 100).toInt()}%'];
+        if (task.sizeMb > 0) {
+          metricsParts.add(task.formattedTransferredAndTotal);
+        }
+        if (speedText.isNotEmpty) {
+          metricsParts.add(speedText);
+        }
+        if (task.eta != null && task.eta!.isNotEmpty) {
+          metricsParts.add('${task.eta} remaining');
+        }
 
-        body = '${task.name}\n${(task.progress * 100).toInt()}% • $speedText';
-        if (task.eta != null) body += ' • ${task.eta} remaining';
+        body = '${task.name}\n$stageText • ${metricsParts.join(' • ')}';
 
         progress = (task.progress * 100).toInt();
 

@@ -63,6 +63,15 @@ class ThumbnailHelper {
     return thumbnail.path;
   }
 
+  static Future<Uint8List?> extractVideoThumbnailData(String videoPath) async {
+    return await VideoThumbnail.thumbnailData(
+      video: videoPath,
+      imageFormat: ImageFormat.JPEG,
+      maxWidth: 400,
+      quality: 80,
+    );
+  }
+
   static Future<void> deleteCachedThumbnail(String fileId) async {
     try {
       final tempDir = await getTemporaryDirectory();

@@ -10,8 +10,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 import 'package:image/image.dart' as img;
 import 'package:archive/archive.dart';
-import 'package:get_thumbnail_video/index.dart';
-import 'package:get_thumbnail_video/video_thumbnail.dart';
 import 'package:pdfx/pdfx.dart';
 import '../constants/app_constants.dart';
 import '../theme/app_colors.dart';
@@ -139,9 +137,10 @@ class ThumbnailGenerator {
     return null;
   }
 
-  /// Generates a 400px JPEG thumbnail with max 50KB size for the given file data.
+  /// Generates a 400px JPEG thumbnail with max 50KB size for the given file data or path.
   static Future<ThumbnailResult?> generate({
-    required Uint8List bytes,
+    Uint8List? bytes,
+    String? filePath,
     required String filename,
     required String mimeType,
   }) async {
@@ -152,25 +151,34 @@ class ThumbnailGenerator {
       final fileExt = lowerName.contains('.') ? lowerName.split('.').last : '';
 
       if (mimeType.startsWith('video/')) {
-        thumbBytes = await generateVideoThumbnail(bytes, filename);
-        thumbBytes ??= await generateImageThumbnail(bytes);
-      } else if (mimeType.startsWith('image/') ||
-          fileExt == 'heic' ||
-          fileExt == 'heif') {
-        thumbBytes = await generateImageThumbnail(bytes);
-      } else if (mimeType == 'application/pdf' || fileExt == 'pdf') {
-        thumbBytes = await generatePdfThumbnail(bytes);
-      } else if (fileExt == 'apk' ||
-          mimeType.contains('android.package-archive')) {
-        thumbBytes = await generateApkThumbnail(bytes);
-      } else if (codeExtensions.contains(fileExt) ||
-          mimeType.startsWith('text/') ||
-          mimeType.contains('json') ||
-          mimeType.contains('javascript')) {
-        thumbBytes = await generateCodeThumbnail(bytes, filename);
+        thumbBytes = await generateVideoThumbnail(
+          bytes ?? Uint8List(0),
+          filename,
+          sourceFilePath: filePath,
+        );
+        if (thumbBytes == null && bytes != null && bytes.isNotEmpty) {
+          thumbBytes = await generateImageThumbnail(bytes);
+        }
+      } else if (bytes != null) {
+        if (mimeType.startsWith('image/') ||
+            fileExt == 'heic' ||
+            fileExt == 'heif') {
+          thumbBytes = await generateImageThumbnail(bytes);
+        } else if (mimeType == 'application/pdf' || fileExt == 'pdf') {
+          thumbBytes = await generatePdfThumbnail(bytes);
+        } else if (fileExt == 'apk' ||
+            mimeType.contains('android.package-archive')) {
+          thumbBytes = await generateApkThumbnail(bytes);
+        } else if (codeExtensions.contains(fileExt) ||
+            mimeType.startsWith('text/') ||
+            mimeType.contains('json') ||
+            mimeType.contains('javascript')) {
+          thumbBytes = await generateCodeThumbnail(bytes, filename);
+        }
       }
 
       if (thumbBytes == null &&
+          bytes != null &&
           (mimeType.startsWith('image/') ||
               fileExt == 'heic' ||
               fileExt == 'heif')) {
@@ -266,24 +274,24 @@ class ThumbnailGenerator {
   /// Extracts JPEG video frame thumbnail scaled to max 400px at 80% quality.
   static Future<Uint8List?> generateVideoThumbnail(
     Uint8List videoBytes,
-    String filename,
-  ) async {
-    final sourcePath =
+    String filename, {
+    String? sourceFilePath,
+  }) async {
+    final sourcePath = sourceFilePath ??
         await ThumbnailHelper.prepareVideoSource(videoBytes, filename);
     try {
-      final uint8list = await VideoThumbnail.thumbnailData(
-        video: sourcePath,
-        imageFormat: ImageFormat.JPEG,
-        maxWidth: maxDimension,
-        quality: quality,
-      );
+      final uint8list =
+          await ThumbnailHelper.extractVideoThumbnailData(sourcePath);
+      if (uint8list == null) return null;
       return compressUnder50KB(uint8list);
     } catch (e) {
       AppLogger.d('Video thumbnail extraction skipped: $e',
           tag: 'ThumbnailGenerator');
       return null;
     } finally {
-      ThumbnailHelper.cleanVideoSource(sourcePath);
+      if (sourceFilePath == null) {
+        ThumbnailHelper.cleanVideoSource(sourcePath);
+      }
     }
   }
 

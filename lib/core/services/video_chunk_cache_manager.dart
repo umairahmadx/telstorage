@@ -40,10 +40,16 @@ class VideoChunkCacheManager {
     return base;
   }
 
+  /// Generates a filesystem-safe folder name for any arbitrary opaque fileId.
+  static String sanitizeFileId(String fileId) {
+    return fileId.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+  }
+
   /// Resolves the dedicated subfolder for a specific video file's chunks.
   Future<Directory> getChunkDir(String fileId) async {
     final base = await getBaseDir();
-    final chunkDir = Directory('${base.path}/$fileId');
+    final safeId = sanitizeFileId(fileId);
+    final chunkDir = Directory('${base.path}/$safeId');
     if (!chunkDir.existsSync()) {
       chunkDir.createSync(recursive: true);
     }
@@ -97,7 +103,8 @@ class VideoChunkCacheManager {
       if (!base.existsSync()) return;
 
       if (fileId != null) {
-        final dir = Directory('${base.path}/$fileId');
+        final safeId = sanitizeFileId(fileId);
+        final dir = Directory('${base.path}/$safeId');
         if (dir.existsSync()) {
           dir.deleteSync(recursive: true);
         }

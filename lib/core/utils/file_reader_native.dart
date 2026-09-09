@@ -24,3 +24,11 @@ Future<void> deleteFileIfExists(String path) async {
     }
   } catch (_) {}
 }
+
+Future<bool> checkFileExists(String path) async {
+  try {
+    return await File(path).exists();
+  } catch (_) {
+    return false;
+  }
+}

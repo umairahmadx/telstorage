@@ -10,3 +10,5 @@ Future<Uint8List> readFileBytes(String path) => throw UnsupportedError(
     'File path reading not supported on web. Use bytes from FilePicker.');
 
 Future<void> deleteFileIfExists(String path) async {}
+
+Future<bool> checkFileExists(String path) async => false;

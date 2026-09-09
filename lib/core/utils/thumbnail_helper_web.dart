@@ -31,6 +31,10 @@ class ThumbnailHelper {
           String fileId, String videoPath) async =>
       null;
 
+  static Future<Uint8List?> extractVideoThumbnailData(
+          String videoPath) async =>
+      null;
+
   static Future<void> deleteCachedThumbnail(String fileId) async {}
 
   static ImageProvider? imageProviderFromPath(String path) => null;

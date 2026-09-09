@@ -8,13 +8,16 @@ import '../errors/result.dart';
 
 abstract class UploadServiceContract {
   Future<Result<Map<String, dynamic>>> uploadFile(
-    Uint8List bytes,
+    Uint8List? bytes,
     String name,
     String? folderId,
     void Function(double progress, String status) onProgress, {
+    String? filePath,
+    int? fileLength,
     bool skipGlobalMetadataUpdate = false,
     String? taskId,
     String? precomputedHash,
+    int? precomputedCrc,
     Uint8List? precomputedThumbnailBytes,
     String? thumbnailExtension,
   });

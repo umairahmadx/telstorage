@@ -119,6 +119,11 @@ class ServiceLocator {
     _hive = hive;
   }
 
+  /// Injects telegram service instance for test isolation.
+  void setTelegramForTesting(TelegramService telegram) {
+    _telegram = telegram;
+  }
+
   ThumbnailRepository get thumbnailRepository => _thumbnailRepository;
   WebShareQueueService get webShareQueue => _webShareQueue;
   DownloadFileUseCase get downloadFileUseCase => _downloadFileUseCase;

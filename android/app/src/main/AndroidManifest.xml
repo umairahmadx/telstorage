@@ -56,7 +56,8 @@
         <service
             android:name="com.dexterous.flutterlocalnotifications.ForegroundService"
             android:foregroundServiceType="dataSync"
-            android:exported="false" />
+            android:exported="false"
+            android:stopWithTask="true" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

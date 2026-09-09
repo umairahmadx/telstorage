@@ -5,9 +5,6 @@
 
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:archive/archive.dart';
-import 'package:convert/convert.dart';
-import 'package:crypto/crypto.dart';
 import 'package:mime/mime.dart';
 import 'package:uuid/uuid.dart';
 import 'package:hive/hive.dart';
@@ -20,7 +17,9 @@ import '../utils/connectivity.dart';
 import '../utils/thumbnail_generator.dart';
 import '../utils/thumbnail_helper_native.dart'
     if (dart.library.js_interop) '../utils/thumbnail_helper_web.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import '../utils/file_reader_stub.dart'
+    if (dart.library.io) '../utils/file_reader_native.dart';
+import '../utils/zip_stream_chunker.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'chunk_resume_service.dart';
 import 'hive_service.dart';
@@ -63,13 +62,16 @@ class UploadService implements UploadServiceContract {
 
   @override
   Future<Result<Map<String, dynamic>>> uploadFile(
-    Uint8List bytes,
+    Uint8List? bytes,
     String name,
     String? folderId,
     Function(double progress, String status) onProgress, {
+    String? filePath,
+    int? fileLength,
     bool skipGlobalMetadataUpdate = false,
     String? taskId,
     String? precomputedHash,
+    int? precomputedCrc,
     Uint8List? precomputedThumbnailBytes,
     String? thumbnailExtension,
   }) async {
@@ -87,13 +89,23 @@ class UploadService implements UploadServiceContract {
         final fileId = taskId ?? const Uuid().v4();
         transferId = fileId;
         final mimeType = lookupMimeType(name) ?? 'application/octet-stream';
-        final sizeMb = bytes.length / 1048576;
+        final totalBytes = bytes?.length ??
+            (fileLength != null && fileLength > 0 ? fileLength : null) ??
+            (filePath != null
+                ? (await ZipStreamChunker.hashAndCrcFile(filePath)).fileSize
+                : null);
+        if (totalBytes == null) {
+          return const Failure(
+              UnknownFailure('No data or file path provided for upload.'));
+        }
+        final sizeMb = totalBytes / 1048576;
 
-        final existingTask = TransferQueueService.instance.tasks
+        final queue = TransferQueueService.instance;
+        final existingTask = queue.tasks
             .cast<TransferTask?>()
             .firstWhere((t) => t?.id == fileId, orElse: () => null);
         if (existingTask == null) {
-          TransferQueueService.instance.addTask(TransferTask(
+          queue.addTask(TransferTask(
             id: fileId,
             name: name,
             type: TransferType.upload,
@@ -103,11 +115,8 @@ class UploadService implements UploadServiceContract {
             currentStage: 'Preparing…',
           ));
         } else {
-          TransferQueueService.instance.updateTask(
-            fileId,
-            status: TransferStatus.preparing,
-            currentStage: 'Preparing…',
-          );
+          queue.updateTask(fileId,
+              status: TransferStatus.preparing, currentStage: 'Preparing…');
         }
 
         void internalOnProgress(double progress, String status) {
@@ -130,15 +139,27 @@ class UploadService implements UploadServiceContract {
 
         // ── Step 1: SHA-256 (precomputed or chunked) ───────────────────────────
         final String hash;
+        int crc = precomputedCrc ?? 0;
         if (precomputedHash != null && precomputedHash.isNotEmpty) {
           hash = precomputedHash;
-        } else {
+        } else if (filePath != null) {
           internalOnProgress(0.03, 'Verifying file… 0%');
-          hash = await _sha256Chunked(
-            bytes,
-            (pct) => internalOnProgress(
+          final hashInfo = await ZipStreamChunker.hashAndCrcFile(
+            filePath,
+            onProgress: (pct) => internalOnProgress(
                 0.03 + pct * 0.07, 'Verifying… ${(pct * 100).toInt()}%'),
           );
+          hash = hashInfo.sha256;
+          crc = hashInfo.crc32;
+        } else {
+          internalOnProgress(0.03, 'Verifying file… 0%');
+          final hashInfo = await ZipStreamChunker.hashAndCrcBytesChunked(
+            bytes!,
+            onProgress: (pct) => internalOnProgress(
+                0.03 + pct * 0.07, 'Verifying… ${(pct * 100).toInt()}%'),
+          );
+          hash = hashInfo.sha256;
+          crc = hashInfo.crc32;
         }
 
         // ── Step 1.2: Check for SHA-256 Deduplication ──────────────────────────
@@ -191,12 +212,9 @@ class UploadService implements UploadServiceContract {
             title: 'Instant Upload Complete',
             body: '$name linked instantly via deduplication.',
             payload: 'transfer_upload',
-            actions: [
-              const AndroidNotificationAction(
-                'view_uploads',
-                'View Uploads',
-                showsUserInterface: true,
-              ),
+            actions: const [
+              AndroidNotificationAction('view_uploads', 'View Uploads',
+                  showsUserInterface: true),
             ],
           );
 
@@ -219,6 +237,7 @@ class UploadService implements UploadServiceContract {
               internalOnProgress(0.08, 'Generating thumbnail…');
               final gen = await ThumbnailGenerator.generate(
                 bytes: bytes,
+                filePath: filePath,
                 filename: name,
                 mimeType: mimeType,
               );
@@ -255,13 +274,20 @@ class UploadService implements UploadServiceContract {
 
         final chunkInfos = <ChunkInfo>[];
 
-        if (bytes.length <= _partSize) {
+        if (totalBytes <= _partSize) {
           // ── Small file: upload directly ───────────────────────────────────────
           internalOnProgress(0.12, 'Uploading "$name"…');
           AppLogger.d('Small file — uploading directly', tag: 'UploadService');
 
+          final Uint8List uploadPayload;
+          if (bytes != null) {
+            uploadPayload = bytes;
+          } else {
+            uploadPayload = await readFileBytes(filePath!);
+          }
+
           final result = await _withRetry(
-              () => _telegram.uploadBytesWithFileId(bytes, name));
+              () => _telegram.uploadBytesWithFileId(uploadPayload, name));
           chunkInfos.add(ChunkInfo(
             index: 1,
             messageId: result['message_id'] as int,
@@ -273,23 +299,28 @@ class UploadService implements UploadServiceContract {
         } else {
           // ── Large file: ZIP (store) → split → upload parts ────────────────────
           internalOnProgress(0.12, 'Packaging file…');
-          AppLogger.d('Large file — wrapping in ZIP (store mode)',
+          AppLogger.d('Large file — streaming in ZIP (store mode)',
               tag: 'UploadService');
 
-          // STORE mode = no DEFLATE compression → near-instant, no CPU freeze.
-          // Videos/images are already compressed, DEFLATE would give 0% savings.
-          final zipBytes = await _wrapInZipStore(bytes, name);
-          final parts = _splitBytes(zipBytes);
+          final chunker = ZipStreamChunker(
+            filename: name,
+            fileSize: totalBytes,
+            crc32: crc,
+            bytes: bytes,
+            filePath: filePath,
+            chunkSize: _partSize,
+          );
+          final totalParts = chunker.partCount;
           final baseName = name.replaceAll(RegExp(r'\.[^.]+$'), '');
 
           AppLogger.d(
-              'ZIP size: ${(zipBytes.length / 1048576).toStringAsFixed(2)} MB, ${parts.length} part(s)',
+              'ZIP size: ${(chunker.totalZipSize / 1048576).toStringAsFixed(2)} MB, $totalParts part(s)',
               tag: 'UploadService');
 
           final existingChunks =
               ChunkResumeService.instance.getUploadedChunks(hash);
 
-          for (var i = 0; i < parts.length; i++) {
+          for (var i = 0; i < totalParts; i++) {
             final chunkIndex = i + 1;
             // Check for pause/cancel
             while (TransferQueueService.instance.isPaused(fileId) &&
@@ -300,38 +331,40 @@ class UploadService implements UploadServiceContract {
               throw Exception('Upload cancelled by user');
             }
 
-            final partName = parts.length == 1
+            final partName = totalParts == 1
                 ? '$baseName.zip'
                 : '$baseName.zip.${chunkIndex.toString().padLeft(3, '0')}';
 
             final cachedChunk = existingChunks[chunkIndex];
             if (cachedChunk != null) {
               AppLogger.d(
-                  'Resuming already-uploaded part $chunkIndex/${parts.length}: "$partName"',
+                  'Resuming already-uploaded part $chunkIndex/$totalParts: "$partName"',
                   tag: 'UploadService');
               chunkInfos.add(cachedChunk);
               internalOnProgress(
-                0.15 + (i / parts.length * 0.68),
-                'Resumed part $chunkIndex/${parts.length}…',
+                0.15 + (i / totalParts * 0.68),
+                'Resumed part $chunkIndex/$totalParts…',
               );
               continue;
             }
 
             internalOnProgress(
-              0.15 + (i / parts.length * 0.68),
-              'Uploading part $chunkIndex/${parts.length}…',
+              0.15 + (i / totalParts * 0.68),
+              'Uploading part $chunkIndex/$totalParts…',
             );
+
+            final partBytes = await chunker.readPart(chunkIndex);
             AppLogger.d(
-                'Part $chunkIndex/${parts.length}: "$partName" (${(parts[i].length / 1048576).toStringAsFixed(2)} MB)',
+                'Part $chunkIndex/$totalParts: "$partName" (${(partBytes.length / 1048576).toStringAsFixed(2)} MB)',
                 tag: 'UploadService');
 
             final result = await _withRetry(
-                () => _telegram.uploadBytesWithFileId(parts[i], partName));
+                () => _telegram.uploadBytesWithFileId(partBytes, partName));
             final chunkInfo = ChunkInfo(
               index: chunkIndex,
               messageId: result['message_id'] as int,
               fileId: result['file_id'] as String,
-              sizeMb: parts[i].length / 1048576,
+              sizeMb: partBytes.length / 1048576,
               partName: partName,
             );
             chunkInfos.add(chunkInfo);
@@ -350,7 +383,7 @@ class UploadService implements UploadServiceContract {
           'size_mb': sizeMb,
           'mime_type': mimeType,
           'chunk_count': chunkInfos.length,
-          'is_zipped': bytes.length > _partSize,
+          'is_zipped': totalBytes > _partSize,
           'chunks': chunkInfos.map((c) => c.toJson()).toList(),
           'uploaded_at': DateTime.now().toIso8601String(),
           if (thumbnailFileId != null) 'thumbnail_file_id': thumbnailFileId,
@@ -405,12 +438,9 @@ class UploadService implements UploadServiceContract {
           title: 'Upload Complete',
           body: '$name has been successfully uploaded.',
           payload: 'transfer_upload',
-          actions: [
-            const AndroidNotificationAction(
-              'view_uploads',
-              'View Uploads',
-              showsUserInterface: true,
-            ),
+          actions: const [
+            AndroidNotificationAction('view_uploads', 'View Uploads',
+                showsUserInterface: true),
           ],
         );
 
@@ -445,36 +475,6 @@ class UploadService implements UploadServiceContract {
 
   // ── Private helpers ─────────────────────────────────────────────────────────
 
-  /// SHA-256 computed in 1 MB chunks with event-loop yields.
-  Future<String> _sha256Chunked(
-    Uint8List data,
-    void Function(double) onProgress,
-  ) async {
-    const chunkSize = 1024 * 1024;
-    final output = AccumulatorSink<Digest>();
-    final input = sha256.startChunkedConversion(output);
-
-    var chunk = 0;
-    for (var offset = 0; offset < data.length; offset += chunkSize) {
-      final end = (offset + chunkSize).clamp(0, data.length);
-      input.add(Uint8List.sublistView(data, offset, end));
-      chunk++;
-      onProgress(offset / data.length);
-      if (kIsWeb && chunk % 1 == 0) await Future.delayed(Duration.zero);
-    }
-    input.close();
-    return output.events.single.toString();
-  }
-
-  /// Wraps [bytes] in a ZIP using STORE (no compression).
-  Future<Uint8List> _wrapInZipStore(Uint8List bytes, String filename) async {
-    if (kIsWeb) await Future.delayed(Duration.zero);
-    final archive = Archive();
-    archive.add(ArchiveFile(filename, bytes.length, bytes));
-    final encoded = ZipEncoder().encode(archive, level: 0);
-    return Uint8List.fromList(encoded);
-  }
-
   /// Split [bytes] into chunks of size <= [partSize] using zero-copy typed data views.
   static List<Uint8List> splitBytesZeroCopy(
     Uint8List bytes, [
@@ -489,7 +489,4 @@ class UploadService implements UploadServiceContract {
     }
     return parts;
   }
-
-  List<Uint8List> _splitBytes(Uint8List bytes) =>
-      splitBytesZeroCopy(bytes, _partSize);
 }

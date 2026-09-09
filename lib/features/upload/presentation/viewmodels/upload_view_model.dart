@@ -4,7 +4,6 @@
  */
 
 import 'dart:typed_data';
-import 'package:crypto/crypto.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mime/mime.dart';
 import '../../../../core/errors/result.dart';
@@ -17,6 +16,9 @@ import '../../../../core/utils/connectivity.dart';
 import '../../../../core/utils/thumbnail_generator.dart';
 import '../../../../core/utils/thumbnail_helper_native.dart'
     if (dart.library.js_interop) '../../../../core/utils/thumbnail_helper_web.dart';
+import '../../../../core/utils/zip_stream_chunker.dart';
+import '../../../../core/utils/file_reader_stub.dart'
+    if (dart.library.io) '../../../../core/utils/file_reader_native.dart';
 
 import 'upload_task.dart';
 import 'upload_event.dart';
@@ -147,25 +149,55 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
         }
 
         try {
-          final Uint8List b = await pending.getBytes();
-          pending.precomputedHash = sha256.convert(b).toString();
+          if (pending.path != null && pending.path!.isNotEmpty) {
+            final hashInfo =
+                await ZipStreamChunker.hashAndCrcFile(pending.path!);
+            pending.precomputedHash = hashInfo.sha256;
+            pending.precomputedCrc = hashInfo.crc32;
+            pending.fileSizeOnDisk = hashInfo.fileSize;
 
-          final mime = lookupMimeType(pending.name) ?? 'application/octet-stream';
-          final thumb = await ThumbnailGenerator.generate(
-            bytes: b,
-            filename: pending.name,
-            mimeType: mime,
-          );
-          if (thumb != null) {
-            pending.precomputedThumbnailBytes = thumb.bytes;
-            pending.thumbnailExtension = thumb.extension;
-            try {
-              if (ServiceLocator.instance.isInitialized) {
-                ServiceLocator.instance.thumbnailRepository
-                    .addToMemoryCache(pending.id, thumb.bytes);
-              }
-              await ThumbnailHelper.cacheThumbnail(pending.id, thumb.bytes);
-            } catch (_) {}
+            final mime =
+                lookupMimeType(pending.name) ?? 'application/octet-stream';
+            final thumb = await ThumbnailGenerator.generate(
+              filePath: pending.path,
+              filename: pending.name,
+              mimeType: mime,
+            );
+            if (thumb != null) {
+              pending.precomputedThumbnailBytes = thumb.bytes;
+              pending.thumbnailExtension = thumb.extension;
+              try {
+                if (ServiceLocator.instance.isInitialized) {
+                  ServiceLocator.instance.thumbnailRepository
+                      .addToMemoryCache(pending.id, thumb.bytes);
+                }
+                await ThumbnailHelper.cacheThumbnail(pending.id, thumb.bytes);
+              } catch (_) {}
+            }
+          } else {
+            final Uint8List b = await pending.getBytes();
+            final hashInfo = ZipStreamChunker.hashAndCrcBytes(b);
+            pending.precomputedHash = hashInfo.sha256;
+            pending.precomputedCrc = hashInfo.crc32;
+
+            final mime =
+                lookupMimeType(pending.name) ?? 'application/octet-stream';
+            final thumb = await ThumbnailGenerator.generate(
+              bytes: b,
+              filename: pending.name,
+              mimeType: mime,
+            );
+            if (thumb != null) {
+              pending.precomputedThumbnailBytes = thumb.bytes;
+              pending.thumbnailExtension = thumb.extension;
+              try {
+                if (ServiceLocator.instance.isInitialized) {
+                  ServiceLocator.instance.thumbnailRepository
+                      .addToMemoryCache(pending.id, thumb.bytes);
+                }
+                await ThumbnailHelper.cacheThumbnail(pending.id, thumb.bytes);
+              } catch (_) {}
+            }
           }
           TransferQueueService.instance.updateTask(
             pending.id,
@@ -243,16 +275,27 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
       totalCount: _totalCount,
     ));
 
-    Uint8List bytes;
-    try {
-      bytes = await task.getBytes();
-    } catch (e) {
-      AppLogger.w('Failed to read bytes for ${task.name}: $e',
-          tag: 'UploadBloc');
-      await task.cleanupCacheFile();
-      _safeAdd(UploadFailed('File inaccessible: ${task.name}',
-          fileName: task.name));
-      return;
+    final Uint8List? bytes;
+    if (task.path != null && task.path!.isNotEmpty) {
+      if (!await checkFileExists(task.path!)) {
+        AppLogger.w('File inaccessible: ${task.name}', tag: 'UploadBloc');
+        await task.cleanupCacheFile();
+        _safeAdd(UploadFailed('File inaccessible: ${task.name}',
+            fileName: task.name));
+        return;
+      }
+      bytes = null;
+    } else {
+      try {
+        bytes = await task.getBytes();
+      } catch (e) {
+        AppLogger.w('Failed to read bytes for ${task.name}: $e',
+            tag: 'UploadBloc');
+        await task.cleanupCacheFile();
+        _safeAdd(UploadFailed('File inaccessible: ${task.name}',
+            fileName: task.name));
+        return;
+      }
     }
 
     final isBatch = _totalCount > 1;
@@ -266,9 +309,12 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
           'Uploading ${task.name} (${_completedCount + 1}/$_totalCount)…',
         ));
       },
+      filePath: task.path,
+      fileLength: task.fileSizeOnDisk ?? task.size,
       skipGlobalMetadataUpdate: isBatch,
       taskId: task.id,
       precomputedHash: task.precomputedHash,
+      precomputedCrc: task.precomputedCrc,
       precomputedThumbnailBytes: task.precomputedThumbnailBytes,
       thumbnailExtension: task.thumbnailExtension,
     );

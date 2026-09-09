@@ -62,8 +62,15 @@ class VideoPlayerViewModel extends ChangeNotifier {
   /// Active error message, if playback initialization failed.
   String? get errorMessage => _errorMessage;
 
+  StreamRegistration? _registration;
+  int _initGeneration = 0;
+
   /// Initializes the video controller with the proxy loopback stream URL for [file].
   Future<void> initialize(FileRecord file) async {
+    final gen = ++_initGeneration;
+    _registration?.dispose();
+    _registration = null;
+
     _currentFile = file;
     _errorMessage = null;
     _isInitialized = false;
@@ -72,12 +79,35 @@ class VideoPlayerViewModel extends ChangeNotifier {
 
     try {
       await VideoStreamServer.instance.start();
-      final streamUrl = VideoStreamServer.instance.getStreamUrl(file.fileId);
+      if (gen != _initGeneration) return;
+
+      final reg = VideoStreamServer.instance.registerFile(file);
+      if (gen != _initGeneration) {
+        reg.dispose();
+        return;
+      }
+      _registration = reg;
+
+      final streamUrl = VideoStreamServer.instance.getStreamUrl(file.fileId, file.name);
       AppLogger.i('Initializing video stream: $streamUrl', tag: 'VideoPlayerViewModel');
 
       final ctrl = VideoPlayerController.networkUrl(Uri.parse(streamUrl));
+      if (gen != _initGeneration) {
+        ctrl.dispose();
+        return;
+      }
+
+      final oldCtrl = _controller;
       _controller = ctrl;
+      oldCtrl?.removeListener(_onControllerStateChanged);
+      oldCtrl?.dispose();
+
       await ctrl.initialize();
+      if (gen != _initGeneration) {
+        ctrl.removeListener(_onControllerStateChanged);
+        ctrl.dispose();
+        return;
+      }
 
       _isInitialized = true;
       _duration = ctrl.value.duration;
@@ -87,7 +117,11 @@ class VideoPlayerViewModel extends ChangeNotifier {
       startAutoHideTimer();
       notifyListeners();
     } catch (e) {
+      if (gen != _initGeneration) return;
       AppLogger.e('Failed to initialize video player: $e', tag: 'VideoPlayerViewModel');
+      _registration?.dispose();
+      _registration = null;
+      _currentFile = null;
       _errorMessage = 'Could not load video: $e';
       notifyListeners();
     }
@@ -215,8 +249,12 @@ class VideoPlayerViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    _initGeneration++;
     _hideControlsTimer?.cancel();
     unawaited(WakelockPlus.disable().catchError((_) {}));
+    _registration?.dispose();
+    _registration = null;
+    _currentFile = null;
     if (_controller != null) {
       _controller!.removeListener(_onControllerStateChanged);
       _controller!.dispose();

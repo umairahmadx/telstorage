@@ -87,6 +87,60 @@ void main() {
     });
   });
 
+  group('TransferTask Progress Formatting Tests', () {
+    test('TC-03b: formattedProgress formats percentages with 1 decimal place', () {
+      final task0 = TransferTask(
+        id: 't0',
+        name: 'test.bin',
+        type: TransferType.upload,
+        sizeMb: 10,
+        progress: 0.0,
+        addedAt: DateTime.now(),
+      );
+      expect(task0.formattedProgress, equals('0.0%'));
+
+      final task452 = TransferTask(
+        id: 't1',
+        name: 'test.bin',
+        type: TransferType.upload,
+        sizeMb: 10,
+        progress: 0.4523,
+        addedAt: DateTime.now(),
+      );
+      expect(task452.formattedProgress, equals('45.2%'));
+
+      final task100 = TransferTask(
+        id: 't2',
+        name: 'test.bin',
+        type: TransferType.upload,
+        sizeMb: 10,
+        progress: 1.0,
+        addedAt: DateTime.now(),
+      );
+      expect(task100.formattedProgress, equals('100.0%'));
+
+      final taskClampLow = TransferTask(
+        id: 't3',
+        name: 'test.bin',
+        type: TransferType.upload,
+        sizeMb: 10,
+        progress: -0.1,
+        addedAt: DateTime.now(),
+      );
+      expect(taskClampLow.formattedProgress, equals('0.0%'));
+
+      final taskClampHigh = TransferTask(
+        id: 't4',
+        name: 'test.bin',
+        type: TransferType.upload,
+        sizeMb: 10,
+        progress: 1.25,
+        addedAt: DateTime.now(),
+      );
+      expect(taskClampHigh.formattedProgress, equals('100.0%'));
+    });
+  });
+
   group('AppTransferTile Widget Layout Tests', () {
     testWidgets(
         'TC-04: Displays dedicated stage line without truncation and adaptive units when uploading',
@@ -123,8 +177,8 @@ void main() {
       // Verify dedicated stage line is shown with full task description
       expect(find.text('Uploading part 1 of 2'), findsOneWidget);
 
-      // Verify metrics line displays KB and KB/s
-      expect(find.text('45% • 112.5 / 250.0 KB • 320 KB/s'), findsOneWidget);
+      // Verify metrics line displays KB and KB/s with 1 decimal place percentage
+      expect(find.text('45.0% • 112.5 / 250.0 KB • 320 KB/s'), findsOneWidget);
 
       // Verify stage text has maxLines 2
       final stageTextWidget =

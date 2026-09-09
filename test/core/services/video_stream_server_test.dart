@@ -396,6 +396,63 @@ void main() {
         client.close();
       }
     });
+
+    test('TC-VSS-12: resolves legacy 0-based chunks from metadata fallback', () async {
+      final chunkBytes = Uint8List.fromList(List.generate(60, (i) => i));
+      final testRecord = FileRecord(
+        fileId: 'stream_vid_legacy_0',
+        name: 'legacy.mp4',
+        metadataMessageId: 70,
+        metadataFileId: 'legacy_meta_file_id',
+        sizeMb: chunkBytes.length / (1024 * 1024),
+        mimeType: 'video/mp4',
+        uploadedAt: DateTime(2026, 1, 1),
+        chunkCount: 1,
+        sha256Hash: 'dummy_legacy',
+      );
+
+      final metadataJson = jsonEncode({
+        'file_id': testRecord.fileId,
+        'name': testRecord.name,
+        'size_mb': testRecord.sizeMb,
+        'chunk_count': 1,
+        'chunks': [
+          {
+            'index': 0,
+            'message_id': 71,
+            'file_id': 'tg_chunk_legacy_000',
+            'size_mb': testRecord.sizeMb,
+            'part_name': 'legacy.mp4',
+          }
+        ],
+      });
+
+      final fakeTelegram = FakeStreamTelegramService();
+      fakeTelegram.files['legacy_meta_file_id'] = Uint8List.fromList(utf8.encode(metadataJson));
+      fakeTelegram.files['tg_chunk_legacy_000'] = chunkBytes;
+
+      ServiceLocator.instance.setTelegramForTesting(fakeTelegram);
+      ServiceLocator.instance.setInitializedForTesting(true);
+
+      server.registerFile(testRecord);
+      server.setChunkFetcherForTesting(null);
+
+      await server.start();
+      final client = HttpClient();
+      try {
+        final streamUrl = server.getStreamUrl(testRecord.fileId, testRecord.name);
+        final request = await client.getUrl(Uri.parse(streamUrl));
+        final response = await request.close();
+
+        expect(response.statusCode, equals(HttpStatus.ok));
+        expect(response.contentLength, equals(60));
+        final responseBytes = await response.fold<List<int>>([], (prev, elem) => prev..addAll(elem));
+        expect(responseBytes, equals(chunkBytes));
+      } finally {
+        client.close();
+        ServiceLocator.instance.setInitializedForTesting(false);
+      }
+    });
   });
 }
 

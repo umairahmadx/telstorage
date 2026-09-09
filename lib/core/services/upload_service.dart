@@ -44,12 +44,9 @@ class UploadService implements UploadServiceContract {
 
   static const int _partSize = AppConstants.chunkSizeBytes; // 19 MB
 
-  Future<T> _withRetry<T>(Future<T> Function() fn,
-      {int maxAttempts = 3}) async {
-    int attempt = 0;
-    while (true) {
+  Future<T> _withRetry<T>(Future<T> Function() fn, {int maxAttempts = 3}) async {
+    for (int attempt = 1;; attempt++) {
       try {
-        attempt++;
         return await fn();
       } catch (e) {
         if (attempt >= maxAttempts) rethrow;
@@ -142,22 +139,14 @@ class UploadService implements UploadServiceContract {
         int crc = precomputedCrc ?? 0;
         if (precomputedHash != null && precomputedHash.isNotEmpty) {
           hash = precomputedHash;
-        } else if (filePath != null) {
-          internalOnProgress(0.03, 'Verifying file… 0%');
-          final hashInfo = await ZipStreamChunker.hashAndCrcFile(
-            filePath,
-            onProgress: (pct) => internalOnProgress(
-                0.03 + pct * 0.07, 'Verifying… ${(pct * 100).toInt()}%'),
-          );
-          hash = hashInfo.sha256;
-          crc = hashInfo.crc32;
         } else {
-          internalOnProgress(0.03, 'Verifying file… 0%');
-          final hashInfo = await ZipStreamChunker.hashAndCrcBytesChunked(
-            bytes!,
-            onProgress: (pct) => internalOnProgress(
-                0.03 + pct * 0.07, 'Verifying… ${(pct * 100).toInt()}%'),
-          );
+          internalOnProgress(0.0, 'Verifying file… 0%');
+          void onP(double pct) =>
+              internalOnProgress(0.0, 'Verifying… ${(pct * 100).toInt()}%');
+          final hashInfo = filePath != null
+              ? await ZipStreamChunker.hashAndCrcFile(filePath, onProgress: onP)
+              : await ZipStreamChunker.hashAndCrcBytesChunked(bytes!,
+                  onProgress: onP);
           hash = hashInfo.sha256;
           crc = hashInfo.crc32;
         }
@@ -234,7 +223,7 @@ class UploadService implements UploadServiceContract {
               thumbBytes = precomputedThumbnailBytes;
               ext = thumbnailExtension ?? 'jpg';
             } else {
-              internalOnProgress(0.08, 'Generating thumbnail…');
+              internalOnProgress(0.0, 'Generating thumbnail…');
               final gen = await ThumbnailGenerator.generate(
                 bytes: bytes,
                 filePath: filePath,
@@ -252,7 +241,7 @@ class UploadService implements UploadServiceContract {
                 await ThumbnailHelper.cacheThumbnail(fileId, thumbBytes);
               } catch (_) {}
 
-              internalOnProgress(0.10, 'Uploading thumbnail…');
+              internalOnProgress(0.0, 'Uploading thumbnail…');
               final thumbUpload = await _telegram.uploadBytesWithFileId(
                 thumbBytes,
                 '.thumb_$name.$ext',
@@ -276,7 +265,7 @@ class UploadService implements UploadServiceContract {
 
         if (totalBytes <= _partSize) {
           // ── Small file: upload directly ───────────────────────────────────────
-          internalOnProgress(0.12, 'Uploading "$name"…');
+          internalOnProgress(0.0, 'Uploading "$name"…');
           AppLogger.d('Small file — uploading directly', tag: 'UploadService');
 
           final Uint8List uploadPayload;
@@ -287,7 +276,17 @@ class UploadService implements UploadServiceContract {
           }
 
           final result = await _withRetry(
-              () => _telegram.uploadBytesWithFileId(uploadPayload, name));
+            () => _telegram.uploadBytesWithFileId(
+              uploadPayload,
+              name,
+              onSendProgress: (sent, total) {
+                if (total > 0) {
+                  final p = (sent / total).clamp(0.0, 1.0);
+                  internalOnProgress(p, 'Uploading "$name"…');
+                }
+              },
+            ),
+          );
           chunkInfos.add(ChunkInfo(
             index: 1,
             messageId: result['message_id'] as int,
@@ -295,10 +294,10 @@ class UploadService implements UploadServiceContract {
             sizeMb: sizeMb,
             partName: name,
           ));
-          internalOnProgress(0.85, 'Uploaded!');
+          internalOnProgress(1.0, 'Uploaded!');
         } else {
           // ── Large file: ZIP (store) → split → upload parts ────────────────────
-          internalOnProgress(0.12, 'Packaging file…');
+          internalOnProgress(0.0, 'Packaging file…');
           AppLogger.d('Large file — streaming in ZIP (store mode)',
               tag: 'UploadService');
 
@@ -312,6 +311,8 @@ class UploadService implements UploadServiceContract {
           );
           final totalParts = chunker.partCount;
           final baseName = name.replaceAll(RegExp(r'\.[^.]+$'), '');
+          final totalUploadBytes =
+              chunker.totalZipSize > 0 ? chunker.totalZipSize : totalBytes;
 
           AppLogger.d(
               'ZIP size: ${(chunker.totalZipSize / 1048576).toStringAsFixed(2)} MB, $totalParts part(s)',
@@ -319,6 +320,7 @@ class UploadService implements UploadServiceContract {
 
           final existingChunks =
               ChunkResumeService.instance.getUploadedChunks(hash);
+          var uploadedBytesBefore = 0;
 
           for (var i = 0; i < totalParts; i++) {
             final chunkIndex = i + 1;
@@ -341,25 +343,31 @@ class UploadService implements UploadServiceContract {
                   'Resuming already-uploaded part $chunkIndex/$totalParts: "$partName"',
                   tag: 'UploadService');
               chunkInfos.add(cachedChunk);
-              internalOnProgress(
-                0.15 + (i / totalParts * 0.68),
-                'Resumed part $chunkIndex/$totalParts…',
-              );
+              uploadedBytesBefore += (cachedChunk.sizeMb * 1048576).round();
+              final p = (uploadedBytesBefore / totalUploadBytes).clamp(0.0, 1.0);
+              internalOnProgress(p, 'Resumed part $chunkIndex/$totalParts…');
               continue;
             }
 
-            internalOnProgress(
-              0.15 + (i / totalParts * 0.68),
-              'Uploading part $chunkIndex/$totalParts…',
-            );
-
             final partBytes = await chunker.readPart(chunkIndex);
+            final currentOffset = uploadedBytesBefore;
             AppLogger.d(
                 'Part $chunkIndex/$totalParts: "$partName" (${(partBytes.length / 1048576).toStringAsFixed(2)} MB)',
                 tag: 'UploadService');
 
             final result = await _withRetry(
-                () => _telegram.uploadBytesWithFileId(partBytes, partName));
+              () => _telegram.uploadBytesWithFileId(
+                partBytes,
+                partName,
+                onSendProgress: (sent, total) {
+                  final cur = currentOffset + sent;
+                  final p = (cur / totalUploadBytes).clamp(0.0, 1.0);
+                  internalOnProgress(p, 'Uploading part $chunkIndex/$totalParts…');
+                },
+              ),
+            );
+            uploadedBytesBefore += partBytes.length;
+
             final chunkInfo = ChunkInfo(
               index: chunkIndex,
               messageId: result['message_id'] as int,
@@ -374,7 +382,7 @@ class UploadService implements UploadServiceContract {
         }
 
         // ── Step 3: Upload per-file metadata JSON ─────────────────────────────
-        internalOnProgress(0.85, 'Saving file index…');
+        internalOnProgress(1.0, 'Saving file index…');
         final fileMeta = <String, dynamic>{
           'file_id': fileId,
           'name': name,
@@ -399,7 +407,7 @@ class UploadService implements UploadServiceContract {
         fileMeta['metadata_file_id'] = metaResult['file_id'] as String;
 
         // ── Step 4: Save to local Hive + batch or single metadata update ──────
-        internalOnProgress(0.94, 'Updating storage index…');
+        internalOnProgress(1.0, 'Updating storage index…');
         final savedFile = FileRecord.fromMap(fileMeta);
         await _hive.saveFile(savedFile);
         DomainEventBus.instance.fire(FileUploadedEvent(savedFile));
@@ -476,16 +484,12 @@ class UploadService implements UploadServiceContract {
   // ── Private helpers ─────────────────────────────────────────────────────────
 
   /// Split [bytes] into chunks of size <= [partSize] using zero-copy typed data views.
-  static List<Uint8List> splitBytesZeroCopy(
-    Uint8List bytes, [
-    int partSize = _partSize,
-  ]) {
+  static List<Uint8List> splitBytesZeroCopy(Uint8List bytes,
+      [int partSize = _partSize]) {
     final parts = <Uint8List>[];
-    var offset = 0;
-    while (offset < bytes.length) {
+    for (var offset = 0; offset < bytes.length; offset += partSize) {
       final end = (offset + partSize).clamp(0, bytes.length);
       parts.add(Uint8List.sublistView(bytes, offset, end));
-      offset += partSize;
     }
     return parts;
   }

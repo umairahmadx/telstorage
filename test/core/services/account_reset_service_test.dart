@@ -43,7 +43,7 @@ class _FakeTelegramResetService extends TelegramService {
   Future<Map<String, dynamic>> uploadBytesWithFileId(
     Uint8List bytes,
     String fileName, {
-    void Function(double)? onProgress,
+    void Function(int sent, int total)? onSendProgress,
   }) async {
     uploadCount++;
     return {

@@ -308,7 +308,7 @@ class NotificationService {
                 : (task.type == TransferType.upload
                     ? 'Uploading'
                     : 'Downloading');
-        final metricsParts = <String>['${(task.progress * 100).toInt()}%'];
+        final metricsParts = <String>[task.formattedProgress];
         if (task.sizeMb > 0) {
           metricsParts.add(task.formattedTransferredAndTotal);
         }

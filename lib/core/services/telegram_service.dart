@@ -44,9 +44,9 @@ class TelegramService {
       : _dio = dio ??
             Dio(
               BaseOptions(
-                connectTimeout: const Duration(seconds: 30),
-                sendTimeout: const Duration(seconds: 120),
-                receiveTimeout: const Duration(seconds: 60),
+                connectTimeout: const Duration(seconds: 60),
+                sendTimeout: const Duration(seconds: 180),
+                receiveTimeout: const Duration(seconds: 180),
               ),
             );
 
@@ -94,10 +94,13 @@ class TelegramService {
           }
         }
 
+        final errorStr = e.error?.toString() ?? '';
         final isTransient = e.type == DioExceptionType.connectionTimeout ||
             e.type == DioExceptionType.sendTimeout ||
             e.type == DioExceptionType.receiveTimeout ||
             e.type == DioExceptionType.connectionError ||
+            errorStr.contains('SocketException') ||
+            errorStr.contains('Connection reset') ||
             (e.response?.statusCode != null &&
                 e.response!.statusCode! >= 500 &&
                 e.response!.statusCode! <= 504);
@@ -129,7 +132,10 @@ class TelegramService {
 
   /// Upload a file (chunk or metadata json) → returns message_id and file_id
   Future<Map<String, dynamic>> uploadBytesWithFileId(
-      Uint8List bytes, String filename) async {
+    Uint8List bytes,
+    String filename, {
+    void Function(int sent, int total)? onSendProgress,
+  }) async {
     return _withRetry(() async {
       await TelegramRateLimiter.instance.acquire();
       try {
@@ -141,7 +147,11 @@ class TelegramService {
           'document': MultipartFile.fromBytes(bytes, filename: filename),
         });
 
-        final res = await _dio.post('$_base/sendDocument', data: formData);
+        final res = await _dio.post(
+          '$_base/sendDocument',
+          data: formData,
+          onSendProgress: onSendProgress,
+        );
 
         if (res.data['ok'] != true) {
           throw Exception('Upload failed: ${res.data['description']}');

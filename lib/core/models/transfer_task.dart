@@ -86,6 +86,12 @@ class TransferTask {
   /// Formatted speed of this task.
   String get formattedSpeed => formatSpeed(speedKbps);
 
+  /// Formatted progress showing percentage with 1 decimal place (e.g. "45.2%").
+  String get formattedProgress {
+    final pct = (progress.clamp(0.0, 1.0) * 100.0);
+    return '${pct.toStringAsFixed(1)}%';
+  }
+
   /// Formatted progress showing transferred and total amounts sharing the appropriate unit.
   String get formattedTransferredAndTotal {
     if (sizeMb <= 0 || sizeMb.isNaN || !sizeMb.isFinite) return '0 B';

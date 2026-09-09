@@ -123,17 +123,17 @@ class SyncQueueService {
       return;
     }
 
-    if (!await Connectivity.hasConnection()) {
-      AppLogger.d('SyncQueue: cannot process, device is offline.',
-          tag: 'SyncQueue');
-      return;
-    }
-
     _isProcessing = true;
-    AppLogger.i('SyncQueue: starting processing of $pendingCount actions...',
-        tag: 'SyncQueue');
-
     try {
+      if (!await Connectivity.hasConnection()) {
+        AppLogger.d('SyncQueue: cannot process, device is offline.',
+            tag: 'SyncQueue');
+        return;
+      }
+
+      AppLogger.i('SyncQueue: starting processing of $pendingCount actions...',
+          tag: 'SyncQueue');
+
       final actions = _pendingBox.values.toList()
         ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
 

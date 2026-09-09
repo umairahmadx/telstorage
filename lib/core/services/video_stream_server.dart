@@ -45,13 +45,10 @@ class VideoStreamServer {
 
   /// In-flight chunk downloads map to prevent duplicate concurrent network requests.
   final Map<String, Future<Uint8List>> _inFlightFetches = {};
-
   /// Map of registered in-memory file records for active streaming sessions with ref counting.
   final Map<String, RegisteredStreamFile> _activeFiles = {};
-
   /// In-flight metadata chunk map fetches to prevent duplicate concurrent network requests.
   final Map<String, Future<Map<int, ChunkInfo>>> _inFlightMetadata = {};
-
   /// In-memory cache for validated metadata chunk descriptors keyed by compound identity.
   final Map<String, Map<int, ChunkInfo>> _metadataCache = {};
 
@@ -100,6 +97,11 @@ class VideoStreamServer {
     _fileRecordProviderForTesting = provider;
   }
 
+  int _partSize = defaultPartSize;
+
+  /// Sets custom part size for unit testing boundary conditions.
+  void setPartSizeForTesting(int? size) => _partSize = size ?? defaultPartSize;
+
   /// Calculates the ZIP local file header offset.
   static int calculateHeaderOffset(String filename, {required bool isZipped}) {
     if (!isZipped) return 0;
@@ -121,44 +123,40 @@ class VideoStreamServer {
 
   /// Parses RFC 7233 / RFC 9110 Range header strings.
   /// Returns null if header is malformed, unsatisfiable, or requests unsupported multiple ranges.
-  static ByteRange? parseByteRange(String? header, int totalSize) {
-    if (totalSize <= 0) return null;
-    if (header == null || header.trim().isEmpty) {
-      return ByteRange(0, totalSize - 1);
+  static ByteRange? parseByteRange(String? header, int totalSize) =>
+      ByteRange.parse(header, totalSize);
+
+  /// Resolves the appropriate video MIME type based on record and file extension.
+  static String resolveMimeType(String filename, String? recordMime) {
+    if (recordMime != null &&
+        recordMime.isNotEmpty &&
+        recordMime != 'application/octet-stream') {
+      return recordMime;
     }
+    final lower = filename.toLowerCase();
+    if (lower.endsWith('.mov')) return 'video/quicktime';
+    if (lower.endsWith('.mkv')) return 'video/x-matroska';
+    if (lower.endsWith('.webm')) return 'video/webm';
+    return 'video/mp4';
+  }
 
-    final trimmed = header.trim();
-    if (!trimmed.toLowerCase().startsWith('bytes=')) return null;
-
-    final spec = trimmed.substring('bytes='.length).trim();
-    // Multi-range requests (comma-separated) are unsupported by design in this single-range proxy
-    if (spec.contains(',')) return null;
-
-    final parts = spec.split('-');
-    if (parts.length != 2) return null;
-
-    final rawStart = parts[0].trim();
-    final rawEnd = parts[1].trim();
-
-    if (rawStart.isNotEmpty && rawEnd.isNotEmpty) {
-      final start = int.tryParse(rawStart);
-      final end = int.tryParse(rawEnd);
-      if (start == null || end == null || start < 0 || end < 0 || start > end || start >= totalSize) {
-        return null;
+  /// Streams byte range directly from a local uncompressed file.
+  Future<void> _streamLocalFile(HttpRequest req, File file, ByteRange range) async {
+    final raf = await file.open(mode: FileMode.read);
+    try {
+      await raf.setPosition(range.start);
+      var remaining = range.length;
+      while (remaining > 0) {
+        final data = await raf.read(min(remaining, 64 * 1024));
+        if (data.isEmpty) break;
+        req.response.add(data);
+        remaining -= data.length;
+        await req.response.flush();
       }
-      return ByteRange(start, min(end, totalSize - 1));
-    } else if (rawStart.isNotEmpty && rawEnd.isEmpty) {
-      final start = int.tryParse(rawStart);
-      if (start == null || start < 0 || start >= totalSize) return null;
-      return ByteRange(start, totalSize - 1);
-    } else if (rawStart.isEmpty && rawEnd.isNotEmpty) {
-      final suffix = int.tryParse(rawEnd);
-      if (suffix == null || suffix <= 0) return null;
-      final start = max(0, totalSize - suffix);
-      return ByteRange(start, totalSize - 1);
+      await req.response.close();
+    } finally {
+      await raf.close();
     }
-
-    return null;
   }
 
   /// Starts the loopback HTTP server on an ephemeral loopback port.
@@ -195,6 +193,7 @@ class VideoStreamServer {
       _inFlightMetadata.clear();
       _chunkFetcherForTesting = null;
       _fileRecordProviderForTesting = null;
+      _partSize = defaultPartSize;
       AppLogger.i('VideoStreamServer stopped', tag: 'VideoStreamServer');
     }
   }
@@ -215,9 +214,9 @@ class VideoStreamServer {
     ).toString();
   }
 
-  /// Handles incoming HTTP GET requests for video streaming.
+  /// Handles incoming HTTP GET and HEAD requests for video streaming.
   Future<void> _handleRequest(HttpRequest request) async {
-    if (request.method != 'GET') {
+    if (request.method != 'GET' && request.method != 'HEAD') {
       request.response.statusCode = HttpStatus.methodNotAllowed;
       await request.response.close();
       return;
@@ -265,7 +264,43 @@ class VideoStreamServer {
       }
     }
 
-    final totalBytes = max(1, (record.sizeMb * 1024 * 1024).round());
+    File? localVideo = await VideoChunkCacheManager.instance.getLocalFullVideo(record.fileId);
+    Uint8List? chunk0Bytes;
+    int totalBytes = max(1, (record.sizeMb * 1024 * 1024).round());
+    int headerOffset = 0;
+
+    if (localVideo != null) {
+      totalBytes = localVideo.lengthSync();
+    } else if (record.chunkCount > 1) {
+      try {
+        chunk0Bytes = await _getOrFetchChunk(record, 0, chunkMap: chunkMap);
+        final zipHeader = ZipHeaderInfo.tryParse(chunk0Bytes);
+        if (zipHeader != null) {
+          if (zipHeader.compressionMethod == 8) {
+            final allChunks = <Uint8List>[chunk0Bytes];
+            for (var i = 1; i < record.chunkCount; i++) {
+              allChunks.add(await _getOrFetchChunk(record, i, chunkMap: chunkMap));
+            }
+            localVideo = await VideoChunkCacheManager.instance.assembleAndDecompressLegacyZip(
+              record.fileId,
+              allChunks,
+            );
+            totalBytes = localVideo.lengthSync();
+          } else {
+            if (zipHeader.uncompressedSize > 0) {
+              totalBytes = zipHeader.uncompressedSize;
+            }
+            headerOffset = zipHeader.headerOffset;
+          }
+        } else {
+          headerOffset = calculateHeaderOffset(record.name, isZipped: true);
+        }
+      } catch (e) {
+        AppLogger.w('Header inspection fallback for $fileId: $e', tag: 'VideoStreamServer');
+        headerOffset = calculateHeaderOffset(record.name, isZipped: true);
+      }
+    }
+
     final rangeHeader = request.headers.value(HttpHeaders.rangeHeader);
     final hasRangeHeader = rangeHeader != null && rangeHeader.trim().isNotEmpty;
     final range = parseByteRange(rangeHeader, totalBytes);
@@ -279,27 +314,32 @@ class VideoStreamServer {
     }
 
     try {
+      request.response.statusCode = hasRangeHeader ? HttpStatus.partialContent : HttpStatus.ok;
       if (hasRangeHeader) {
-        request.response.statusCode = HttpStatus.partialContent;
         request.response.headers.set(
           HttpHeaders.contentRangeHeader,
           'bytes ${range.start}-${range.end}/$totalBytes',
         );
-      } else {
-        request.response.statusCode = HttpStatus.ok;
       }
 
       request.response.headers.set(HttpHeaders.acceptRangesHeader, 'bytes');
       request.response.headers.set(
         HttpHeaders.contentTypeHeader,
-        record.mimeType.isNotEmpty ? record.mimeType : 'video/mp4',
+        resolveMimeType(record.name, record.mimeType),
       );
       request.response.contentLength = range.length;
 
-      final isZipped = record.chunkCount > 1;
-      final headerOffset = calculateHeaderOffset(record.name, isZipped: isZipped);
-      const partSize = defaultPartSize;
+      if (request.method == 'HEAD') {
+        await request.response.close();
+        return;
+      }
 
+      if (localVideo != null) {
+        await _streamLocalFile(request, localVideo, range);
+        return;
+      }
+
+      final partSize = _partSize;
       final zStart = range.start + headerOffset;
       final zEnd = range.end + headerOffset;
       final startChunk = zStart ~/ partSize;
@@ -307,7 +347,9 @@ class VideoStreamServer {
 
       var totalWritten = 0;
       for (var chunkIdx = startChunk; chunkIdx <= endChunk; chunkIdx++) {
-        final chunkBytes = await _getOrFetchChunk(record, chunkIdx, chunkMap: chunkMap);
+        final chunkBytes = (chunkIdx == 0 && chunk0Bytes != null)
+            ? chunk0Bytes
+            : await _getOrFetchChunk(record, chunkIdx, chunkMap: chunkMap);
         final chunkBase = chunkIdx * partSize;
         final sliceStart = max(0, zStart - chunkBase).clamp(0, chunkBytes.length);
         final sliceEnd = min(chunkBytes.length, zEnd - chunkBase + 1);
@@ -415,38 +457,11 @@ class VideoStreamServer {
       record.metadataFileId!,
       RequestPriority.immediate,
     );
-    final meta = jsonDecode(utf8.decode(metaBytes)) as Map<String, dynamic>;
-    final rawList = meta['chunks'] as List?;
-    if (rawList == null || rawList.isEmpty) {
-      throw Exception('Metadata for ${record.fileId} contains no chunks');
-    }
-
-    final rawChunks = rawList
-        .map((c) => ChunkInfo.fromJson(c as Map<String, dynamic>))
-        .toList();
-
-    final chunkMap = <int, ChunkInfo>{};
-    for (final chunk in rawChunks) {
-      if (chunk.fileId == null || chunk.fileId!.isEmpty) {
-        throw Exception('Chunk ${chunk.index} has empty fileId for ${record.fileId}');
-      }
-      if (chunk.sizeMb <= 0) {
-        throw Exception('Chunk ${chunk.index} has invalid non-positive size for ${record.fileId}');
-      }
-      if (chunkMap.containsKey(chunk.index)) {
-        throw Exception('Duplicate chunk index ${chunk.index} in metadata for ${record.fileId}');
-      }
-      chunkMap[chunk.index] = chunk;
-    }
-
-    final expectedCount = record.chunkCount > 0 ? record.chunkCount : rawChunks.length;
-    for (var i = 1; i <= expectedCount; i++) {
-      if (!chunkMap.containsKey(i)) {
-        throw Exception('Missing chunk index $i in metadata for ${record.fileId}');
-      }
-    }
-
-    return chunkMap;
+    return ChunkMetadataParser.parseAndValidate(
+      fileId: record.fileId,
+      chunkCount: record.chunkCount,
+      metaBytes: metaBytes,
+    );
   }
 
   Future<Uint8List> _executeChunkFetch(
@@ -461,12 +476,17 @@ class VideoStreamServer {
     final telegram = ServiceLocator.instance.telegram;
     if (record.metadataFileId != null && record.metadataFileId!.trim().isNotEmpty) {
       final map = chunkMap ?? await _getOrFetchMetadata(record);
-      final targetChunk = map[chunkIdx + 1];
-      if (targetChunk == null || targetChunk.fileId == null || targetChunk.fileId!.isEmpty) {
-        throw Exception('Chunk ${chunkIdx + 1} not found in validated metadata for ${record.fileId}');
+      // Primary: 1-based indexing; Fallback: legacy 0-based indexing
+      final targetChunk = map[chunkIdx + 1] ?? map[chunkIdx];
+      if (targetChunk != null && targetChunk.fileId != null && targetChunk.fileId!.isNotEmpty) {
+        return await telegram.downloadByFileId(targetChunk.fileId!, RequestPriority.immediate);
       }
 
-      return await telegram.downloadByFileId(targetChunk.fileId!, RequestPriority.immediate);
+      if (record.chunkCount == 1 && chunkIdx == 0 && record.fileId.isNotEmpty) {
+        return await telegram.downloadByFileId(record.fileId, RequestPriority.immediate);
+      }
+
+      throw Exception('Chunk ${chunkIdx + 1} not found in validated metadata for ${record.fileId}');
     } else if (record.chunkCount == 1 && chunkIdx == 0) {
       return await telegram.downloadByFileId(record.fileId, RequestPriority.immediate);
     } else {

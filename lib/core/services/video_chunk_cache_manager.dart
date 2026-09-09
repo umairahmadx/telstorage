@@ -5,6 +5,7 @@
 
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
 import '../utils/app_logger.dart';
@@ -92,6 +93,61 @@ class VideoChunkCacheManager {
       renamed.setLastModifiedSync(DateTime.now());
     } catch (_) {}
     return renamed;
+  }
+
+  /// Checks if a fully assembled uncompressed video file exists in the cache.
+  Future<File?> getLocalFullVideo(String fileId) async {
+    if (kIsWeb) return null;
+    try {
+      final dir = await getChunkDir(fileId);
+      final fullFile = File('${dir.path}/full_video.mp4');
+      if (fullFile.existsSync() && fullFile.lengthSync() > 0) {
+        try {
+          fullFile.setLastModifiedSync(DateTime.now());
+        } catch (_) {}
+        return fullFile;
+      }
+    } catch (e) {
+      AppLogger.w('Failed to check local full video: $e', tag: 'VideoChunkCacheManager');
+    }
+    return null;
+  }
+
+  /// Atomically saves fully assembled video bytes to disk.
+  Future<File> saveFullVideo(String fileId, Uint8List bytes) async {
+    final dir = await getChunkDir(fileId);
+    final targetFile = File('${dir.path}/full_video.mp4');
+    final tmpFile = File('${dir.path}/full_video.mp4.tmp');
+
+    if (tmpFile.existsSync()) {
+      tmpFile.deleteSync();
+    }
+
+    await tmpFile.writeAsBytes(bytes, flush: true);
+    final renamed = await tmpFile.rename(targetFile.path);
+    try {
+      renamed.setLastModifiedSync(DateTime.now());
+    } catch (_) {}
+    return renamed;
+  }
+
+  /// Reassembles partitioned chunks, decompresses legacy DEFLATE archives,
+  /// and saves the resulting raw uncompressed video to local disk.
+  Future<File> assembleAndDecompressLegacyZip(
+    String fileId,
+    List<Uint8List> chunks,
+  ) async {
+    final builder = BytesBuilder(copy: false);
+    for (final chunk in chunks) {
+      builder.add(chunk);
+    }
+    final assembled = builder.toBytes();
+    final archive = ZipDecoder().decodeBytes(assembled);
+    if (archive.isEmpty) {
+      throw Exception('Legacy ZIP archive for $fileId was empty');
+    }
+    final rawBytes = archive.first.content;
+    return await saveFullVideo(fileId, rawBytes);
   }
 
   /// Clears chunks for a specific [fileId], or all video chunks if [fileId] is null.

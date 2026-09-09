@@ -71,8 +71,7 @@ class AppTransferTile extends StatelessWidget {
         metricsParts.add(task.formattedSize);
       }
     } else {
-      final pct = (task.progress * 100).toInt();
-      metricsParts.add('$pct%');
+      metricsParts.add(task.formattedProgress);
       if (task.sizeMb > 0) {
         metricsParts.add(task.formattedTransferredAndTotal);
       }

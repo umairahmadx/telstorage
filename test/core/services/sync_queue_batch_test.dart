@@ -175,5 +175,32 @@ void main() {
       expect(pendingBox.length, equals(0));
       expect(mockMeta.addBatchCalls, equals(1)); // Processed via unified batch API
     });
+
+    test('TC-04: Concurrent calls to processQueue do not double-process actions',
+        () async {
+      await pendingBox.put(
+        'add-concurrent',
+        PendingAction(
+          id: 'add-concurrent',
+          actionType: AppConstants.actionAddFileMeta,
+          payload: {
+            'fileMeta': {'file_id': 'f_conc', 'name': 'conc.txt', 'size_mb': 1.0}
+          },
+          timestamp: DateTime.now(),
+        ),
+      );
+
+      // Fire 5 concurrent calls simultaneously
+      await Future.wait([
+        syncQueue.processQueue(),
+        syncQueue.processQueue(),
+        syncQueue.processQueue(),
+        syncQueue.processQueue(),
+        syncQueue.processQueue(),
+      ]);
+
+      expect(mockMeta.addBatchCalls, equals(1));
+      expect(pendingBox.length, equals(0));
+    });
   });
 }

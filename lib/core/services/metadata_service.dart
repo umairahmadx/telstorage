@@ -111,9 +111,6 @@ class MetadataService {
     AppLogger.d('Uploaded → message_id: $newMsgId, file_id: $newFileId',
         tag: 'MetadataService');
 
-    // Unpin all previous pinned messages to keep the channel clean
-    await _telegram.unpinAllMessages();
-
     // Pin the new message so any device can discover it
     await _telegram.pinMessage(newMsgId);
 

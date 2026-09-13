@@ -140,7 +140,8 @@ class TransferCubit extends Cubit<TransferState> {
   /// Listener for local files database updates.
   void _onFilesChanged() {
     if (!isClosed) {
-      emit(state.copyWith(uploadJobs: ServiceLocator.instance.hive.allFiles));
+      emit(state.copyWith(
+          uploadJobs: ServiceLocator.instance.hive.recentFiles(10)));
     }
   }
 
@@ -150,7 +151,7 @@ class TransferCubit extends Cubit<TransferState> {
       activeTasks: ServiceLocator.instance.transferQueue.activeTasks,
       downloadJobs: ServiceLocator.instance.downloadQueue.allJobs,
       shareJobs: ServiceLocator.instance.webShareQueue.allShares,
-      uploadJobs: ServiceLocator.instance.hive.allFiles,
+      uploadJobs: ServiceLocator.instance.hive.recentFiles(10),
     ));
   }
 

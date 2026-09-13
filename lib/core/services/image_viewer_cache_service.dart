@@ -98,6 +98,27 @@ class ImageViewerCacheService {
     return null;
   }
 
+  /// Evicts cached full-resolution preview file for [fileId].
+  Future<void> evict(String fileId) async {
+    if (kIsWeb) return;
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final cacheDir = Directory('${tempDir.path}/image_cache');
+      if (cacheDir.existsSync()) {
+        final matches = cacheDir.listSync().whereType<File>().where(
+            (f) => p.basenameWithoutExtension(f.path) == fileId);
+        for (final f in matches) {
+          try {
+            f.deleteSync();
+          } catch (_) {}
+        }
+      }
+    } catch (e) {
+      AppLogger.w('Failed to evict image cache for $fileId: $e',
+          tag: 'ImageViewerCacheService');
+    }
+  }
+
   /// Asynchronously downloads the full-resolution image and caches it on disk.
   Future<File?> downloadImageToCache(
     FileRecord file, {

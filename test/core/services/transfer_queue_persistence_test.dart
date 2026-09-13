@@ -117,5 +117,47 @@ void main() {
       expect(transferQueue.tasks.length, 1);
       expect(transferQueue.tasks.first.status, TransferStatus.completed);
     });
+
+    test('TC-06: Status changes notify listeners immediately without throttling delay', () {
+      final task = TransferTask(
+        id: 'file_006',
+        name: 'video.mov',
+        type: TransferType.upload,
+        sizeMb: 58.0,
+        addedAt: DateTime.now(),
+        status: TransferStatus.preparing,
+      );
+      transferQueue.addTask(task);
+
+      var notificationCount = 0;
+      transferQueue.tasksNotifier.addListener(() {
+        notificationCount++;
+      });
+
+      // Status change to uploading must notify immediately
+      transferQueue.updateTask('file_006', status: TransferStatus.uploading);
+      expect(notificationCount, equals(1));
+
+      // Stage change must notify immediately
+      transferQueue.updateTask('file_006', currentStage: 'Uploading Part 1…');
+      expect(notificationCount, equals(2));
+    });
+
+    test('TC-07: Computes continuous progress updates on task', () {
+      final task = TransferTask(
+        id: 'file_007',
+        name: 'data.bin',
+        type: TransferType.upload,
+        sizeMb: 100.0,
+        addedAt: DateTime.now(),
+        status: TransferStatus.uploading,
+      );
+      transferQueue.addTask(task);
+
+      // Micro progress update: 10% done
+      transferQueue.updateTask('file_007', progress: 0.10);
+      final current = transferQueue.tasks.firstWhere((t) => t.id == 'file_007');
+      expect(current.progress, closeTo(0.10, 0.001));
+    });
   });
 }

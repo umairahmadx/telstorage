@@ -279,13 +279,13 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
             return true;
           }).toList();
 
-          // Completed uploads
+          // Completed uploads (latest 10 items)
           final uploadFiles = state.uploadJobs.where((f) {
             if (query.isNotEmpty && !f.name.toLowerCase().contains(query)) {
               return false;
             }
             return true;
-          }).toList();
+          }).take(10).toList();
 
           // Completed shared links
           final sharedLinks = state.shareJobs.where((s) {
@@ -335,7 +335,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                 ),
               if (_activeTab == 1 && uploadFiles.isNotEmpty) ...[
                 AppSectionLabel(
-                  label: 'Uploaded Files (${uploadFiles.length})',
+                  label: 'Recent Uploads (${uploadFiles.length})',
                   padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
                 ),
                 ...uploadFiles.map(

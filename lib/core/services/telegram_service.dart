@@ -148,9 +148,20 @@ class TelegramService {
         AppLogger.d('Uploading: $filename (${bytes.length} bytes)',
             tag: 'TelegramService');
 
+        final MultipartFile document;
+        if (bytes.length > 65536) {
+          document = MultipartFile.fromStream(
+            () => _chunkedStream(bytes),
+            bytes.length,
+            filename: filename,
+          );
+        } else {
+          document = MultipartFile.fromBytes(bytes, filename: filename);
+        }
+
         final formData = FormData.fromMap({
           'chat_id': _channelId,
-          'document': MultipartFile.fromBytes(bytes, filename: filename),
+          'document': document,
         });
 
         final res = await _dio.post(
@@ -197,10 +208,7 @@ class TelegramService {
         AppLogger.d(
             'Uploaded successfully, message_id: $messageId, file_id: $fileId',
             tag: 'TelegramService');
-        return {
-          'message_id': messageId,
-          'file_id': fileId,
-        };
+        return {'message_id': messageId, 'file_id': fileId};
       } on DioException {
         rethrow;
       } catch (e) {
@@ -208,6 +216,15 @@ class TelegramService {
         throw Exception('Failed to upload file: $e');
       }
     }, operationName: 'uploadBytesWithFileId($filename)');
+  }
+
+  /// Slices [bytes] into 64KB subviews to stream continuously to HTTP socket.
+  static Stream<List<int>> _chunkedStream(Uint8List bytes,
+      [int sliceSize = 65536]) async* {
+    for (var offset = 0; offset < bytes.length; offset += sliceSize) {
+      final end = (offset + sliceSize).clamp(0, bytes.length);
+      yield Uint8List.sublistView(bytes, offset, end);
+    }
   }
 
   /// Resolves the remote Telegram CDN download URL for a given file ID.

@@ -18,6 +18,8 @@ import '../../../../core/services/auth_service.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/services/sync_queue_service.dart';
 import '../../../../core/services/service_locator.dart';
+import '../../../../core/services/chunk_resume_service.dart';
+import '../../../../core/services/image_viewer_cache_service.dart';
 import '../../../../core/models/download_conflict_policy.dart';
 import '../../../../core/models/web_share_job.dart';
 import 'package:hive/hive.dart';
@@ -254,16 +256,14 @@ class StorageRepository implements StorageRepositoryContract {
         payload: {
           'folderId': folderId,
           'folderIds': folderIds.toList(),
-          'fileSnapshots': files
-              .map((file) => {
-                    'fileId': file.fileId,
-                    'metadataMessageId': file.metadataMessageId,
-                    'metadataFileId': file.metadataFileId,
-                    'sizeMb': file.sizeMb,
-                    'mimeType': file.mimeType,
-                    'folderId': file.folderId,
-                  })
-              .toList(),
+          'fileSnapshots': files.map((file) => {
+            'fileId': file.fileId,
+            'metadataMessageId': file.metadataMessageId,
+            'metadataFileId': file.metadataFileId,
+            'sizeMb': file.sizeMb,
+            'mimeType': file.mimeType,
+            'folderId': file.folderId,
+          }).toList(),
         },
         timestamp: DateTime.now(),
       );
@@ -273,6 +273,12 @@ class StorageRepository implements StorageRepositoryContract {
         await _hive.deleteFile(file.fileId);
         try {
           ServiceLocator.instance.thumbnailRepository.evict(file.fileId);
+          await ChunkResumeService.instance.clearFileCache(file.sha256Hash);
+          await ImageViewerCacheService.instance.evict(file.fileId);
+          if (ServiceLocator.instance.isInitialized) {
+            await ServiceLocator.instance.downloadQueue
+                .deleteJobAndLocalFile(file.fileId);
+          }
         } catch (_) {}
       }
       for (final id in folderIds) {
@@ -388,11 +394,7 @@ class StorageRepository implements StorageRepositoryContract {
     final pending = PendingAction(
       id: const Uuid().v4(),
       actionType: AppConstants.actionMoveFile,
-      payload: {
-        'fileId': fileId,
-        'folderId': newFolderId,
-        'oldFolderId': oldFolderId,
-      },
+      payload: {'fileId': fileId, 'folderId': newFolderId, 'oldFolderId': oldFolderId},
       timestamp: DateTime.now(),
     );
     await _pendingBox.put(pending.id, pending);
@@ -436,12 +438,7 @@ class StorageRepository implements StorageRepositoryContract {
       final pending = PendingAction(
         id: const Uuid().v4(),
         actionType: AppConstants.actionCopyFile,
-        payload: {
-          'originalFileId': fileId,
-          'newFileId': newFileId,
-          'newName': newName,
-          'targetFolderId': targetFolderId,
-        },
+        payload: {'originalFileId': fileId, 'newFileId': newFileId, 'newName': newName, 'targetFolderId': targetFolderId},
         timestamp: DateTime.now(),
       );
       await _pendingBox.put(pending.id, pending);
@@ -462,17 +459,22 @@ class StorageRepository implements StorageRepositoryContract {
       }
 
       final payload = {
-        'fileId': fileId,
+        'fileId': fileId, 'sizeMb': record.sizeMb,
         'metadataMessageId': record.metadataMessageId,
         'metadataFileId': record.metadataFileId,
-        'sizeMb': record.sizeMb,
-        'mimeType': record.mimeType,
-        'folderId': record.folderId,
+        'mimeType': record.mimeType, 'folderId': record.folderId,
+        'sha256': record.sha256Hash,
       };
 
       await _hive.deleteFile(fileId);
       try {
         ServiceLocator.instance.thumbnailRepository.evict(fileId);
+        await ChunkResumeService.instance.clearFileCache(record.sha256Hash);
+        await ImageViewerCacheService.instance.evict(fileId);
+        if (ServiceLocator.instance.isInitialized) {
+          await ServiceLocator.instance.downloadQueue
+              .deleteJobAndLocalFile(fileId);
+        }
       } catch (_) {}
 
       final pending = PendingAction(

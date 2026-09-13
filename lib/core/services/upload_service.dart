@@ -80,6 +80,7 @@ class UploadService implements UploadServiceContract {
 
     return await TransferConcurrencyCoordinator.instance.runGuarded(() async {
       String? transferId;
+      String? fileHash;
       try {
         AppLogger.d('Starting upload for: $name', tag: 'UploadService');
 
@@ -125,9 +126,7 @@ class UploadService implements UploadServiceContract {
             fileId,
             progress: progress,
             currentStage: status,
-            status: progress >= 1.0
-                ? TransferStatus.completed
-                : TransferStatus.uploading,
+            status: TransferStatus.uploading,
           );
         }
 
@@ -150,6 +149,7 @@ class UploadService implements UploadServiceContract {
           hash = hashInfo.sha256;
           crc = hashInfo.crc32;
         }
+        fileHash = hash;
 
         // ── Step 1.2: Check for SHA-256 Deduplication ──────────────────────────
         final existingFile = _hive.allFiles.firstWhere(
@@ -268,20 +268,14 @@ class UploadService implements UploadServiceContract {
           internalOnProgress(0.0, 'Uploading "$name"…');
           AppLogger.d('Small file — uploading directly', tag: 'UploadService');
 
-          final Uint8List uploadPayload;
-          if (bytes != null) {
-            uploadPayload = bytes;
-          } else {
-            uploadPayload = await readFileBytes(filePath!);
-          }
-
+          final uploadPayload = bytes ?? await readFileBytes(filePath!);
           final result = await _withRetry(
             () => _telegram.uploadBytesWithFileId(
               uploadPayload,
               name,
               onSendProgress: (sent, total) {
                 if (total > 0) {
-                  final p = (sent / total).clamp(0.0, 1.0);
+                  final p = (sent / total).clamp(0.0, 1.0) * 0.90;
                   internalOnProgress(p, 'Uploading "$name"…');
                 }
               },
@@ -294,7 +288,6 @@ class UploadService implements UploadServiceContract {
             sizeMb: sizeMb,
             partName: name,
           ));
-          internalOnProgress(1.0, 'Uploaded!');
         } else {
           // ── Large file: ZIP (store) → split → upload parts ────────────────────
           internalOnProgress(0.0, 'Packaging file…');
@@ -344,7 +337,9 @@ class UploadService implements UploadServiceContract {
                   tag: 'UploadService');
               chunkInfos.add(cachedChunk);
               uploadedBytesBefore += (cachedChunk.sizeMb * 1048576).round();
-              final p = (uploadedBytesBefore / totalUploadBytes).clamp(0.0, 1.0);
+              final p =
+                  (uploadedBytesBefore / totalUploadBytes).clamp(0.0, 1.0) *
+                      0.90;
               internalOnProgress(p, 'Resumed part $chunkIndex/$totalParts…');
               continue;
             }
@@ -361,8 +356,9 @@ class UploadService implements UploadServiceContract {
                 partName,
                 onSendProgress: (sent, total) {
                   final cur = currentOffset + sent;
-                  final p = (cur / totalUploadBytes).clamp(0.0, 1.0);
-                  internalOnProgress(p, 'Uploading part $chunkIndex/$totalParts…');
+                  final p = (cur / totalUploadBytes).clamp(0.0, 1.0) * 0.90;
+                  internalOnProgress(
+                      p, 'Uploading part $chunkIndex/$totalParts…');
                 },
               ),
             );
@@ -382,7 +378,7 @@ class UploadService implements UploadServiceContract {
         }
 
         // ── Step 3: Upload per-file metadata JSON ─────────────────────────────
-        internalOnProgress(1.0, 'Saving file index…');
+        internalOnProgress(0.92, 'Saving file index…');
         final fileMeta = <String, dynamic>{
           'file_id': fileId,
           'name': name,
@@ -407,7 +403,7 @@ class UploadService implements UploadServiceContract {
         fileMeta['metadata_file_id'] = metaResult['file_id'] as String;
 
         // ── Step 4: Save to local Hive + batch or single metadata update ──────
-        internalOnProgress(1.0, 'Updating storage index…');
+        internalOnProgress(0.96, 'Updating storage index…');
         final savedFile = FileRecord.fromMap(fileMeta);
         await _hive.saveFile(savedFile);
         DomainEventBus.instance.fire(FileUploadedEvent(savedFile));
@@ -438,8 +434,12 @@ class UploadService implements UploadServiceContract {
         }
 
         internalOnProgress(1.0, 'Upload complete!');
-        TransferQueueService.instance
-            .updateTask(fileId, status: TransferStatus.completed);
+        TransferQueueService.instance.updateTask(
+          fileId,
+          progress: 1.0,
+          currentStage: 'Upload complete!',
+          status: TransferStatus.completed,
+        );
         AppLogger.i('Upload complete: $name', tag: 'UploadService');
 
         await NotificationService.instance.showCompletionNotification(
@@ -456,6 +456,11 @@ class UploadService implements UploadServiceContract {
       } catch (e, st) {
         final wasCancelled = transferId != null &&
             TransferQueueService.instance.isCancelled(transferId);
+        if (wasCancelled && fileHash != null && fileHash.isNotEmpty) {
+          try {
+            await ChunkResumeService.instance.clearFileCache(fileHash);
+          } catch (_) {}
+        }
         if (transferId != null) {
           TransferQueueService.instance.updateTask(
             transferId,
@@ -475,22 +480,18 @@ class UploadService implements UploadServiceContract {
     });
   }
 
+  /// Slices byte array into zero-copy subviews of [partSize].
+  static List<Uint8List> splitBytesZeroCopy(Uint8List bytes, int partSize) {
+    return [
+      for (var i = 0; i < bytes.length; i += partSize)
+        Uint8List.sublistView(
+            bytes, i, (i + partSize < bytes.length) ? i + partSize : bytes.length)
+    ];
+  }
+
   /// Batch update global metadata in 1 single API call for multi-file uploads.
   Future<void> commitUploadBatch(
       List<Map<String, dynamic>> filesDataList) async {
     await _metadata.addBatchFiles(filesDataList);
-  }
-
-  // ── Private helpers ─────────────────────────────────────────────────────────
-
-  /// Split [bytes] into chunks of size <= [partSize] using zero-copy typed data views.
-  static List<Uint8List> splitBytesZeroCopy(Uint8List bytes,
-      [int partSize = _partSize]) {
-    final parts = <Uint8List>[];
-    for (var offset = 0; offset < bytes.length; offset += partSize) {
-      final end = (offset + partSize).clamp(0, bytes.length);
-      parts.add(Uint8List.sublistView(bytes, offset, end));
-    }
-    return parts;
   }
 }

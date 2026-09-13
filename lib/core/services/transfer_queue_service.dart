@@ -22,6 +22,7 @@ class TransferQueueService {
 
   final Map<String, DateTime> _lastUpdateTimes = {};
   final Map<String, double> _lastProgresses = {};
+  final Map<String, DateTime> _lastEmitTimes = {};
 
   /// All recorded transfer tasks in memory.
   List<TransferTask> get tasks => _tasksNotifier.value;
@@ -106,11 +107,29 @@ class TransferQueueService {
       eta: eta,
     );
 
-    final newTasks = List<TransferTask>.from(tasks);
-    newTasks[index] = updatedTask;
-    _tasksNotifier.value = newTasks;
+    final statusChanged = status != null && status != task.status;
+    final stageChanged =
+        currentStage != null && currentStage != task.currentStage;
+    final isTerminal =
+        progress != null && (progress >= 1.0 || progress <= 0.0);
+    final lastEmit = _lastEmitTimes[id];
+    final nowTime = DateTime.now();
+    final shouldEmit = statusChanged ||
+        stageChanged ||
+        isTerminal ||
+        lastEmit == null ||
+        nowTime.difference(lastEmit).inMilliseconds >= 80 ||
+        (progress != null && (progress - task.progress).abs() >= 0.005);
 
-    _updateNotification();
+    if (shouldEmit) {
+      _lastEmitTimes[id] = nowTime;
+      final newTasks = List<TransferTask>.from(tasks);
+      newTasks[index] = updatedTask;
+      _tasksNotifier.value = newTasks;
+      _updateNotification();
+    } else {
+      tasks[index] = updatedTask;
+    }
   }
 
   /// Removes a task from the active queue.
@@ -128,6 +147,7 @@ class TransferQueueService {
     _tasksNotifier.value = newTasks;
     _lastUpdateTimes.remove(id);
     _lastProgresses.remove(id);
+    _lastEmitTimes.remove(id);
     _updateNotification();
   }
 
@@ -136,6 +156,7 @@ class TransferQueueService {
     _tasksNotifier.value = [];
     _lastUpdateTimes.clear();
     _lastProgresses.clear();
+    _lastEmitTimes.clear();
   }
 
   /// Requests cancellation while retaining the task long enough for its

@@ -169,6 +169,7 @@ class ThumbnailRepository {
         if (isPriority) {
           final req = _pendingQueue.removeAt(i);
           _pendingQueue.insert(0, req);
+          return req.completer.future;
         }
         return _pendingQueue[i].completer.future;
       }

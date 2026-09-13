@@ -12,6 +12,7 @@ import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/services/image_viewer_cache_service.dart';
 import 'package:telstorage/core/services/service_locator.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
+import 'package:telstorage/core/utils/app_logger.dart';
 import 'package:telstorage/core/utils/thumbnail_helper_native.dart'
     if (dart.library.js_interop) 'package:telstorage/core/utils/thumbnail_helper_web.dart';
 
@@ -165,69 +166,67 @@ class _ImageZoomPageState extends State<ImageZoomPage> {
         }
       },
       child: Center(
-        child: _cachedFullFile != null
-            ? (widget.file.name.toLowerCase().endsWith('.svg') ||
-                    widget.file.mimeType.toLowerCase() == 'image/svg+xml'
-                ? SvgPicture.file(
-                    _cachedFullFile!,
-                    fit: BoxFit.contain,
-                    placeholderBuilder: (_) => _buildThumbnail(colors),
-                  )
-                : Image.file(
-                    _cachedFullFile!,
-                    fit: BoxFit.contain,
-                    frameBuilder:
-                        (context, child, frame, wasSynchronouslyLoaded) {
-                      if (wasSynchronouslyLoaded) {
-                        return child;
-                      }
-                      return AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 150),
-                        child: frame != null
-                            ? KeyedSubtree(
-                                key: const ValueKey('full_res_ready'),
-                                child: child,
-                              )
-                            : KeyedSubtree(
-                                key: const ValueKey('thumb_waiting'),
-                                child: Stack(
-                                  fit: StackFit.passthrough,
-                                  alignment: Alignment.center,
-                                  children: [
-                                    _buildThumbnail(colors),
-                                    Opacity(opacity: 0.0, child: child),
-                                  ],
-                                ),
-                              ),
-                      );
-                    },
-                    errorBuilder: (_, __, ___) => _buildThumbnail(colors),
-                  ))
-            : Stack(
-                alignment: Alignment.center,
-                children: [
-                  _buildThumbnail(colors),
-                  if (_isDownloading)
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: colors.bgPrimary.withValues(alpha: 0.65),
-                        shape: BoxShape.circle,
+        child: Stack(
+          fit: StackFit.expand,
+          alignment: Alignment.center,
+          children: [
+            // 1. Instant thumbnail placeholder beneath (never causes black dip)
+            Center(child: _buildThumbnail(colors)),
+
+            // 2. Full resolution image on top fading in once decoded
+            if (_cachedFullFile != null)
+              Center(
+                child: (widget.file.name.toLowerCase().endsWith('.svg') ||
+                        widget.file.mimeType.toLowerCase() == 'image/svg+xml')
+                    ? SvgPicture.file(
+                        _cachedFullFile!,
+                        fit: BoxFit.contain,
+                        placeholderBuilder: (_) => _buildThumbnail(colors),
+                      )
+                    : Image.file(
+                        _cachedFullFile!,
+                        fit: BoxFit.contain,
+                        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                          if (wasSynchronouslyLoaded) return child;
+                          return AnimatedOpacity(
+                            opacity: frame != null ? 1.0 : 0.0,
+                            duration: const Duration(milliseconds: 150),
+                            curve: Curves.easeOut,
+                            child: child,
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          AppLogger.w('Failed to render full image: $error',
+                              tag: 'ImageZoomPage');
+                          return const SizedBox.shrink();
+                        },
                       ),
-                      child: Center(
-                        child: SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: colors.accentPrimary,
-                          ),
-                        ),
+              ),
+
+            // 3. Download spinner while fetching
+            if (_isDownloading)
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: colors.bgPrimary.withValues(alpha: 0.65),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: colors.accentPrimary,
                       ),
                     ),
-                ],
+                  ),
+                ),
               ),
+          ],
+        ),
       ),
     );
   }

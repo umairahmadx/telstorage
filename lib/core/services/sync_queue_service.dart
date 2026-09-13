@@ -12,6 +12,7 @@ import '../models/pending_action.dart';
 import '../utils/app_logger.dart';
 import '../utils/connectivity.dart';
 import 'file_manager.dart';
+import 'chunk_resume_service.dart';
 import 'telegram_rate_limiter.dart';
 
 class SyncLogItem {
@@ -404,6 +405,12 @@ class SyncQueueService {
         final mimeType =
             (payload['mimeType'] as String?) ?? 'application/octet-stream';
         final folderId = payload['folderId'] as String?;
+        final sha256 = payload['sha256'] as String?;
+        if (sha256 != null && sha256.isNotEmpty) {
+          try {
+            await ChunkResumeService.instance.clearFileCache(sha256);
+          } catch (_) {}
+        }
         await _fileManager.deleteFileRemoteOnly(
           fileId: fileId,
           metadataMessageId: metadataMessageId,

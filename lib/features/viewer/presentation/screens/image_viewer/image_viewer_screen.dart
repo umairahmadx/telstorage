@@ -3,6 +3,7 @@
  * Description: Fullscreen in-app image viewer supporting horizontal folder swiping, progressive loading, zoom gestures, immersive mode, and swipe-to-dismiss.
  */
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
@@ -25,11 +26,15 @@ class ImageViewerScreen extends StatefulWidget {
   /// Index of the initially selected image.
   final int initialIndex;
 
+  /// Optional prefix to match origin tile's Hero tag.
+  final String? heroPrefix;
+
   /// Constructs ImageViewerScreen.
   const ImageViewerScreen({
     super.key,
     required this.images,
     required this.initialIndex,
+    this.heroPrefix,
   });
 
   /// Opens the ImageViewerScreen with a smooth translucent route transition.
@@ -37,6 +42,7 @@ class ImageViewerScreen extends StatefulWidget {
     BuildContext context, {
     required List<FileRecord> images,
     required int initialIndex,
+    String? heroPrefix,
   }) {
     if (images.isEmpty) return;
     Navigator.of(context).push(
@@ -49,6 +55,7 @@ class ImageViewerScreen extends StatefulWidget {
           child: ImageViewerScreen(
             images: images,
             initialIndex: initialIndex.clamp(0, images.length - 1),
+            heroPrefix: heroPrefix,
           ),
         ),
       ),
@@ -92,17 +99,21 @@ class _ImageViewerScreenState extends State<ImageViewerScreen>
   Animation<double>? _zoomScaleAnimation;
   Animation<Offset>? _zoomPositionAnimation;
   PhotoViewController? _animatingController;
+  Timer? _adjacentPrefetchTimer;
 
   @override
   void initState() {
     super.initState();
+    if (ServiceLocator.instance.isInitialized) {
+      ServiceLocator.instance.thumbnailRepository.pauseDownloads();
+    }
     _currentIndex = widget.initialIndex;
     _pageController = PageController(initialPage: _currentIndex);
     _zoomAnimationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 250),
     )..addListener(_handleZoomAnimationTick);
-    _prefetchAdjacent(_currentIndex);
+    _scheduleAdjacentPrefetch(_currentIndex);
     _checkIfCurrentFileSaved();
   }
 
@@ -118,6 +129,10 @@ class _ImageViewerScreenState extends State<ImageViewerScreen>
 
   @override
   void dispose() {
+    _adjacentPrefetchTimer?.cancel();
+    if (ServiceLocator.instance.isInitialized) {
+      ServiceLocator.instance.thumbnailRepository.resumeDownloads();
+    }
     _zoomAnimationController.dispose();
     for (final controller in _photoControllers.values) {
       controller.dispose();
@@ -149,14 +164,18 @@ class _ImageViewerScreenState extends State<ImageViewerScreen>
     });
   }
 
-  void _prefetchAdjacent(int index) {
-    final cache = ImageViewerCacheService.instance;
-    if (index > 0) {
-      cache.prefetchImage(widget.images[index - 1]);
-    }
-    if (index < widget.images.length - 1) {
-      cache.prefetchImage(widget.images[index + 1]);
-    }
+  void _scheduleAdjacentPrefetch(int index) {
+    _adjacentPrefetchTimer?.cancel();
+    _adjacentPrefetchTimer = Timer(const Duration(seconds: 2), () {
+      if (!mounted || _currentIndex != index) return;
+      final cache = ImageViewerCacheService.instance;
+      if (index < widget.images.length - 1) {
+        cache.prefetchImage(widget.images[index + 1]);
+      }
+      if (index > 0) {
+        cache.prefetchImage(widget.images[index - 1]);
+      }
+    });
   }
 
   Future<void> _checkIfCurrentFileSaved() async {
@@ -178,7 +197,7 @@ class _ImageViewerScreenState extends State<ImageViewerScreen>
       _currentIndex = index;
       _isZoomed = false;
     });
-    _prefetchAdjacent(index);
+    _scheduleAdjacentPrefetch(index);
     _checkIfCurrentFileSaved();
   }
 
@@ -405,7 +424,9 @@ class _ImageViewerScreenState extends State<ImageViewerScreen>
                         minScale: PhotoViewComputedScale.contained,
                         maxScale: PhotoViewComputedScale.covered * 3.5,
                         heroAttributes: PhotoViewHeroAttributes(
-                          tag: 'image_hero_${file.fileId}',
+                          tag: widget.heroPrefix != null
+                              ? '${widget.heroPrefix}_image_hero_${file.fileId}'
+                              : 'image_hero_${file.fileId}',
                         ),
                       );
                     },

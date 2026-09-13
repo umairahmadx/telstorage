@@ -475,6 +475,7 @@ abstract final class BrowserDialogs {
   static void showSortSheet(BuildContext context, BrowserState state) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => AppSortFilterSheet(
         currentSort: state.sortOption,

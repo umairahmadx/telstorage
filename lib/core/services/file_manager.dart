@@ -223,15 +223,17 @@ class FileManagerService {
     await _meta.updateFileRef(updatedRef);
   }
 
-  Future<void> moveFile(String fileId, String? newFolderId) async {
+  Future<void> moveFile(String fileId, String? newFolderId,
+      {String? oldFolderId}) async {
     final record = _hive.getFile(fileId);
     if (record == null) return;
 
-    final oldFolderId = record.folderId;
     final fileMeta = await _fetchFileMeta(
       record.metadataMessageId,
       record.metadataFileId,
     );
+    final effectiveOldFolderId =
+        oldFolderId ?? (fileMeta['folder_id'] as String?);
     fileMeta['folder_id'] = newFolderId;
 
     final uploadResult = await _telegram.uploadBytesWithFileId(
@@ -263,7 +265,11 @@ class FileManagerService {
       metadataMessageId: newMsgId,
       thumbnailFileId: record.thumbnailFileId,
     );
-    await _meta.updateFileRef(updatedRef, oldFolderId: oldFolderId);
+    await _meta.updateFileRef(
+      updatedRef,
+      oldFolderId: effectiveOldFolderId,
+      folderChanged: true,
+    );
   }
 
   Future<void> deleteFile(String fileId) async {

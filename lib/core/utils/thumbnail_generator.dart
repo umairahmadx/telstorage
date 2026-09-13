@@ -14,42 +14,12 @@ import 'package:pdfx/pdfx.dart';
 import '../constants/app_constants.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_logger.dart';
+import 'app_mime_helper.dart';
+import 'thumbnail_image_decoder.dart';
 
 import 'thumbnail_helper_native.dart'
     if (dart.library.js_interop) 'thumbnail_helper_web.dart';
 
-/// Processes standard images in background isolate while preserving exact aspect ratios (e.g. 16:4, 16:9, 4:3).
-Uint8List? _isolateProcessImage(Uint8List bytes) {
-  try {
-    final decoded = img.decodeImage(bytes);
-    if (decoded != null) {
-      int targetW = decoded.width;
-      int targetH = decoded.height;
-      if (targetW > ThumbnailGenerator.maxDimension ||
-          targetH > ThumbnailGenerator.maxDimension) {
-        if (targetW >= targetH) {
-          targetH =
-              (targetH * ThumbnailGenerator.maxDimension / targetW).round();
-          targetW = ThumbnailGenerator.maxDimension;
-        } else {
-          targetW =
-              (targetW * ThumbnailGenerator.maxDimension / targetH).round();
-          targetH = ThumbnailGenerator.maxDimension;
-        }
-      }
-      final resized = img.copyResize(
-        decoded,
-        width: targetW,
-        height: targetH,
-      );
-      final encoded = Uint8List.fromList(
-        img.encodeJpg(resized, quality: ThumbnailGenerator.quality),
-      );
-      return ThumbnailGenerator.compressUnder50KB(encoded);
-    }
-  } catch (_) {}
-  return null;
-}
 
 /// Holds compressed thumbnail bytes and file format extension.
 class ThumbnailResult {
@@ -157,13 +127,20 @@ class ThumbnailGenerator {
           sourceFilePath: filePath,
         );
         if (thumbBytes == null && bytes != null && bytes.isNotEmpty) {
-          thumbBytes = await generateImageThumbnail(bytes);
+          thumbBytes = await generateImageThumbnail(
+            bytes,
+            filename: filename,
+            mimeType: mimeType,
+          );
         }
       } else if (bytes != null) {
         if (mimeType.startsWith('image/') ||
-            fileExt == 'heic' ||
-            fileExt == 'heif') {
-          thumbBytes = await generateImageThumbnail(bytes);
+            AppMimeHelper.isImageExtension(filename)) {
+          thumbBytes = await generateImageThumbnail(
+            bytes,
+            filename: filename,
+            mimeType: mimeType,
+          );
         } else if (mimeType == 'application/pdf' || fileExt == 'pdf') {
           thumbBytes = await generatePdfThumbnail(bytes);
         } else if (fileExt == 'apk' ||
@@ -180,10 +157,13 @@ class ThumbnailGenerator {
       if (thumbBytes == null &&
           bytes != null &&
           (mimeType.startsWith('image/') ||
-              fileExt == 'heic' ||
-              fileExt == 'heif')) {
+              AppMimeHelper.isImageExtension(filename))) {
         try {
-          thumbBytes = await generateImageThumbnail(bytes);
+          thumbBytes = await generateImageThumbnail(
+            bytes,
+            filename: filename,
+            mimeType: mimeType,
+          );
         } catch (_) {}
       }
 
@@ -200,75 +180,17 @@ class ThumbnailGenerator {
     return null;
   }
 
-  /// Attempts to extract an embedded JPEG preview stream from HEIC/HEIF or EXIF container bytes.
-  static Uint8List? _extractEmbeddedJpegFromHeic(Uint8List bytes) {
-    try {
-      final int searchLimit = bytes.length > 500000 ? 500000 : bytes.length;
-      for (int i = 0; i < searchLimit - 4; i++) {
-        if (bytes[i] == 0xFF && bytes[i + 1] == 0xD8 && bytes[i + 2] == 0xFF) {
-          final maxScan = (i + 300000).clamp(0, bytes.length - 1);
-          for (int j = i + 100; j < maxScan; j++) {
-            if (bytes[j] == 0xFF && bytes[j + 1] == 0xD9) {
-              final candidate = bytes.sublist(i, j + 2);
-              if (candidate.length >= 1024) {
-                final decoded = img.decodeJpg(candidate);
-                if (decoded != null &&
-                    decoded.width >= 50 &&
-                    decoded.height >= 50) {
-                  return _isolateProcessImage(candidate);
-                }
-              }
-            }
-          }
-        }
-      }
-    } catch (_) {}
-    return null;
-  }
-
   /// Generates image thumbnail scaled proportionally to max 400px preserving original aspect ratio.
-  static Future<Uint8List?> generateImageThumbnail(Uint8List bytes) async {
-    // 1. Primary: Native hardware-accelerated downsampled decoding (low RAM, C++ Skia/Impeller)
-    try {
-      final ui.Codec codec = await ui.instantiateImageCodec(
-        bytes,
-        targetWidth: maxDimension,
-      );
-      final ui.FrameInfo fi = await codec.getNextFrame();
-      final ui.Image image = fi.image;
-      final ByteData? byteData = await image.toByteData(
-        format: ui.ImageByteFormat.png,
-      );
-      if (byteData != null) {
-        final decoded = img.decodeImage(byteData.buffer.asUint8List());
-        if (decoded != null) {
-          final encoded =
-              Uint8List.fromList(img.encodeJpg(decoded, quality: quality));
-          return compressUnder50KB(encoded);
-        }
-      }
-    } catch (e) {
-      AppLogger.d('Native image codec decode failed/skipped: $e',
-          tag: 'ThumbnailGenerator');
-    }
-
-    // 2. Secondary: Embedded JPEG preview extraction (e.g. for HEIC/HEIF container images)
-    try {
-      final embedded = _extractEmbeddedJpegFromHeic(bytes);
-      if (embedded != null && embedded.length <= maxByteSize) {
-        return embedded;
-      }
-    } catch (_) {}
-
-    // 3. Tertiary: Fallback standard decode via isolate
-    try {
-      final isolateResult = await compute(_isolateProcessImage, bytes);
-      if (isolateResult != null && isolateResult.length <= maxByteSize) {
-        return isolateResult;
-      }
-    } catch (_) {}
-
-    return null;
+  static Future<Uint8List?> generateImageThumbnail(
+    Uint8List bytes, {
+    String filename = '',
+    String mimeType = '',
+  }) async {
+    return ThumbnailImageDecoder.decodeThumbnail(
+      bytes: bytes,
+      filename: filename,
+      mimeType: mimeType,
+    );
   }
 
   /// Extracts JPEG video frame thumbnail scaled to max 400px at 80% quality.

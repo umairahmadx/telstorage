@@ -378,6 +378,7 @@ class StorageRepository implements StorageRepositoryContract {
 
   @override
   Future<void> moveFile(String fileId, String? newFolderId) async {
+    final oldFolderId = _hive.getFile(fileId)?.folderId;
     await _hive.updateFile(
       fileId,
       folderId: newFolderId,
@@ -390,6 +391,7 @@ class StorageRepository implements StorageRepositoryContract {
       payload: {
         'fileId': fileId,
         'folderId': newFolderId,
+        'oldFolderId': oldFolderId,
       },
       timestamp: DateTime.now(),
     );

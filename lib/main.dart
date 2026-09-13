@@ -5,6 +5,7 @@
 
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:workmanager/workmanager.dart';
@@ -115,13 +116,16 @@ Future<void> main() async {
   // Setup Global Error Handlers to record uncaught crashes
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
-    ErrorLogService.instance.logError(
-      details.exceptionAsString(),
-      tag: 'FlutterUI',
-      error: details.exception,
-      stackTrace: details.stack,
-      metadata: {'library': details.library},
-    );
+    // Defer error logging to post-frame callback to avoid setState() calls during build/paint frames.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ErrorLogService.instance.logError(
+        details.exceptionAsString(),
+        tag: 'FlutterUI',
+        error: details.exception,
+        stackTrace: details.stack,
+        metadata: {'library': details.library},
+      );
+    });
   };
 
   PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
@@ -139,6 +143,12 @@ Future<void> main() async {
 
   // Enforce user cache budget limit on startup
   await AppCacheManager.instance.enforceCacheLimit();
+
+  // Lock app orientation strictly to portrait across general navigation
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
 
   runApp(const TelStorageApp());
 }

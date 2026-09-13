@@ -341,6 +341,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                 ...uploadFiles.map(
                   (file) => AppFileTile(
                     file: file,
+                    heroPrefix: 'uploads',
                     onTap: () {
                       HapticFeedback.lightImpact();
                       _showShareSheet(file);

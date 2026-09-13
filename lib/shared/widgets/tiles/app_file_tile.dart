@@ -6,8 +6,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:telstorage/core/models/file_record.dart';
+import 'package:telstorage/core/services/image_viewer_cache_service.dart';
 import 'package:telstorage/core/theme/app_icons.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
+import 'package:telstorage/features/viewer/presentation/screens/video_player/video_player_screen.dart';
 import 'package:telstorage/shared/widgets/app_surface_card.dart';
 import 'package:telstorage/shared/widgets/thumbnail_widget.dart';
 
@@ -40,6 +42,9 @@ class AppFileTile extends StatelessWidget {
   /// Callback when trailing menu or action button is tapped.
   final VoidCallback? onActionTap;
 
+  /// Optional prefix to ensure unique Hero tags across distinct screens or sections.
+  final String? heroPrefix;
+
   /// Constructs AppFileTile.
   const AppFileTile({
     super.key,
@@ -52,6 +57,7 @@ class AppFileTile extends StatelessWidget {
     this.trailing,
     this.subtitleText,
     this.onActionTap,
+    this.heroPrefix,
   });
 
   @override
@@ -103,14 +109,33 @@ class AppFileTile extends StatelessWidget {
             SizedBox(
               width: 44,
               height: 44,
-              child: Hero(
-                tag: 'image_hero_${file.fileId}',
-                child: ThumbnailWidget(
-                  file: file,
-                  width: 44,
-                  height: 44,
-                ),
-              ),
+              child: ImageViewerCacheService.isImageRecord(file)
+                  ? Hero(
+                      tag: heroPrefix != null
+                          ? '${heroPrefix}_image_hero_${file.fileId}'
+                          : 'image_hero_${file.fileId}',
+                      child: ThumbnailWidget(
+                        file: file,
+                        width: 44,
+                        height: 44,
+                      ),
+                    )
+                  : (VideoPlayerScreen.isVideoRecord(file)
+                      ? Hero(
+                          tag: heroPrefix != null
+                              ? '${heroPrefix}_video_hero_${file.fileId}'
+                              : 'video_hero_${file.fileId}',
+                          child: ThumbnailWidget(
+                            file: file,
+                            width: 44,
+                            height: 44,
+                          ),
+                        )
+                      : ThumbnailWidget(
+                          file: file,
+                          width: 44,
+                          height: 44,
+                        )),
             ),
             const SizedBox(width: 14),
             Expanded(

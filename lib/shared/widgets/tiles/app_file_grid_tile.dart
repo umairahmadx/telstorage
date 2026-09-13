@@ -5,8 +5,10 @@
 
 import 'package:flutter/material.dart';
 import 'package:telstorage/core/models/file_record.dart';
+import 'package:telstorage/core/services/image_viewer_cache_service.dart';
 import 'package:telstorage/core/theme/app_icons.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
+import 'package:telstorage/features/viewer/presentation/screens/video_player/video_player_screen.dart';
 import 'package:telstorage/shared/widgets/thumbnail_widget.dart';
 
 /// Unified file card for grid view layouts with curved foreground ink ripple.
@@ -29,6 +31,9 @@ class AppFileGridTile extends StatelessWidget {
   /// Callback when the secondary action/menu is tapped.
   final VoidCallback? onActionTap;
 
+  /// Optional prefix to ensure unique Hero tags across distinct screens or sections.
+  final String? heroPrefix;
+
   /// Constructs AppFileGridTile.
   const AppFileGridTile({
     super.key,
@@ -38,6 +43,7 @@ class AppFileGridTile extends StatelessWidget {
     required this.onTap,
     required this.onLongPress,
     this.onActionTap,
+    this.heroPrefix,
   });
 
   @override
@@ -74,14 +80,33 @@ class AppFileGridTile extends StatelessWidget {
                     Center(
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(14),
-                        child: Hero(
-                          tag: 'image_hero_${file.fileId}',
-                          child: ThumbnailWidget(
-                            file: file,
-                            width: double.infinity,
-                            height: double.infinity,
-                          ),
-                        ),
+                        child: ImageViewerCacheService.isImageRecord(file)
+                            ? Hero(
+                                tag: heroPrefix != null
+                                    ? '${heroPrefix}_image_hero_${file.fileId}'
+                                    : 'image_hero_${file.fileId}',
+                                child: ThumbnailWidget(
+                                  file: file,
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                ),
+                              )
+                            : (VideoPlayerScreen.isVideoRecord(file)
+                                ? Hero(
+                                    tag: heroPrefix != null
+                                        ? '${heroPrefix}_video_hero_${file.fileId}'
+                                        : 'video_hero_${file.fileId}',
+                                    child: ThumbnailWidget(
+                                      file: file,
+                                      width: double.infinity,
+                                      height: double.infinity,
+                                    ),
+                                  )
+                                : ThumbnailWidget(
+                                    file: file,
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                  )),
                       ),
                     ),
                     if (isSelectionMode)

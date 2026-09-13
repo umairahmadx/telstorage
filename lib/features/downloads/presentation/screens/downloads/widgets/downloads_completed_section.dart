@@ -59,6 +59,7 @@ class DownloadsCompletedSection extends StatelessWidget {
 
           return AppFileTile(
             file: record,
+            heroPrefix: 'downloads',
             subtitleText: job.localPath,
             onTap: () => onOpenFile(
               job.localPath,

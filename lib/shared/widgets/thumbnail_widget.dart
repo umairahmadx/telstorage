@@ -202,10 +202,27 @@ class _ThumbnailWidgetState extends State<ThumbnailWidget> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.file.fileId != widget.file.fileId ||
         oldWidget.file.thumbnailFileId != widget.file.thumbnailFileId) {
+      try {
+        if (ServiceLocator.instance.isInitialized) {
+          ServiceLocator.instance.thumbnailRepository
+              .cancelThumbnailRequest(oldWidget.file.fileId);
+        }
+      } catch (_) {}
       setState(() {
         _initThumbnail();
       });
     }
+  }
+
+  @override
+  void dispose() {
+    try {
+      if (ServiceLocator.instance.isInitialized) {
+        ServiceLocator.instance.thumbnailRepository
+            .cancelThumbnailRequest(widget.file.fileId);
+      }
+    } catch (_) {}
+    super.dispose();
   }
 
   @override

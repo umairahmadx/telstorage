@@ -1,12 +1,11 @@
 /*
  * File: video_stream_multi_chunk_test.dart
- * Description: Unit and integration tests for multi-chunk video streaming, HEAD probing, MIME resolution, and legacy ZIP decompression.
+ * Description: Unit and integration tests for multi-chunk video streaming, HEAD probing, MIME resolution, and STORE chunk slicing.
  */
 
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/services/service_locator.dart';
@@ -124,7 +123,7 @@ void main() {
       }
     });
 
-    test('Multi-chunk STORE stream slices exact byte ranges matching original payload', () async {
+    test('Multi-chunk STORE stream with trailer slices exact video bytes only', () async {
       final rawVideo = Uint8List.fromList(List.generate(5000, (i) => (i * 7) % 256));
       const filename = 'camera_vid.mp4';
       final header = ZipStreamChunker.createLocalHeader(
@@ -132,12 +131,18 @@ void main() {
         crc32: 9999,
         fileSize: rawVideo.length,
       );
+      final trailer = ZipStreamChunker.createCentralDirectoryAndEocd(
+        filename: filename,
+        crc32: 9999,
+        fileSize: rawVideo.length,
+      );
 
-      // Assemble chunk 0 (header + part of video) and chunk 1 (rest of video + trailer)
+      // Build realistic full ZIP: header + video + Central Directory + EOCD
       const partSize = 3000;
-      final fullZipBytes = Uint8List(header.length + rawVideo.length);
+      final fullZipBytes = Uint8List(header.length + rawVideo.length + trailer.length);
       fullZipBytes.setRange(0, header.length, header);
       fullZipBytes.setRange(header.length, header.length + rawVideo.length, rawVideo);
+      fullZipBytes.setRange(header.length + rawVideo.length, fullZipBytes.length, trailer);
 
       final chunk0 = Uint8List.sublistView(fullZipBytes, 0, partSize);
       final chunk1 = Uint8List.sublistView(fullZipBytes, partSize);
@@ -182,22 +187,20 @@ void main() {
       try {
         final streamUrl = server.getStreamUrl(testRecord.fileId, testRecord.name);
 
-        // Fetch range spanning across chunk 0 and chunk 1
+        // Cross-chunk boundary range (chunk 0 → chunk 1)
         final req = await client.getUrl(Uri.parse(streamUrl));
         req.headers.set(HttpHeaders.rangeHeader, 'bytes=2800-3200');
         final res = await req.close();
-
         expect(res.statusCode, equals(HttpStatus.partialContent));
         expect(res.contentLength, equals(401));
         final received = await res.fold<List<int>>([], (p, e) => p..addAll(e));
-        final expected = rawVideo.sublist(2800, 3201);
-        expect(received, equals(expected));
+        expect(received, equals(rawVideo.sublist(2800, 3201)));
 
-        // Fetch range at end of file (where moov atom lives)
+        // EOF range — the exact scenario that previously served ZIP trailer
+        // bytes as video data, causing ExoPlayer Source error.
         final reqEnd = await client.getUrl(Uri.parse(streamUrl));
         reqEnd.headers.set(HttpHeaders.rangeHeader, 'bytes=4900-4999');
         final resEnd = await reqEnd.close();
-
         expect(resEnd.statusCode, equals(HttpStatus.partialContent));
         expect(resEnd.contentLength, equals(100));
         final receivedEnd = await resEnd.fold<List<int>>([], (p, e) => p..addAll(e));
@@ -208,47 +211,172 @@ void main() {
       }
     });
 
-    test('Legacy DEFLATE archive is automatically decompressed and served from disk', () async {
-      final rawVideo = Uint8List.fromList(List.generate(3500, (i) => (i * 13) % 256));
-      const filename = 'legacy_deflate.mp4';
+    test('Multi-chunk STORE full un-ranged GET returns exact video payload', () async {
+      final rawVideo = Uint8List.fromList(List.generate(4000, (i) => (i * 3) % 256));
+      const filename = 'full_get_vid.mp4';
+      final header = ZipStreamChunker.createLocalHeader(
+        filename: filename, crc32: 1111, fileSize: rawVideo.length,
+      );
+      final trailer = ZipStreamChunker.createCentralDirectoryAndEocd(
+        filename: filename, crc32: 1111, fileSize: rawVideo.length,
+      );
 
-      // Create a genuine DEFLATE archive using ZipEncoder
-      final archive = Archive();
-      archive.addFile(ArchiveFile(filename, rawVideo.length, rawVideo));
-      final zipBytes = Uint8List.fromList(ZipEncoder().encode(archive));
+      const partSize = 2500;
+      final fullZip = Uint8List(header.length + rawVideo.length + trailer.length);
+      fullZip.setRange(0, header.length, header);
+      fullZip.setRange(header.length, header.length + rawVideo.length, rawVideo);
+      fullZip.setRange(header.length + rawVideo.length, fullZip.length, trailer);
 
-      // Split into 2 chunks
-      final split = zipBytes.length ~/ 2;
-      final chunk0 = Uint8List.sublistView(zipBytes, 0, split);
-      final chunk1 = Uint8List.sublistView(zipBytes, split);
+      final chunk0 = Uint8List.sublistView(fullZip, 0, partSize);
+      final chunk1 = Uint8List.sublistView(fullZip, partSize);
 
       final testRecord = FileRecord(
-        fileId: 'deflate_legacy_vid_456',
+        fileId: 'full_get_multi_vid',
         name: filename,
-        metadataMessageId: 90,
-        metadataFileId: 'deflate_meta_id',
+        metadataMessageId: 100,
+        metadataFileId: 'full_get_meta_id',
         sizeMb: rawVideo.length / (1024 * 1024),
         mimeType: 'video/mp4',
         uploadedAt: DateTime(2026, 1, 1),
         chunkCount: 2,
-        sha256Hash: 'dummy_deflate_hash',
+        sha256Hash: 'dummy_full',
       );
 
-      final metadataJson = jsonEncode({
-        'file_id': testRecord.fileId,
-        'name': testRecord.name,
-        'size_mb': testRecord.sizeMb,
-        'chunk_count': 2,
+      final metaJson = jsonEncode({
+        'file_id': testRecord.fileId, 'name': testRecord.name,
+        'size_mb': testRecord.sizeMb, 'chunk_count': 2,
         'chunks': [
-          {'index': 1, 'message_id': 91, 'file_id': 'tg_deflate_1', 'size_mb': 1.0, 'part_name': 'part1'},
-          {'index': 2, 'message_id': 92, 'file_id': 'tg_deflate_2', 'size_mb': 1.0, 'part_name': 'part2'},
+          {'index': 1, 'message_id': 101, 'file_id': 'fg_c1', 'size_mb': 1.0},
+          {'index': 2, 'message_id': 102, 'file_id': 'fg_c2', 'size_mb': 1.0},
         ],
       });
 
       final fakeTelegram = FakeMultiStreamTelegram();
-      fakeTelegram.files['deflate_meta_id'] = Uint8List.fromList(utf8.encode(metadataJson));
-      fakeTelegram.files['tg_deflate_1'] = chunk0;
-      fakeTelegram.files['tg_deflate_2'] = chunk1;
+      fakeTelegram.files['full_get_meta_id'] = Uint8List.fromList(utf8.encode(metaJson));
+      fakeTelegram.files['fg_c1'] = chunk0;
+      fakeTelegram.files['fg_c2'] = chunk1;
+
+      ServiceLocator.instance.setTelegramForTesting(fakeTelegram);
+      ServiceLocator.instance.setInitializedForTesting(true);
+      server.registerFile(testRecord);
+      server.setChunkFetcherForTesting(null);
+      server.setPartSizeForTesting(partSize);
+
+      await server.start();
+      final client = HttpClient();
+      try {
+        final streamUrl = server.getStreamUrl(testRecord.fileId, testRecord.name);
+        // No Range header — full file fetch
+        final req = await client.getUrl(Uri.parse(streamUrl));
+        final res = await req.close();
+        expect(res.statusCode, equals(HttpStatus.ok));
+        expect(res.contentLength, equals(rawVideo.length));
+        final received = await res.fold<List<int>>([], (p, e) => p..addAll(e));
+        expect(received, equals(rawVideo));
+      } finally {
+        client.close();
+        ServiceLocator.instance.setInitializedForTesting(false);
+      }
+    });
+
+    test('Uint32 overflow (>4 GB) falls back to record.sizeMb for totalBytes', () async {
+      // Simulate a ZIP header where uncompressedSize is 0 (Uint32 overflow)
+      const filename = 'huge_vid.mp4';
+      const fakeSizeMb = 25.0; // 25 MB
+      final fakeVideoSize = (fakeSizeMb * 1024 * 1024).round();
+      final header = ZipStreamChunker.createLocalHeader(
+        filename: filename, crc32: 5555, fileSize: fakeVideoSize,
+      );
+
+      // Manually zero out the uncompressedSize field at offset 22 to simulate overflow
+      final chunk0 = Uint8List.fromList(header);
+      ByteData.sublistView(chunk0).setUint32(22, 0, Endian.little);
+      // Also zero out compressedSize at offset 18 for consistency
+      ByteData.sublistView(chunk0).setUint32(18, 0, Endian.little);
+
+      final testRecord = FileRecord(
+        fileId: 'huge_vid_overflow',
+        name: filename,
+        metadataMessageId: 110,
+        metadataFileId: 'huge_meta_id',
+        sizeMb: fakeSizeMb,
+        mimeType: 'video/mp4',
+        uploadedAt: DateTime(2026, 1, 1),
+        chunkCount: 2,
+        sha256Hash: 'dummy_huge',
+      );
+
+      final metaJson = jsonEncode({
+        'file_id': testRecord.fileId, 'name': testRecord.name,
+        'size_mb': testRecord.sizeMb, 'chunk_count': 2,
+        'chunks': [
+          {'index': 1, 'message_id': 111, 'file_id': 'huge_c1', 'size_mb': 19.0},
+          {'index': 2, 'message_id': 112, 'file_id': 'huge_c2', 'size_mb': 6.0},
+        ],
+      });
+
+      final fakeTelegram = FakeMultiStreamTelegram();
+      fakeTelegram.files['huge_meta_id'] = Uint8List.fromList(utf8.encode(metaJson));
+      // Chunk 0 is the tampered header (uncompressedSize=0)
+      fakeTelegram.files['huge_c1'] = chunk0;
+      // Chunk 1 is arbitrary bytes — we only test HEAD, not full payload
+      fakeTelegram.files['huge_c2'] = Uint8List(100);
+
+      ServiceLocator.instance.setTelegramForTesting(fakeTelegram);
+      ServiceLocator.instance.setInitializedForTesting(true);
+      server.registerFile(testRecord);
+      server.setChunkFetcherForTesting(null);
+
+      await server.start();
+      final client = HttpClient();
+      try {
+        final streamUrl = server.getStreamUrl(testRecord.fileId, testRecord.name);
+        // HEAD request to verify advertised Content-Length equals sizeMb fallback
+        final req = await client.headUrl(Uri.parse(streamUrl));
+        final res = await req.close();
+        expect(res.statusCode, equals(HttpStatus.ok));
+        expect(res.contentLength, equals(fakeVideoSize));
+        await res.drain();
+      } finally {
+        client.close();
+        ServiceLocator.instance.setInitializedForTesting(false);
+      }
+    });
+
+    test('Non-STORE compression method (e.g. DEFLATE method 8) returns 415 unsupportedMediaType', () async {
+      const filename = 'deflate_rejected.mp4';
+      final header = ZipStreamChunker.createLocalHeader(
+        filename: filename, crc32: 8888, fileSize: 10000,
+      );
+      final chunk0 = Uint8List.fromList(header);
+      // Set compression method to 8 (DEFLATE)
+      ByteData.sublistView(chunk0).setUint16(8, 8, Endian.little);
+
+      final testRecord = FileRecord(
+        fileId: 'deflate_reject_123',
+        name: filename,
+        metadataMessageId: 95,
+        metadataFileId: 'deflate_reject_meta',
+        sizeMb: 10000 / (1024 * 1024),
+        mimeType: 'video/mp4',
+        uploadedAt: DateTime(2026, 1, 1),
+        chunkCount: 2,
+        sha256Hash: 'dummy_reject',
+      );
+
+      final metaJson = jsonEncode({
+        'file_id': testRecord.fileId, 'name': testRecord.name,
+        'size_mb': testRecord.sizeMb, 'chunk_count': 2,
+        'chunks': [
+          {'index': 1, 'message_id': 96, 'file_id': 'rej_c1', 'size_mb': 1.0},
+          {'index': 2, 'message_id': 97, 'file_id': 'rej_c2', 'size_mb': 1.0},
+        ],
+      });
+
+      final fakeTelegram = FakeMultiStreamTelegram();
+      fakeTelegram.files['deflate_reject_meta'] = Uint8List.fromList(utf8.encode(metaJson));
+      fakeTelegram.files['rej_c1'] = chunk0;
+      fakeTelegram.files['rej_c2'] = Uint8List(100);
 
       ServiceLocator.instance.setTelegramForTesting(fakeTelegram);
       ServiceLocator.instance.setInitializedForTesting(true);
@@ -260,22 +388,10 @@ void main() {
       final client = HttpClient();
       try {
         final streamUrl = server.getStreamUrl(testRecord.fileId, testRecord.name);
-
-        // Request range 500-1500
         final req = await client.getUrl(Uri.parse(streamUrl));
-        req.headers.set(HttpHeaders.rangeHeader, 'bytes=500-1499');
         final res = await req.close();
-
-        expect(res.statusCode, equals(HttpStatus.partialContent));
-        expect(res.contentLength, equals(1000));
-        final received = await res.fold<List<int>>([], (p, e) => p..addAll(e));
-        expect(received, equals(rawVideo.sublist(500, 1500)));
-
-        // Verify that full_video.mp4 exists on disk in the cache
-        final localFile = await VideoChunkCacheManager.instance.getLocalFullVideo(testRecord.fileId);
-        expect(localFile, isNotNull);
-        expect(localFile!.existsSync(), isTrue);
-        expect(localFile.lengthSync(), equals(rawVideo.length));
+        expect(res.statusCode, equals(HttpStatus.unsupportedMediaType));
+        await res.drain();
       } finally {
         client.close();
         ServiceLocator.instance.setInitializedForTesting(false);

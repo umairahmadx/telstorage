@@ -72,40 +72,44 @@ class ErrorLogFilterBar extends StatelessWidget {
         const SizedBox(height: 12),
 
         // Filter Tabs
-        Row(
-          children: [
-            _buildFilterChip(
-              colors,
-              label: 'All',
-              level: null,
-              count: counts[null] ?? 0,
-              activeColor: colors.accentPrimary,
-            ),
-            const SizedBox(width: 8),
-            _buildFilterChip(
-              colors,
-              label: 'Errors',
-              level: ErrorLogLevel.error,
-              count: counts[ErrorLogLevel.error] ?? 0,
-              activeColor: colors.error,
-            ),
-            const SizedBox(width: 8),
-            _buildFilterChip(
-              colors,
-              label: 'Warnings',
-              level: ErrorLogLevel.warning,
-              count: counts[ErrorLogLevel.warning] ?? 0,
-              activeColor: colors.warning,
-            ),
-            const SizedBox(width: 8),
-            _buildFilterChip(
-              colors,
-              label: 'Info',
-              level: ErrorLogLevel.info,
-              count: counts[ErrorLogLevel.info] ?? 0,
-              activeColor: colors.accentPrimary,
-            ),
-          ],
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
+            children: [
+              _buildFilterChip(
+                colors,
+                label: 'All',
+                level: null,
+                count: counts[null] ?? 0,
+                activeColor: colors.accentPrimary,
+              ),
+              const SizedBox(width: 8),
+              _buildFilterChip(
+                colors,
+                label: 'Errors',
+                level: ErrorLogLevel.error,
+                count: counts[ErrorLogLevel.error] ?? 0,
+                activeColor: colors.error,
+              ),
+              const SizedBox(width: 8),
+              _buildFilterChip(
+                colors,
+                label: 'Warnings',
+                level: ErrorLogLevel.warning,
+                count: counts[ErrorLogLevel.warning] ?? 0,
+                activeColor: colors.warning,
+              ),
+              const SizedBox(width: 8),
+              _buildFilterChip(
+                colors,
+                label: 'Info',
+                level: ErrorLogLevel.info,
+                count: counts[ErrorLogLevel.info] ?? 0,
+                activeColor: colors.accentPrimary,
+              ),
+            ],
+          ),
         ),
 
       ],

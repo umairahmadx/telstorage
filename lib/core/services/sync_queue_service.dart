@@ -257,7 +257,7 @@ class SyncQueueService {
           AppLogger.d(
               'SyncQueue: successfully processed & deleted action ${action.id}',
               tag: 'SyncQueue');
-        } catch (e) {
+        } catch (e, stack) {
           _failureCount++;
           final backoffSeconds =
               math.min(300, (1 << math.min(_failureCount, 5)) * 5);
@@ -265,7 +265,7 @@ class SyncQueueService {
               DateTime.now().add(Duration(seconds: backoffSeconds));
 
           AppLogger.e('SyncQueue: failed to process action ${action.id}: $e',
-              tag: 'SyncQueue', error: e);
+              tag: 'SyncQueue', error: e, stackTrace: stack);
           recordLog(SyncLogItem(
             id: action.id,
             actionType: action.actionType,
@@ -375,7 +375,9 @@ class SyncQueueService {
       case AppConstants.actionMoveFile:
         final fileId = payload['fileId'] as String;
         final folderId = payload['folderId'] as String?;
-        await _fileManager.moveFile(fileId, folderId);
+        final oldFolderId = payload['oldFolderId'] as String?;
+        await _fileManager.moveFile(fileId, folderId,
+            oldFolderId: oldFolderId);
         break;
 
       case AppConstants.actionCopyFile:

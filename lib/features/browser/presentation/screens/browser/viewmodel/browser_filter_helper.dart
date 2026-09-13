@@ -5,6 +5,7 @@
 
 import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/models/folder_record.dart';
+import 'package:telstorage/core/utils/app_mime_helper.dart';
 import 'package:telstorage/features/storage/domain/repositories/storage_repository_contract.dart';
 import 'browser_event.dart';
 
@@ -27,8 +28,10 @@ abstract final class BrowserFilterHelper {
     List<FileRecord> rawFiles = [];
 
     if (category != null) {
-      rawFiles = repository.getFiles(folderId)
-        ..retainWhere((f) => matchesCategory(f, category));
+      rawFiles = repository
+          .getFiles(folderId)
+          .where((f) => matchesCategory(f, category))
+          .toList();
       rawFolders = [];
     } else {
       rawFolders = repository.getFolders(folderId);
@@ -85,16 +88,45 @@ abstract final class BrowserFilterHelper {
     final mime = file.mimeType.toLowerCase();
     final ext =
         file.name.contains('.') ? file.name.split('.').last.toLowerCase() : '';
+
     final isImg = mime.startsWith('image/') ||
-        const ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'heic']
-            .contains(ext);
+        AppMimeHelper.allImageExtensions.contains(ext);
+
     final isVid = mime.startsWith('video/') ||
-        const ['mp4', 'mkv', 'mov', 'avi', 'webm', 'flv', 'wmv', 'm4v', '3gp']
-            .contains(ext);
+        const [
+          'mp4',
+          'mkv',
+          'mov',
+          'avi',
+          'webm',
+          'flv',
+          'wmv',
+          'm4v',
+          '3gp',
+          'ts',
+        ].contains(ext);
+
+    final isAud = mime.startsWith('audio/') ||
+        const [
+          'mp3',
+          'wav',
+          'ogg',
+          'm4a',
+          'flac',
+          'aac',
+          'opus',
+          'wma',
+          'aiff',
+          'alac',
+        ].contains(ext);
+
     final isDoc = mime == 'application/pdf' ||
         mime.contains('document') ||
         mime.contains('word') ||
+        mime.contains('sheet') ||
+        mime.contains('presentation') ||
         mime.startsWith('text/') ||
+        mime == 'application/rtf' ||
         const [
           'pdf',
           'doc',
@@ -105,14 +137,42 @@ abstract final class BrowserFilterHelper {
           'xlsx',
           'ppt',
           'pptx',
-          'csv'
+          'csv',
+          'odt',
+          'ods',
+          'odp',
+          'md',
         ].contains(ext);
 
-    return switch (category) {
-      'images' => isImg,
-      'videos' => isVid,
-      'docs' => isDoc,
-      'others' => !isImg && !isVid && !isDoc,
+    final isArc = mime.contains('zip') ||
+        mime.contains('compressed') ||
+        mime.contains('tar') ||
+        mime.contains('rar') ||
+        mime.contains('7z') ||
+        mime == 'application/x-tar' ||
+        mime == 'application/x-7z-compressed' ||
+        mime == 'application/x-rar-compressed' ||
+        mime == 'application/x-bzip2' ||
+        mime == 'application/x-gzip' ||
+        const [
+          'zip',
+          'rar',
+          '7z',
+          'tar',
+          'gz',
+          'bz2',
+          'xz',
+          'iso',
+          'tgz',
+        ].contains(ext);
+
+    return switch (category.toLowerCase()) {
+      'image' || 'images' => isImg,
+      'video' || 'videos' => isVid,
+      'audio' => isAud,
+      'document' || 'documents' || 'docs' || 'doc' => isDoc,
+      'archive' || 'archives' => isArc,
+      'others' => !isImg && !isVid && !isAud && !isDoc && !isArc,
       _ => true,
     };
   }

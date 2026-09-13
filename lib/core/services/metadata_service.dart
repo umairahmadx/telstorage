@@ -245,11 +245,17 @@ class MetadataService {
   }
 
   /// Update an existing FileRef in partitions and recentFiles.
-  Future<void> updateFileRef(FileRef ref, {String? oldFolderId}) async {
+  Future<void> updateFileRef(
+    FileRef ref, {
+    String? oldFolderId,
+    bool folderChanged = false,
+  }) async {
     await _synchronized(() async {
       final latestMeta = await fetch();
-      final newFolderId = ref.folderId ?? 'root';
-      final previousFolderId = oldFolderId ?? ref.folderId ?? 'root';
+      final newFolderId = ref.folderId ?? AppConstants.rootFolderPartitionId;
+      final previousFolderId = folderChanged
+          ? (oldFolderId ?? AppConstants.rootFolderPartitionId)
+          : (oldFolderId ?? ref.folderId ?? AppConstants.rootFolderPartitionId);
 
       if (previousFolderId != newFolderId) {
         await _partitionService.removeFileRefFromPartition(

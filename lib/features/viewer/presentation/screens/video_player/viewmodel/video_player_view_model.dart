@@ -114,6 +114,7 @@ class VideoPlayerViewModel extends ChangeNotifier {
       _volume = ctrl.value.volume;
 
       ctrl.addListener(_onControllerStateChanged);
+      await ctrl.play();
       startAutoHideTimer();
       notifyListeners();
     } catch (e) {

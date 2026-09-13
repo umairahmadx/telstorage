@@ -38,114 +38,137 @@ class AppSortFilterSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>()!;
 
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: colors.textTertiary.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(2),
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.bgSurface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: colors.borderSubtle,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Sort & Group',
-              style: TextStyle(
-                color: colors.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+              const SizedBox(height: 16),
+              Text(
+                'Sort & Group',
+                style: TextStyle(
+                  color: colors.textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'SORT BY',
-              style: TextStyle(
-                color: colors.textSecondary,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
+              const SizedBox(height: 16),
+              Text(
+                'SORT BY',
+                style: TextStyle(
+                  color: colors.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-            ListTile(
-              title: Text('Name', style: TextStyle(color: colors.textPrimary)),
-              trailing: currentSort == BrowserSortOption.name
-                  ? Icon(
-                      isAscending
-                          ? Icons.arrow_upward_rounded
-                          : Icons.arrow_downward_rounded,
-                      color: colors.accentPrimary)
-                  : null,
-              onTap: () {
-                onSortChanged(BrowserSortOption.name);
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              title: Text('Date', style: TextStyle(color: colors.textPrimary)),
-              trailing: currentSort == BrowserSortOption.date
-                  ? Icon(
-                      isAscending
-                          ? Icons.arrow_upward_rounded
-                          : Icons.arrow_downward_rounded,
-                      color: colors.accentPrimary)
-                  : null,
-              onTap: () {
-                onSortChanged(BrowserSortOption.date);
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              title: Text('Size', style: TextStyle(color: colors.textPrimary)),
-              trailing: currentSort == BrowserSortOption.size
-                  ? Icon(
-                      isAscending
-                          ? Icons.arrow_upward_rounded
-                          : Icons.arrow_downward_rounded,
-                      color: colors.accentPrimary)
-                  : null,
-              onTap: () {
-                onSortChanged(BrowserSortOption.size);
-                Navigator.pop(context);
-              },
-            ),
-            const Divider(),
-            Text(
-              'GROUP BY',
-              style: TextStyle(
-                color: colors.textSecondary,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
+              ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                title: Text('Name', style: TextStyle(color: colors.textPrimary)),
+                trailing: currentSort == BrowserSortOption.name
+                    ? Icon(
+                        isAscending
+                            ? Icons.arrow_upward_rounded
+                            : Icons.arrow_downward_rounded,
+                        color: colors.accentPrimary)
+                    : null,
+                onTap: () {
+                  onSortChanged(BrowserSortOption.name);
+                  Navigator.pop(context);
+                },
               ),
-            ),
-            ListTile(
-              title: Text('Folders First',
-                  style: TextStyle(color: colors.textPrimary)),
-              trailing: currentGroup == BrowserGroupOption.foldersFirst
-                  ? Icon(Icons.check_rounded, color: colors.accentPrimary)
-                  : null,
-              onTap: () {
-                onGroupChanged(BrowserGroupOption.foldersFirst);
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              title: Text('Mixed', style: TextStyle(color: colors.textPrimary)),
-              trailing: currentGroup == BrowserGroupOption.mixed
-                  ? Icon(Icons.check_rounded, color: colors.accentPrimary)
-                  : null,
-              onTap: () {
-                onGroupChanged(BrowserGroupOption.mixed);
-                Navigator.pop(context);
-              },
-            ),
-          ],
+              ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                title: Text('Date', style: TextStyle(color: colors.textPrimary)),
+                trailing: currentSort == BrowserSortOption.date
+                    ? Icon(
+                        isAscending
+                            ? Icons.arrow_upward_rounded
+                            : Icons.arrow_downward_rounded,
+                        color: colors.accentPrimary)
+                    : null,
+                onTap: () {
+                  onSortChanged(BrowserSortOption.date);
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                title: Text('Size', style: TextStyle(color: colors.textPrimary)),
+                trailing: currentSort == BrowserSortOption.size
+                    ? Icon(
+                        isAscending
+                            ? Icons.arrow_upward_rounded
+                            : Icons.arrow_downward_rounded,
+                        color: colors.accentPrimary)
+                    : null,
+                onTap: () {
+                  onSortChanged(BrowserSortOption.size);
+                  Navigator.pop(context);
+                },
+              ),
+              Divider(color: colors.borderSubtle),
+              Text(
+                'GROUP BY',
+                style: TextStyle(
+                  color: colors.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                title: Text('Folders First',
+                    style: TextStyle(color: colors.textPrimary)),
+                trailing: currentGroup == BrowserGroupOption.foldersFirst
+                    ? Icon(Icons.check_rounded, color: colors.accentPrimary)
+                    : null,
+                onTap: () {
+                  onGroupChanged(BrowserGroupOption.foldersFirst);
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                title: Text('Mixed', style: TextStyle(color: colors.textPrimary)),
+                trailing: currentGroup == BrowserGroupOption.mixed
+                    ? Icon(Icons.check_rounded, color: colors.accentPrimary)
+                    : null,
+                onTap: () {
+                  onGroupChanged(BrowserGroupOption.mixed);
+                  Navigator.pop(context);
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );

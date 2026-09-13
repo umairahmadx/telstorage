@@ -52,4 +52,7 @@ Welcome to the TelStorage project rules repository. These rules govern code arch
    - Streaming memory ceiling vs. full file RAM buffering for chunking/zipping pipelines.
    - Background queue worker inspectable state (active task, stage, last error, progress) and diagnostics.
 
-
+10. [**Bug Fix Reproduction-First Rule**](file:///c:/Users/umair-dell/StudioProjects/telstorage/.agents/rules/bug_fix_reproduction_rule.md)
+    - Mandatory automated reproduction test (RED) before touching production code.
+    - Raw terminal failure output shown before applying the fix.
+    - Verified passing output (GREEN) after fix, followed by full regression test run.

@@ -11,6 +11,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/file_record.dart';
 import '../utils/app_logger.dart';
+import '../utils/app_mime_helper.dart';
+import '../utils/media_preview_helper.dart';
 import '../utils/thumbnail_helper_native.dart'
     if (dart.library.js_interop) '../utils/thumbnail_helper_web.dart';
 import 'app_cache_manager.dart';
@@ -31,14 +33,7 @@ class ImageViewerCacheService {
   static bool isImageRecord(FileRecord file) {
     final mime = file.mimeType.toLowerCase();
     if (mime.startsWith('image/')) return true;
-    final name = file.name.toLowerCase();
-    return name.endsWith('.jpg') ||
-        name.endsWith('.jpeg') ||
-        name.endsWith('.png') ||
-        name.endsWith('.webp') ||
-        name.endsWith('.gif') ||
-        name.endsWith('.bmp') ||
-        name.endsWith('.heic');
+    return AppMimeHelper.isImageExtension(file.name);
   }
 
   /// Resolves the dedicated local cache file path for an image.
@@ -49,8 +44,24 @@ class ImageViewerCacheService {
       cacheDir.createSync(recursive: true);
     }
 
-    final ext = p.extension(file.name);
-    final safeExt = ext.isNotEmpty ? ext : '.jpg';
+    final ext = p.extension(file.name).toLowerCase();
+    final cleanExt = ext.replaceFirst('.', '');
+    final isConvertedToJpeg = {
+      'cr2',
+      'cr3',
+      'nef',
+      'arw',
+      'dng',
+      'bay',
+      'raw',
+      'eps',
+      'jp2',
+      'j2k',
+      'j2c',
+      'jpx',
+      'jxl'
+    }.contains(cleanExt);
+    final safeExt = isConvertedToJpeg ? '.jpg' : (ext.isNotEmpty ? ext : '.jpg');
     return File('${cacheDir.path}/${file.fileId}$safeExt');
   }
 
@@ -123,7 +134,11 @@ class ImageViewerCacheService {
 
         final targetFile = await getCacheTargetFile(file);
         final tempStaging = File('${targetFile.path}.tmp');
-        await tempStaging.writeAsBytes(bytes, flush: true);
+        final viewableBytes = await MediaPreviewHelper.prepareViewableBytes(
+          rawBytes: bytes,
+          filename: file.name,
+        );
+        await tempStaging.writeAsBytes(viewableBytes, flush: true);
 
         if (targetFile.existsSync()) {
           try {

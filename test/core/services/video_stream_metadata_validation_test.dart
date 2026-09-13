@@ -29,13 +29,15 @@ void main() {
   });
 
   tearDown(() async {
+    await server.stop();
     server.setFileRecordProviderForTesting(null);
     server.setChunkFetcherForTesting(null);
     VideoChunkCacheManager.instance.setBaseDirForTesting(null);
     if (tempDir.existsSync()) {
-      await tempDir.delete(recursive: true);
+      try {
+        await tempDir.delete(recursive: true);
+      } catch (_) {}
     }
-    await server.stop();
   });
 
   group('VideoStreamServer Metadata Validation Tests', () {

@@ -89,6 +89,11 @@ class ServiceLocator {
   SyncQueueService get syncQueue => _syncQueue;
   StorageRepository get storageRepository => _storageRepository;
 
+  /// Injects thumbnail repository instance for test isolation.
+  void setThumbnailRepositoryForTesting(ThumbnailRepository repo) {
+    _thumbnailRepository = repo;
+  }
+
   /// Injects storage repository instance for test isolation.
   void setStorageRepositoryForTesting(StorageRepository repo) {
     _storageRepository = repo;
@@ -107,6 +112,11 @@ class ServiceLocator {
   /// Injects upload service instance for test isolation.
   void setUploadServiceForTesting(UploadService service) {
     _uploadService = service;
+  }
+
+  /// Injects sync queue service instance for test isolation.
+  void setSyncQueueForTesting(SyncQueueService queue) {
+    _syncQueue = queue;
   }
 
   /// Sets initialization flag for testing isolation.

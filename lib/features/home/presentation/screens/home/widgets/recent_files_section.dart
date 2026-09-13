@@ -63,6 +63,7 @@ class RecentFilesSection extends StatelessWidget {
               return AppFileTile(
                 key: ValueKey(file.fileId),
                 file: file,
+                heroPrefix: 'recent',
                 onTap: () => (onFileTap ?? onMore)(file),
                 onActionTap: () => onMore(file),
               );

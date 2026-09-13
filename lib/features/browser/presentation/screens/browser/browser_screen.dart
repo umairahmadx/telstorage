@@ -6,6 +6,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:telstorage/core/constants/app_constants.dart';
 import 'package:telstorage/core/services/folder_traversal_service.dart';
 import 'package:telstorage/core/services/image_viewer_cache_service.dart';
 import 'package:telstorage/core/services/service_locator.dart';
@@ -247,11 +248,11 @@ class _BrowserScreenState extends State<BrowserScreen> {
   Widget _buildCategoryFilter(BrowserState state, AppColorsExtension colors) {
     const categories = [
       ('All', null),
-      ('Images', 'image'),
-      ('Videos', 'video'),
-      ('Docs', 'document'),
-      ('Audio', 'audio'),
-      ('Archives', 'archive'),
+      ('Images', AppConstants.categoryImages),
+      ('Videos', AppConstants.categoryVideos),
+      ('Docs', AppConstants.categoryDocuments),
+      ('Audio', AppConstants.categoryAudio),
+      ('Archives', AppConstants.categoryArchives),
     ];
 
     return SizedBox(
@@ -380,6 +381,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
             final isCut = isCutFile(file.fileId);
             final tile = AppFileTile(
               file: file,
+              heroPrefix: 'browser',
               isSelected: isSelected,
               isSelectionMode: state.isMultiSelect,
               onTap: () {
@@ -397,6 +399,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
                     context,
                     images: images,
                     initialIndex: initialIndex >= 0 ? initialIndex : 0,
+                    heroPrefix: 'browser',
                   );
                 } else if (VideoPlayerScreen.isVideoRecord(file)) {
                   final videos = state.files
@@ -408,6 +411,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
                     context,
                     videos: videos,
                     initialIndex: initialIndex >= 0 ? initialIndex : 0,
+                    heroPrefix: 'browser',
                   );
                 } else {
                   BrowserDialogs.showFileDetail(context, file);

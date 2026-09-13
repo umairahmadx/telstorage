@@ -91,6 +91,11 @@ dependencies:
   # Video playback engine
   video_player: ^2.9.2
 
+  # Vector & Advanced Image Codecs
+  flutter_svg: ^2.0.17
+  j2k: ^0.9.0
+  koni_jxl: ^0.1.4
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

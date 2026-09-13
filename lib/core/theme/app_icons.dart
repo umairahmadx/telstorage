@@ -33,6 +33,7 @@ abstract final class AppIcons {
   static const IconData selectAll = Icons.select_all_rounded;
   static const IconData filterOff = Icons.filter_alt_off_rounded;
   static const IconData logout = Icons.logout_rounded;
+  static const IconData rotate = Icons.screen_rotation_rounded;
 
   // -- File types ------------------------------------------------------------
   static const IconData fileGeneric = Icons.insert_drive_file_rounded;

@@ -46,6 +46,9 @@ void main() {
             isVisible: true,
             onBack: () => backPressed = true,
             onSave: () => savePressed = true,
+            onRotate: () {},
+            onShare: () {},
+            onMore: () {},
           ),
         ),
       );

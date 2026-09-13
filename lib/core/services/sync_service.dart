@@ -259,21 +259,40 @@ class SyncService {
       if (pendingSets.deletedFileIds.contains(ref.fileId)) continue;
 
       final existing = _hive.getFile(ref.fileId);
-      final name = pendingSets.renamedOrMovedFileIds.contains(ref.fileId) &&
-              existing != null
+
+      // Guard: if syncing root partition, but this file is already recorded locally
+      // in a specific folder with an equal or newer metadataMessageId, this root entry is a stale ghost.
+      if (targetFolderId == null &&
+          existing != null &&
+          existing.folderId != null &&
+          existing.metadataMessageId >= (ref.metadataMessageId ?? 0)) {
+        continue;
+      }
+
+      final hasPendingChange =
+          pendingSets.renamedOrMovedFileIds.contains(ref.fileId) &&
+              existing != null;
+      final isLocalNewer = existing != null &&
+          existing.metadataMessageId > (ref.metadataMessageId ?? 0);
+
+      final name = (hasPendingChange || isLocalNewer)
           ? existing.name
           : ref.name;
-      final fId = pendingSets.renamedOrMovedFileIds.contains(ref.fileId) &&
-              existing != null
+      final fId = (hasPendingChange || isLocalNewer)
           ? existing.folderId
           : (ref.folderId ?? targetFolderId);
+      final metaMsgId = isLocalNewer
+          ? existing.metadataMessageId
+          : (ref.metadataMessageId ?? 0);
+      final metaFileId =
+          isLocalNewer ? existing.metadataFileId : ref.metaFileId;
 
       records.add(FileRecord(
         fileId: ref.fileId,
         name: name,
         folderId: fId,
-        metadataMessageId: ref.metadataMessageId ?? 0,
-        metadataFileId: ref.metaFileId,
+        metadataMessageId: metaMsgId,
+        metadataFileId: metaFileId,
         sizeMb: ref.sizeMb ?? 0.0,
         mimeType: ref.mimeType ?? 'application/octet-stream',
         uploadedAt: ref.uploadedAt != null

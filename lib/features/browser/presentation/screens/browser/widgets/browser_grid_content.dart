@@ -120,6 +120,7 @@ class BrowserGridContent extends StatelessWidget {
                   final isCut = isCutFile(file.fileId);
                   final tile = AppFileGridTile(
                     file: file,
+                    heroPrefix: 'browser',
                     isSelected: isSelected,
                     isSelectionMode: state.isMultiSelect,
                     onTap: () {
@@ -135,6 +136,7 @@ class BrowserGridContent extends StatelessWidget {
                           context,
                           images: images,
                           initialIndex: initialIndex >= 0 ? initialIndex : 0,
+                          heroPrefix: 'browser',
                         );
                       } else if (VideoPlayerScreen.isVideoRecord(file)) {
                         final videos = state.files
@@ -146,6 +148,7 @@ class BrowserGridContent extends StatelessWidget {
                           context,
                           videos: videos,
                           initialIndex: initialIndex >= 0 ? initialIndex : 0,
+                          heroPrefix: 'browser',
                         );
                       } else {
                         BrowserDialogs.showFileDetail(context, file);

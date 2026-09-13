@@ -104,5 +104,35 @@ void main() {
       expect(await manager.getCachedChunk('vid_lru', 0), isNull);
       expect(await manager.getTotalVideoCacheBytes(), lessThanOrEqualTo(150));
     });
+
+    test('TC-VCM-05: two-tier eviction deletes other videos chunks before active video chunks', () async {
+      // Create 2 chunks for old/inactive video (100 bytes each)
+      final oldChunk0 = await manager.saveChunk('vid_inactive', 0, Uint8List(100));
+      final oldChunk1 = await manager.saveChunk('vid_inactive', 1, Uint8List(100));
+
+      // Create 2 chunks for actively streaming video (100 bytes each)
+      final activeChunk0 = await manager.saveChunk('vid_active', 0, Uint8List(100));
+      final activeChunk1 = await manager.saveChunk('vid_active', 1, Uint8List(100));
+
+      // Make activeChunk0 older than oldChunk1 to verify tier priority takes precedence over pure timestamp
+      activeChunk0.setLastModifiedSync(DateTime.now().subtract(const Duration(hours: 2)));
+      oldChunk0.setLastModifiedSync(DateTime.now().subtract(const Duration(hours: 1)));
+      oldChunk1.setLastModifiedSync(DateTime.now().subtract(const Duration(minutes: 30)));
+      activeChunk1.setLastModifiedSync(DateTime.now());
+
+      expect(await manager.getTotalVideoCacheBytes(), equals(400));
+
+      // Evict with 250-byte ceiling, specifying activeFileId = 'vid_active'
+      // 400 - 250 = 150 bytes need to be freed.
+      // Since vid_inactive has 200 bytes across its 2 chunks, BOTH vid_inactive chunks must be evicted FIRST,
+      // leaving active video chunks untouched (even though activeChunk0 has an older timestamp!).
+      await manager.evictOldestIfNeeded(maxSizeBytes: 250, activeFileId: 'vid_active');
+
+      expect(await manager.getCachedChunk('vid_inactive', 0), isNull);
+      expect(await manager.getCachedChunk('vid_inactive', 1), isNull);
+      expect(await manager.getCachedChunk('vid_active', 0), isNotNull);
+      expect(await manager.getCachedChunk('vid_active', 1), isNotNull);
+      expect(await manager.getTotalVideoCacheBytes(), equals(200));
+    });
   });
 }

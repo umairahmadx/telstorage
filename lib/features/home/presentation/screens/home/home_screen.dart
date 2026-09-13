@@ -91,6 +91,7 @@ class _HomeScreenState extends State<HomeScreen> {
         context,
         images: images,
         initialIndex: initialIndex >= 0 ? initialIndex : 0,
+        heroPrefix: 'recent',
       );
     } else if (VideoPlayerScreen.isVideoRecord(file)) {
       final videos =
@@ -101,6 +102,7 @@ class _HomeScreenState extends State<HomeScreen> {
         context,
         videos: videos,
         initialIndex: initialIndex >= 0 ? initialIndex : 0,
+        heroPrefix: 'recent',
       );
     } else {
       _showFileDetail(file);

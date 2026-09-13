@@ -15,6 +15,7 @@ import '../utils/app_logger.dart';
 import 'service_locator.dart';
 import 'telegram_rate_limiter.dart';
 import 'video_chunk_cache_manager.dart';
+import 'video_prefetch_coordinator.dart';
 
 export '../models/video_stream_models.dart';
 
@@ -43,17 +44,17 @@ class VideoStreamServer {
   int? _activePort;
   int _cacheGeneration = 0;
 
-  /// In-flight chunk downloads map to prevent duplicate concurrent network requests.
-  final Map<String, Future<Uint8List>> _inFlightFetches = {};
-  /// Map of registered in-memory file records for active streaming sessions with ref counting.
-  final Map<String, RegisteredStreamFile> _activeFiles = {};
-  /// In-flight metadata chunk map fetches to prevent duplicate concurrent network requests.
-  final Map<String, Future<Map<int, ChunkInfo>>> _inFlightMetadata = {};
-  /// In-memory cache for validated metadata chunk descriptors keyed by compound identity.
-  final Map<String, Map<int, ChunkInfo>> _metadataCache = {};
+  final Map<String, Future<Uint8List>> _inFlightFetches = {}; // In-flight chunk downloads
+  final Map<String, RegisteredStreamFile> _activeFiles = {}; // Registered stream files
+  final Map<String, Future<Map<int, ChunkInfo>>> _inFlightMetadata = {}; // In-flight metadata
+  final Map<String, Map<int, ChunkInfo>> _metadataCache = {}; // Validated metadata cache
 
   ChunkFetcher? _chunkFetcherForTesting;
   FileRecordProvider? _fileRecordProviderForTesting;
+  final VideoPrefetchCoordinator _prefetchCoordinator = VideoPrefetchCoordinator();
+
+  /// Sliding-window prefetch coordinator.
+  VideoPrefetchCoordinator get prefetchCoordinator => _prefetchCoordinator;
 
   /// Registers an active [file] record in memory for stream resolution and returns an idempotent handle.
   StreamRegistration registerFile(FileRecord file) {
@@ -83,6 +84,7 @@ class VideoStreamServer {
         _cacheGeneration++;
         _metadataCache.removeWhere((k, _) => k.startsWith('$fileId:'));
         _inFlightMetadata.removeWhere((k, _) => k.startsWith('$fileId:'));
+        _prefetchCoordinator.cancelForFile(fileId);
       }
     }
   }
@@ -90,6 +92,13 @@ class VideoStreamServer {
   /// Sets custom chunk fetcher for unit test isolation.
   void setChunkFetcherForTesting(ChunkFetcher? fetcher) {
     _chunkFetcherForTesting = fetcher;
+    if (fetcher != null) {
+      _prefetchCoordinator.setDownloaderForTesting(
+        (record, chunkIdx, priority) => fetcher(record.fileId, chunkIdx, record.chunkCount),
+      );
+    } else {
+      _prefetchCoordinator.setDownloaderForTesting(null);
+    }
   }
 
   /// Sets custom file record provider for unit test isolation.
@@ -98,7 +107,6 @@ class VideoStreamServer {
   }
 
   int _partSize = defaultPartSize;
-
   /// Sets custom part size for unit testing boundary conditions.
   void setPartSizeForTesting(int? size) => _partSize = size ?? defaultPartSize;
 
@@ -140,25 +148,6 @@ class VideoStreamServer {
     return 'video/mp4';
   }
 
-  /// Streams byte range directly from a local uncompressed file.
-  Future<void> _streamLocalFile(HttpRequest req, File file, ByteRange range) async {
-    final raf = await file.open(mode: FileMode.read);
-    try {
-      await raf.setPosition(range.start);
-      var remaining = range.length;
-      while (remaining > 0) {
-        final data = await raf.read(min(remaining, 64 * 1024));
-        if (data.isEmpty) break;
-        req.response.add(data);
-        remaining -= data.length;
-        await req.response.flush();
-      }
-      await req.response.close();
-    } finally {
-      await raf.close();
-    }
-  }
-
   /// Starts the loopback HTTP server on an ephemeral loopback port.
   Future<int> start() async {
     if (kIsWeb) return 0;
@@ -187,6 +176,7 @@ class VideoStreamServer {
       _server = null;
       _activePort = null;
       _cacheGeneration++;
+      await _prefetchCoordinator.cancelAll();
       _inFlightFetches.clear();
       _activeFiles.clear();
       _metadataCache.clear();
@@ -264,40 +254,41 @@ class VideoStreamServer {
       }
     }
 
-    File? localVideo = await VideoChunkCacheManager.instance.getLocalFullVideo(record.fileId);
     Uint8List? chunk0Bytes;
     int totalBytes = max(1, (record.sizeMb * 1024 * 1024).round());
     int headerOffset = 0;
+    /// Exclusive upper bound of video bytes in ZIP-space (0 = not applicable).
+    int videoEndInZip = 0;
 
-    if (localVideo != null) {
-      totalBytes = localVideo.lengthSync();
-    } else if (record.chunkCount > 1) {
+    if (record.chunkCount > 1) {
       try {
         chunk0Bytes = await _getOrFetchChunk(record, 0, chunkMap: chunkMap);
         final zipHeader = ZipHeaderInfo.tryParse(chunk0Bytes);
         if (zipHeader != null) {
-          if (zipHeader.compressionMethod == 8) {
-            final allChunks = <Uint8List>[chunk0Bytes];
-            for (var i = 1; i < record.chunkCount; i++) {
-              allChunks.add(await _getOrFetchChunk(record, i, chunkMap: chunkMap));
-            }
-            localVideo = await VideoChunkCacheManager.instance.assembleAndDecompressLegacyZip(
-              record.fileId,
-              allChunks,
+          if (zipHeader.compressionMethod != 0) {
+            AppLogger.w(
+              'Unsupported compression method ${zipHeader.compressionMethod} for ${record.fileId}. Only STORE (method 0) is streamable.',
+              tag: 'VideoStreamServer',
             );
-            totalBytes = localVideo.lengthSync();
-          } else {
-            if (zipHeader.uncompressedSize > 0) {
-              totalBytes = zipHeader.uncompressedSize;
-            }
-            headerOffset = zipHeader.headerOffset;
+            request.response.statusCode = HttpStatus.unsupportedMediaType;
+            await request.response.close();
+            return;
           }
+          // Use ZIP header size if valid; for files > 4 GB the Uint32 wraps to 0.
+          final videoSize = zipHeader.uncompressedSize > 0
+              ? zipHeader.uncompressedSize
+              : max(1, (record.sizeMb * 1024 * 1024).round());
+          totalBytes = videoSize;
+          headerOffset = zipHeader.headerOffset;
+          videoEndInZip = headerOffset + videoSize;
         } else {
           headerOffset = calculateHeaderOffset(record.name, isZipped: true);
+          videoEndInZip = headerOffset + totalBytes;
         }
       } catch (e) {
         AppLogger.w('Header inspection fallback for $fileId: $e', tag: 'VideoStreamServer');
         headerOffset = calculateHeaderOffset(record.name, isZipped: true);
+        videoEndInZip = headerOffset + totalBytes;
       }
     }
 
@@ -334,16 +325,18 @@ class VideoStreamServer {
         return;
       }
 
-      if (localVideo != null) {
-        await _streamLocalFile(request, localVideo, range);
-        return;
-      }
-
       final partSize = _partSize;
       final zStart = range.start + headerOffset;
-      final zEnd = range.end + headerOffset;
+      // Clamp to videoEndInZip to exclude ZIP trailer bytes from served range.
+      final zEnd = videoEndInZip > 0
+          ? min(range.end + headerOffset, videoEndInZip - 1)
+          : range.end + headerOffset;
       final startChunk = zStart ~/ partSize;
       final endChunk = zEnd ~/ partSize;
+
+      if (record.chunkCount > 1) {
+        _prefetchCoordinator.onChunkRequested(record, endChunk, chunkMap: chunkMap);
+      }
 
       var totalWritten = 0;
       for (var chunkIdx = startChunk; chunkIdx <= endChunk; chunkIdx++) {

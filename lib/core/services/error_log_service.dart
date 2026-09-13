@@ -5,6 +5,7 @@
 
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:hive/hive.dart';
 import 'package:intl/intl.dart';
 import '../constants/app_constants.dart';
@@ -128,7 +129,18 @@ class ErrorLogService {
     while (updated.length > maxLogCapacity) {
       updated.removeAt(0);
     }
-    _logsNotifier.value = updated;
+    try {
+      final scheduler = SchedulerBinding.instance;
+      if (scheduler.schedulerPhase == SchedulerPhase.idle) {
+        _logsNotifier.value = updated;
+      } else {
+        scheduler.addPostFrameCallback((_) {
+          _logsNotifier.value = updated;
+        });
+      }
+    } catch (_) {
+      _logsNotifier.value = updated;
+    }
 
     if (_box != null && _box!.isOpen) {
       try {
@@ -155,7 +167,9 @@ class ErrorLogService {
   }
 
   /// Generates a plain-text diagnostic report suitable for exporting/sharing.
-  String exportDiagnosticReport() {
+  /// If [logs] is provided, exports only those records; otherwise exports all stored logs.
+  String exportDiagnosticReport([List<ErrorLogRecord>? logs]) {
+    final targetLogs = logs ?? _logsNotifier.value;
     final buffer = StringBuffer();
     final nowFormatted =
         DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
@@ -163,15 +177,15 @@ class ErrorLogService {
     buffer.writeln('TelStorage Diagnostic Report');
     buffer.writeln('Generated: $nowFormatted');
     buffer.writeln('Platform: ${kIsWeb ? "Web" : Platform.operatingSystem}');
-    buffer.writeln('Total Logged Events: ${_logsNotifier.value.length}');
+    buffer.writeln('Total Logged Events: ${targetLogs.length}');
     buffer.writeln('========================================\n');
 
-    if (_logsNotifier.value.isEmpty) {
+    if (targetLogs.isEmpty) {
       buffer.writeln('No errors or warnings recorded.');
       return buffer.toString();
     }
 
-    for (final log in _logsNotifier.value) {
+    for (final log in targetLogs) {
       final time = DateFormat('HH:mm:ss.SSS').format(log.timestamp);
       buffer.writeln(
           '[$time] [${log.level.name.toUpperCase()}] [${log.tag}] ${log.message}');

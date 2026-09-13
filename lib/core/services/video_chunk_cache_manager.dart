@@ -3,9 +3,9 @@
  * Description: Dedicated LRU disk cache manager for 19 MB video streaming chunks with atomic persistence.
  */
 
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
 import '../utils/app_logger.dart';
@@ -81,73 +81,29 @@ class VideoChunkCacheManager {
   Future<File> saveChunk(String fileId, int chunkIndex, Uint8List bytes) async {
     final dir = await getChunkDir(fileId);
     final targetFile = File('${dir.path}/chunk_$chunkIndex.part');
-    final tmpFile = File('${dir.path}/chunk_$chunkIndex.part.tmp');
-
-    if (tmpFile.existsSync()) {
-      tmpFile.deleteSync();
+    if (targetFile.existsSync() && targetFile.lengthSync() > 0) {
+      return targetFile;
     }
 
+    final uniqueSuffix = '${DateTime.now().microsecondsSinceEpoch}_$chunkIndex';
+    final tmpFile = File('${dir.path}/chunk_${chunkIndex}_$uniqueSuffix.part.tmp');
+
     await tmpFile.writeAsBytes(bytes, flush: true);
+    if (targetFile.existsSync() && targetFile.lengthSync() > 0) {
+      try {
+        tmpFile.deleteSync();
+      } catch (_) {}
+      return targetFile;
+    }
     final renamed = await tmpFile.rename(targetFile.path);
     try {
       renamed.setLastModifiedSync(DateTime.now());
     } catch (_) {}
+
+    // Trigger priority eviction in background so cache ceiling is always respected.
+    unawaited(evictOldestIfNeeded(activeFileId: fileId));
+
     return renamed;
-  }
-
-  /// Checks if a fully assembled uncompressed video file exists in the cache.
-  Future<File?> getLocalFullVideo(String fileId) async {
-    if (kIsWeb) return null;
-    try {
-      final dir = await getChunkDir(fileId);
-      final fullFile = File('${dir.path}/full_video.mp4');
-      if (fullFile.existsSync() && fullFile.lengthSync() > 0) {
-        try {
-          fullFile.setLastModifiedSync(DateTime.now());
-        } catch (_) {}
-        return fullFile;
-      }
-    } catch (e) {
-      AppLogger.w('Failed to check local full video: $e', tag: 'VideoChunkCacheManager');
-    }
-    return null;
-  }
-
-  /// Atomically saves fully assembled video bytes to disk.
-  Future<File> saveFullVideo(String fileId, Uint8List bytes) async {
-    final dir = await getChunkDir(fileId);
-    final targetFile = File('${dir.path}/full_video.mp4');
-    final tmpFile = File('${dir.path}/full_video.mp4.tmp');
-
-    if (tmpFile.existsSync()) {
-      tmpFile.deleteSync();
-    }
-
-    await tmpFile.writeAsBytes(bytes, flush: true);
-    final renamed = await tmpFile.rename(targetFile.path);
-    try {
-      renamed.setLastModifiedSync(DateTime.now());
-    } catch (_) {}
-    return renamed;
-  }
-
-  /// Reassembles partitioned chunks, decompresses legacy DEFLATE archives,
-  /// and saves the resulting raw uncompressed video to local disk.
-  Future<File> assembleAndDecompressLegacyZip(
-    String fileId,
-    List<Uint8List> chunks,
-  ) async {
-    final builder = BytesBuilder(copy: false);
-    for (final chunk in chunks) {
-      builder.add(chunk);
-    }
-    final assembled = builder.toBytes();
-    final archive = ZipDecoder().decodeBytes(assembled);
-    if (archive.isEmpty) {
-      throw Exception('Legacy ZIP archive for $fileId was empty');
-    }
-    final rawBytes = archive.first.content;
-    return await saveFullVideo(fileId, rawBytes);
   }
 
   /// Clears chunks for a specific [fileId], or all video chunks if [fileId] is null.
@@ -200,34 +156,54 @@ class VideoChunkCacheManager {
     }
   }
 
-  /// Enforces LRU pruning if total video cache exceeds [maxSizeBytes] (default 250 MB).
-  Future<void> evictOldestIfNeeded({int maxSizeBytes = 250 * 1024 * 1024}) async {
+  /// Enforces two-tier LRU pruning if total video cache exceeds [maxSizeBytes] (default 250 MB).
+  ///
+  /// Eviction Priority:
+  /// - Tier 1: Chunks from other/previous videos (fileId != [activeFileId]), sorted oldest first.
+  /// - Tier 2: Chunks from the currently active video (fileId == [activeFileId]), sorted oldest first.
+  Future<void> evictOldestIfNeeded({
+    int maxSizeBytes = 250 * 1024 * 1024,
+    String? activeFileId,
+  }) async {
     if (kIsWeb) return;
 
     try {
       final base = await getBaseDir();
       if (!base.existsSync()) return;
 
-      final partFiles = <File>[];
+      final otherVideoChunks = <File>[];
+      final activeVideoChunks = <File>[];
       int currentTotal = 0;
+      final safeActiveId = activeFileId != null ? sanitizeFileId(activeFileId) : null;
 
       for (final entity in base.listSync(recursive: true, followLinks: false)) {
         if (entity is File && entity.path.endsWith('.part')) {
-          partFiles.add(entity);
           currentTotal += entity.lengthSync();
+          final parentDirName = entity.parent.path.split(RegExp(r'[\\/]')).last;
+          if (safeActiveId != null && parentDirName == safeActiveId) {
+            activeVideoChunks.add(entity);
+          } else {
+            otherVideoChunks.add(entity);
+          }
         }
       }
 
       if (currentTotal <= maxSizeBytes) return;
 
-      // Sort oldest accessed first
-      partFiles.sort((a, b) {
+      int sortByAge(File a, File b) {
         final aMod = a.lastModifiedSync();
         final bMod = b.lastModifiedSync();
         return aMod.compareTo(bMod);
-      });
+      }
 
-      for (final file in partFiles) {
+      otherVideoChunks.sort(sortByAge);
+      activeVideoChunks.sort(sortByAge);
+
+      // Tier 1: Delete all other videos' chunks first
+      // Tier 2: Delete active video's oldest chunks only if still over limit
+      final evictionCandidates = [...otherVideoChunks, ...activeVideoChunks];
+
+      for (final file in evictionCandidates) {
         if (currentTotal <= maxSizeBytes) break;
         final size = file.lengthSync();
         try {

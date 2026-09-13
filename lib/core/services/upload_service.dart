@@ -5,7 +5,7 @@
 
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:mime/mime.dart';
+import '../utils/app_mime_helper.dart';
 import 'package:uuid/uuid.dart';
 import 'package:hive/hive.dart';
 import '../constants/app_constants.dart';
@@ -85,7 +85,7 @@ class UploadService implements UploadServiceContract {
 
         final fileId = taskId ?? const Uuid().v4();
         transferId = fileId;
-        final mimeType = lookupMimeType(name) ?? 'application/octet-stream';
+        final mimeType = AppMimeHelper.detectMimeType(name);
         final totalBytes = bytes?.length ??
             (fileLength != null && fileLength > 0 ? fileLength : null) ??
             (filePath != null

@@ -345,6 +345,9 @@ class AppCacheManager {
             'LRU eviction freed ${(freedBytes / 1024).toStringAsFixed(1)} KB',
             tag: 'AppCacheManager');
       }
+
+      // Also evict video chunks respecting the configured ceiling
+      await VideoChunkCacheManager.instance.evictOldestIfNeeded(maxSizeBytes: maxBytes);
     } catch (e) {
       AppLogger.w('enforceCacheLimit warning: $e', tag: 'AppCacheManager');
     }

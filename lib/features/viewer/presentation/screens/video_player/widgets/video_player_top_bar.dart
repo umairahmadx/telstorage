@@ -1,6 +1,6 @@
 /*
  * File: video_player_top_bar.dart
- * Description: Glassmorphic top navigation bar for the video player displaying filename, index, size, back button, and download trigger.
+ * Description: Glassmorphic top navigation bar for the video player displaying filename, index, size, back button, rotate, share, download, and more options.
  */
 
 import 'package:flutter/material.dart';
@@ -28,6 +28,15 @@ class VideoPlayerTopBar extends StatelessWidget {
   /// Callback to save or download the video.
   final VoidCallback onSave;
 
+  /// Callback to toggle device orientation.
+  final VoidCallback onRotate;
+
+  /// Callback when share button is pressed.
+  final VoidCallback onShare;
+
+  /// Callback when more options button is pressed.
+  final VoidCallback onMore;
+
   /// Constructs VideoPlayerTopBar.
   const VideoPlayerTopBar({
     super.key,
@@ -37,6 +46,9 @@ class VideoPlayerTopBar extends StatelessWidget {
     required this.isVisible,
     required this.onBack,
     required this.onSave,
+    required this.onRotate,
+    required this.onShare,
+    required this.onMore,
   });
 
   @override
@@ -112,9 +124,39 @@ class VideoPlayerTopBar extends StatelessWidget {
               clipBehavior: Clip.antiAlias,
               shape: const CircleBorder(),
               child: IconButton(
+                icon: Icon(AppIcons.rotate, color: colors.textPrimary, size: 20),
+                onPressed: onRotate,
+                tooltip: 'Rotate orientation',
+              ),
+            ),
+            Material(
+              color: Colors.transparent,
+              clipBehavior: Clip.antiAlias,
+              shape: const CircleBorder(),
+              child: IconButton(
+                icon: Icon(AppIcons.share, color: colors.textPrimary, size: 20),
+                onPressed: onShare,
+                tooltip: 'Share video',
+              ),
+            ),
+            Material(
+              color: Colors.transparent,
+              clipBehavior: Clip.antiAlias,
+              shape: const CircleBorder(),
+              child: IconButton(
                 icon: Icon(AppIcons.download, color: colors.textPrimary, size: 20),
                 onPressed: onSave,
                 tooltip: 'Save to Downloads',
+              ),
+            ),
+            Material(
+              color: Colors.transparent,
+              clipBehavior: Clip.antiAlias,
+              shape: const CircleBorder(),
+              child: IconButton(
+                icon: Icon(AppIcons.moreVert, color: colors.textPrimary, size: 20),
+                onPressed: onMore,
+                tooltip: 'More options',
               ),
             ),
           ],

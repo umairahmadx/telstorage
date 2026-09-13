@@ -460,6 +460,10 @@ class MobileShellState extends State<MobileShell> {
 
   @override
   Widget build(BuildContext context) {
+    final activeIndex = _currentIndex > 2
+        ? _currentIndex - 1
+        : (_currentIndex == 2 ? 0 : _currentIndex);
+
     return Scaffold(
       key: _scaffoldKey,
       drawer: AppDrawer(
@@ -467,14 +471,12 @@ class MobileShellState extends State<MobileShell> {
         onTabSelected: switchTab,
       ),
       body: IndexedStack(
-        index: _currentIndex > 2
-            ? _currentIndex - 1
-            : (_currentIndex == 2 ? 0 : _currentIndex),
-        children: const [
-          HomeScreen(),
-          BrowserScreen(),
-          DownloadsScreen(),
-          SettingsScreen(),
+        index: activeIndex,
+        children: [
+          HeroMode(enabled: activeIndex == 0, child: const HomeScreen()),
+          HeroMode(enabled: activeIndex == 1, child: const BrowserScreen()),
+          HeroMode(enabled: activeIndex == 2, child: const DownloadsScreen()),
+          HeroMode(enabled: activeIndex == 3, child: const SettingsScreen()),
         ],
       ),
       bottomNavigationBar: MobileNavBar(

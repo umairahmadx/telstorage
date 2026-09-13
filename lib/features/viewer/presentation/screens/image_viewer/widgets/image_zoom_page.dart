@@ -7,6 +7,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/services/image_viewer_cache_service.dart';
 import 'package:telstorage/core/services/service_locator.dart';
@@ -61,7 +62,9 @@ class _ImageZoomPageState extends State<ImageZoomPage> {
   void initState() {
     super.initState();
     _initThumbnail();
-    _loadFullResolutionImage();
+    if (widget.isActive) {
+      _loadFullResolutionImage();
+    }
   }
 
   @override
@@ -163,37 +166,47 @@ class _ImageZoomPageState extends State<ImageZoomPage> {
       },
       child: Center(
         child: _cachedFullFile != null
-            ? Image.file(
-                _cachedFullFile!,
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-              )
+            ? (widget.file.name.toLowerCase().endsWith('.svg') ||
+                    widget.file.mimeType.toLowerCase() == 'image/svg+xml'
+                ? SvgPicture.file(
+                    _cachedFullFile!,
+                    fit: BoxFit.contain,
+                    placeholderBuilder: (_) => _buildThumbnail(colors),
+                  )
+                : Image.file(
+                    _cachedFullFile!,
+                    fit: BoxFit.contain,
+                    frameBuilder:
+                        (context, child, frame, wasSynchronouslyLoaded) {
+                      if (wasSynchronouslyLoaded) {
+                        return child;
+                      }
+                      return AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 150),
+                        child: frame != null
+                            ? KeyedSubtree(
+                                key: const ValueKey('full_res_ready'),
+                                child: child,
+                              )
+                            : KeyedSubtree(
+                                key: const ValueKey('thumb_waiting'),
+                                child: Stack(
+                                  fit: StackFit.passthrough,
+                                  alignment: Alignment.center,
+                                  children: [
+                                    _buildThumbnail(colors),
+                                    Opacity(opacity: 0.0, child: child),
+                                  ],
+                                ),
+                              ),
+                      );
+                    },
+                    errorBuilder: (_, __, ___) => _buildThumbnail(colors),
+                  ))
             : Stack(
                 alignment: Alignment.center,
                 children: [
-                  if (_thumbBytes != null)
-                    Image.memory(
-                      _thumbBytes!,
-                      fit: BoxFit.contain,
-                    )
-                  else if (_thumbPath != null &&
-                      File(_thumbPath!).existsSync())
-                    Image.file(
-                      File(_thumbPath!),
-                      fit: BoxFit.contain,
-                    )
-                  else
-                    SizedBox(
-                      width: 120,
-                      height: 120,
-                      child: Center(
-                        child: Icon(
-                          Icons.image_outlined,
-                          size: 48,
-                          color: colors.textTertiary,
-                        ),
-                      ),
-                    ),
+                  _buildThumbnail(colors),
                   if (_isDownloading)
                     Container(
                       width: 44,
@@ -217,5 +230,32 @@ class _ImageZoomPageState extends State<ImageZoomPage> {
               ),
       ),
     );
+  }
+
+  /// Builds lightweight thumbnail placeholder to prevent any black dip while loading.
+  Widget _buildThumbnail(AppColorsExtension colors) {
+    if (_thumbBytes != null) {
+      return Image.memory(
+        _thumbBytes!,
+        fit: BoxFit.contain,
+      );
+    } else if (_thumbPath != null && File(_thumbPath!).existsSync()) {
+      return Image.file(
+        File(_thumbPath!),
+        fit: BoxFit.contain,
+      );
+    } else {
+      return SizedBox(
+        width: 120,
+        height: 120,
+        child: Center(
+          child: Icon(
+            Icons.image_outlined,
+            size: 48,
+            color: colors.textTertiary,
+          ),
+        ),
+      );
+    }
   }
 }

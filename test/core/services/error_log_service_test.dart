@@ -94,5 +94,19 @@ void main() {
       expect(report, contains('Bot token revoked'));
       expect(report, contains('#0 TelegramService.auth'));
     });
+
+    test('exports diagnostic report with custom log subset', () async {
+      await service.logError('Error 1', tag: 'Test');
+      await service.logWarning('Warning 1', tag: 'Test');
+
+      final warningsOnly = service.logsNotifier.value
+          .where((l) => l.level == ErrorLogLevel.warning)
+          .toList();
+      final report = service.exportDiagnosticReport(warningsOnly);
+
+      expect(report, contains('Total Logged Events: 1'));
+      expect(report, contains('Warning 1'));
+      expect(report, isNot(contains('Error 1')));
+    });
   });
 }

@@ -16,6 +16,7 @@ import 'service_locator.dart';
 import 'telegram_rate_limiter.dart';
 import 'video_chunk_cache_manager.dart';
 import 'video_prefetch_coordinator.dart';
+import 'video_stream_pipeliner.dart';
 
 export '../models/video_stream_models.dart';
 
@@ -52,9 +53,13 @@ class VideoStreamServer {
   ChunkFetcher? _chunkFetcherForTesting;
   FileRecordProvider? _fileRecordProviderForTesting;
   final VideoPrefetchCoordinator _prefetchCoordinator = VideoPrefetchCoordinator();
+  final VideoStreamPipeliner _pipeliner = VideoStreamPipeliner();
 
   /// Sliding-window prefetch coordinator.
   VideoPrefetchCoordinator get prefetchCoordinator => _prefetchCoordinator;
+
+  /// Real-time packet stream pipeliner.
+  VideoStreamPipeliner get pipeliner => _pipeliner;
 
   /// Registers an active [file] record in memory for stream resolution and returns an idempotent handle.
   StreamRegistration registerFile(FileRecord file) {
@@ -96,10 +101,20 @@ class VideoStreamServer {
       _prefetchCoordinator.setDownloaderForTesting(
         (record, chunkIdx, priority) => fetcher(record.fileId, chunkIdx, record.chunkCount),
       );
+      _pipeliner.setStreamFetcherForTesting((fileId, chunkIndex) async* {
+        final record = _activeFiles[fileId]?.file;
+        final totalChunks = record?.chunkCount ?? 1;
+        yield await fetcher(fileId, chunkIndex, totalChunks);
+      });
     } else {
       _prefetchCoordinator.setDownloaderForTesting(null);
+      _pipeliner.setStreamFetcherForTesting(null);
     }
   }
+
+  /// Sets custom stream fetcher for unit test isolation.
+  void setStreamFetcherForTesting(StreamFetcher? fetcher) =>
+      _pipeliner.setStreamFetcherForTesting(fetcher);
 
   /// Sets custom file record provider for unit test isolation.
   void setFileRecordProviderForTesting(FileRecordProvider? provider) {
@@ -111,11 +126,8 @@ class VideoStreamServer {
   void setPartSizeForTesting(int? size) => _partSize = size ?? defaultPartSize;
 
   /// Calculates the ZIP local file header offset.
-  static int calculateHeaderOffset(String filename, {required bool isZipped}) {
-    if (!isZipped) return 0;
-    final nameBytes = utf8.encode(filename);
-    return 30 + nameBytes.length;
-  }
+  static int calculateHeaderOffset(String filename, {required bool isZipped}) =>
+      !isZipped ? 0 : 30 + utf8.encode(filename).length;
 
   /// Computes the chunk index and byte offset within that chunk for any video byte.
   static ChunkByteMapping mapByteToChunk({
@@ -124,9 +136,10 @@ class VideoStreamServer {
     required int partSize,
   }) {
     final zipOffset = videoByteOffset + headerOffset;
-    final chunkIndex = zipOffset ~/ partSize;
-    final chunkOffset = zipOffset % partSize;
-    return ChunkByteMapping(chunkIndex: chunkIndex, chunkOffset: chunkOffset);
+    return ChunkByteMapping(
+      chunkIndex: zipOffset ~/ partSize,
+      chunkOffset: zipOffset % partSize,
+    );
   }
 
   /// Parses RFC 7233 / RFC 9110 Range header strings.
@@ -136,9 +149,7 @@ class VideoStreamServer {
 
   /// Resolves the appropriate video MIME type based on record and file extension.
   static String resolveMimeType(String filename, String? recordMime) {
-    if (recordMime != null &&
-        recordMime.isNotEmpty &&
-        recordMime != 'application/octet-stream') {
+    if (recordMime != null && recordMime.isNotEmpty && recordMime != 'application/octet-stream') {
       return recordMime;
     }
     final lower = filename.toLowerCase();
@@ -183,6 +194,8 @@ class VideoStreamServer {
       _inFlightMetadata.clear();
       _chunkFetcherForTesting = null;
       _fileRecordProviderForTesting = null;
+      _prefetchCoordinator.setDownloaderForTesting(null);
+      _pipeliner.setStreamFetcherForTesting(null);
       _partSize = defaultPartSize;
       AppLogger.i('VideoStreamServer stopped', tag: 'VideoStreamServer');
     }
@@ -191,17 +204,9 @@ class VideoStreamServer {
   /// Resolves the loopback streaming URL for a given file ID and optional filename.
   String getStreamUrl(String fileId, [String? filename]) {
     final port = _activePort;
-    if (port == null) {
-      throw StateError('VideoStreamServer must be started before getStreamUrl');
-    }
-    return Uri(
-      scheme: 'http',
-      host: '127.0.0.1',
-      port: port,
-      pathSegments: filename != null && filename.isNotEmpty
-          ? ['stream', fileId, filename]
-          : ['stream', fileId],
-    ).toString();
+    if (port == null) throw StateError('VideoStreamServer must be started before getStreamUrl');
+    final segs = (filename != null && filename.isNotEmpty) ? ['stream', fileId, filename] : ['stream', fileId];
+    return Uri(scheme: 'http', host: '127.0.0.1', port: port, pathSegments: segs).toString();
   }
 
   /// Handles incoming HTTP GET and HEAD requests for video streaming.
@@ -227,11 +232,8 @@ class VideoStreamServer {
       return;
     }
 
-    final metaId = (record.metadataFileId?.trim().isNotEmpty == true)
-        ? record.metadataFileId!.trim()
-        : null;
-
-    if (metaId == null && record.chunkCount > 1) {
+    final metaId = record.metadataFileId?.trim();
+    if ((metaId == null || metaId.isEmpty) && record.chunkCount > 1) {
       request.response.statusCode = HttpStatus.internalServerError;
       request.response.headers.contentType = ContentType.text;
       request.response.write('Multi-chunk file missing metadataFileId for $fileId');
@@ -254,15 +256,19 @@ class VideoStreamServer {
       }
     }
 
-    Uint8List? chunk0Bytes;
     int totalBytes = max(1, (record.sizeMb * 1024 * 1024).round());
     int headerOffset = 0;
     /// Exclusive upper bound of video bytes in ZIP-space (0 = not applicable).
     int videoEndInZip = 0;
 
-    if (record.chunkCount > 1) {
+    final regFile = _activeFiles[fileId];
+    if (regFile != null && regFile.totalBytes != null) {
+      totalBytes = regFile.totalBytes!;
+      headerOffset = regFile.headerOffset ?? 0;
+      videoEndInZip = regFile.videoEndInZip ?? 0;
+    } else if (record.chunkCount > 1) {
       try {
-        chunk0Bytes = await _getOrFetchChunk(record, 0, chunkMap: chunkMap);
+        final chunk0Bytes = await _getOrFetchChunk(record, 0, chunkMap: chunkMap);
         final zipHeader = ZipHeaderInfo.tryParse(chunk0Bytes);
         if (zipHeader != null) {
           if (zipHeader.compressionMethod != 0) {
@@ -274,7 +280,6 @@ class VideoStreamServer {
             await request.response.close();
             return;
           }
-          // Use ZIP header size if valid; for files > 4 GB the Uint32 wraps to 0.
           final videoSize = zipHeader.uncompressedSize > 0
               ? zipHeader.uncompressedSize
               : max(1, (record.sizeMb * 1024 * 1024).round());
@@ -284,6 +289,12 @@ class VideoStreamServer {
         } else {
           headerOffset = calculateHeaderOffset(record.name, isZipped: true);
           videoEndInZip = headerOffset + totalBytes;
+        }
+        if (regFile != null) {
+          regFile.zipHeader = zipHeader;
+          regFile.totalBytes = totalBytes;
+          regFile.headerOffset = headerOffset;
+          regFile.videoEndInZip = videoEndInZip;
         }
       } catch (e) {
         AppLogger.w('Header inspection fallback for $fileId: $e', tag: 'VideoStreamServer');
@@ -325,7 +336,7 @@ class VideoStreamServer {
         return;
       }
 
-      final partSize = _partSize;
+      final partSize = record.chunkCount > 1 ? _partSize : max(_partSize, totalBytes);
       final zStart = range.start + headerOffset;
       // Clamp to videoEndInZip to exclude ZIP trailer bytes from served range.
       final zEnd = videoEndInZip > 0
@@ -340,18 +351,19 @@ class VideoStreamServer {
 
       var totalWritten = 0;
       for (var chunkIdx = startChunk; chunkIdx <= endChunk; chunkIdx++) {
-        final chunkBytes = (chunkIdx == 0 && chunk0Bytes != null)
-            ? chunk0Bytes
-            : await _getOrFetchChunk(record, chunkIdx, chunkMap: chunkMap);
         final chunkBase = chunkIdx * partSize;
-        final sliceStart = max(0, zStart - chunkBase).clamp(0, chunkBytes.length);
-        final sliceEnd = min(chunkBytes.length, zEnd - chunkBase + 1);
+        final sliceStart = max(0, zStart - chunkBase);
+        final sliceEnd = min(partSize, zEnd - chunkBase + 1);
 
         if (sliceEnd > sliceStart) {
-          final slice = Uint8List.sublistView(chunkBytes, sliceStart, sliceEnd);
-          request.response.add(slice);
-          totalWritten += slice.length;
-          await request.response.flush();
+          totalWritten += await _pipeliner.pipeChunkRange(
+            record: record,
+            chunkIndex: chunkIdx,
+            sliceStart: sliceStart,
+            sliceEnd: sliceEnd,
+            output: request.response,
+            chunkMap: chunkMap,
+          );
         }
       }
 
@@ -436,11 +448,8 @@ class VideoStreamServer {
         _inFlightMetadata.remove(key);
       }
       return map;
-    }).catchError((e) {
-      if (identical(_inFlightMetadata[key], future)) {
-        _inFlightMetadata.remove(key);
-      }
-      throw e;
+    }).whenComplete(() {
+      if (identical(_inFlightMetadata[key], future)) _inFlightMetadata.remove(key);
     });
   }
 
@@ -471,8 +480,8 @@ class VideoStreamServer {
       final map = chunkMap ?? await _getOrFetchMetadata(record);
       // Primary: 1-based indexing; Fallback: legacy 0-based indexing
       final targetChunk = map[chunkIdx + 1] ?? map[chunkIdx];
-      if (targetChunk != null && targetChunk.fileId != null && targetChunk.fileId!.isNotEmpty) {
-        return await telegram.downloadByFileId(targetChunk.fileId!, RequestPriority.immediate);
+      if (targetChunk?.fileId?.isNotEmpty == true) {
+        return await telegram.downloadByFileId(targetChunk!.fileId!, RequestPriority.immediate);
       }
 
       if (record.chunkCount == 1 && chunkIdx == 0 && record.fileId.isNotEmpty) {
@@ -482,8 +491,7 @@ class VideoStreamServer {
       throw Exception('Chunk ${chunkIdx + 1} not found in validated metadata for ${record.fileId}');
     } else if (record.chunkCount == 1 && chunkIdx == 0) {
       return await telegram.downloadByFileId(record.fileId, RequestPriority.immediate);
-    } else {
-      throw Exception('Cannot fetch chunk $chunkIdx for ${record.fileId} without metadata');
     }
+    throw Exception('Cannot fetch chunk $chunkIdx for ${record.fileId} without metadata');
   }
 }

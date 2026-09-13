@@ -53,10 +53,16 @@ class TelegramService {
   String get _base => '${AppConstants.telegramApiBase}$_token';
   String get _fileBase => '${AppConstants.telegramFileBase}$_token';
 
+  bool _isInitialized = false;
+
+  /// Whether credentials have been initialized.
+  bool get isInitialized => _isInitialized;
+
   /// Initializes bot token and destination channel ID.
   Future<void> init(String token, String channelId) async {
     _token = token;
     _channelId = channelId;
+    _isInitialized = true;
   }
 
   /// Helper executing API actions with automatic 3-attempt exponential retry on network/transient failures.
@@ -204,6 +210,27 @@ class TelegramService {
     }, operationName: 'uploadBytesWithFileId($filename)');
   }
 
+  /// Resolves the remote Telegram CDN download URL for a given file ID.
+  Future<String> _resolveDownloadUrl(String fileId) async {
+    final workerUrl =
+        (dotenv.isInitialized ? dotenv.env['WORKER_URL'] : null) ??
+            'https://telstorage-proxy.umair-ahmed-64422.workers.dev';
+
+    final getFileEndpoint = '$_base/getFile';
+    final requestGetFileUrl = kIsWeb
+        ? '$workerUrl?url=${Uri.encodeComponent('$getFileEndpoint?file_id=$fileId')}'
+        : getFileEndpoint;
+
+    final filePathRes = await _dio.get(
+      requestGetFileUrl,
+      queryParameters: kIsWeb ? null : {'file_id': fileId},
+    );
+
+    final filePath = filePathRes.data['result']['file_path'] as String;
+    final fileUrl = '$_fileBase/$filePath';
+    return kIsWeb ? '$workerUrl?url=${Uri.encodeComponent(fileUrl)}' : fileUrl;
+  }
+
   /// Download file bytes by file_id with Web proxy fallback
   Future<Uint8List> downloadByFileId(
     String fileId, [
@@ -212,42 +239,12 @@ class TelegramService {
     return _withRetry(() async {
       await TelegramRateLimiter.instance.acquire(priority);
       try {
-        AppLogger.d('Downloading file with file_id: $fileId',
-            tag: 'TelegramService');
-
-        final workerUrl =
-            (dotenv.isInitialized ? dotenv.env['WORKER_URL'] : null) ??
-                'https://telstorage-proxy.umair-ahmed-64422.workers.dev';
-
-        // Step 1: Get file path using file_id
-        AppLogger.d('Getting file path...', tag: 'TelegramService');
-        final getFileEndpoint = '$_base/getFile';
-        final requestGetFileUrl = kIsWeb
-            ? '$workerUrl?url=${Uri.encodeComponent('$getFileEndpoint?file_id=$fileId')}'
-            : getFileEndpoint;
-
-        final filePathRes = await _dio.get(
-          requestGetFileUrl,
-          queryParameters: kIsWeb ? null : {'file_id': fileId},
-        );
-
-        final filePath = filePathRes.data['result']['file_path'] as String;
-        AppLogger.d('Got file path: $filePath', tag: 'TelegramService');
-
-        // Step 2: Download the actual file
-        final fileUrl = '$_fileBase/$filePath';
-
-        final downloadUrl =
-            kIsWeb ? '$workerUrl?url=${Uri.encodeComponent(fileUrl)}' : fileUrl;
-
-        AppLogger.d('Downloading from: ${kIsWeb ? "proxy" : "direct"}',
-            tag: 'TelegramService');
-
+        AppLogger.d('Downloading file with file_id: $fileId', tag: 'TelegramService');
+        final downloadUrl = await _resolveDownloadUrl(fileId);
         final fileRes = await _dio.get(
           downloadUrl,
           options: Options(responseType: ResponseType.bytes),
         );
-
         final bytes = Uint8List.fromList(fileRes.data as List<int>);
         AppLogger.d('Downloaded ${bytes.length} bytes', tag: 'TelegramService');
         return bytes;
@@ -258,6 +255,51 @@ class TelegramService {
         throw Exception('Failed to download file: $e');
       }
     }, operationName: 'downloadByFileId($fileId)');
+  }
+
+  /// Stream file bytes by file_id with optional byte range support directly from Telegram CDN.
+  Future<Stream<List<int>>> streamByFileId(
+    String fileId, {
+    RequestPriority priority = RequestPriority.normal,
+    int? startByte,
+    int? endByte,
+  }) async {
+    if (!_isInitialized) {
+      final bytes = await downloadByFileId(fileId, priority);
+      final boundedStart = startByte ?? 0;
+      final boundedEnd = (endByte != null && endByte + 1 < bytes.length) ? endByte + 1 : bytes.length;
+      return Stream.value(bytes.sublist(boundedStart, boundedEnd));
+    }
+    return _withRetry(() async {
+      await TelegramRateLimiter.instance.acquire(priority);
+      try {
+        AppLogger.d('Streaming file with file_id: $fileId', tag: 'TelegramService');
+        final downloadUrl = await _resolveDownloadUrl(fileId);
+        final headers = <String, String>{};
+        if (startByte != null) {
+          headers['Range'] = 'bytes=$startByte-${endByte ?? ""}';
+        }
+
+        final res = await _dio.get<ResponseBody>(
+          downloadUrl,
+          options: Options(
+            responseType: ResponseType.stream,
+            headers: headers.isNotEmpty ? headers : null,
+          ),
+        );
+
+        final body = res.data;
+        if (body == null) {
+          throw Exception('Empty stream response for file_id $fileId');
+        }
+        return body.stream.cast<List<int>>();
+      } on DioException {
+        rethrow;
+      } catch (e) {
+        AppLogger.e('Stream failed: $e', tag: 'TelegramService', error: e);
+        throw Exception('Failed to stream file: $e');
+      }
+    }, operationName: 'streamByFileId($fileId)');
   }
 
   /// Delete a message (used for cleanup)

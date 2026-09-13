@@ -11,6 +11,18 @@ import 'package:telstorage/core/services/thumbnail_repository.dart';
 
 class FakeTelegramService implements TelegramService {
   @override
+  bool get isInitialized => true;
+
+  @override
+  Future<Stream<List<int>>> streamByFileId(
+    String fileId, {
+    RequestPriority priority = RequestPriority.normal,
+    int? startByte,
+    int? endByte,
+  }) async =>
+      Stream.value(Uint8List(10));
+
+  @override
   Future<void> init(String token, String channelId) async {}
 
   @override

@@ -28,13 +28,15 @@ void main() {
   });
 
   tearDown(() async {
+    await server.stop();
     server.setFileRecordProviderForTesting(null);
     server.setChunkFetcherForTesting(null);
     VideoChunkCacheManager.instance.setBaseDirForTesting(null);
     if (tempDir.existsSync()) {
-      await tempDir.delete(recursive: true);
+      try {
+        await tempDir.delete(recursive: true);
+      } catch (_) {}
     }
-    await server.stop();
   });
 
   group('VideoStreamServer Math & Range Unit Tests', () {
@@ -238,6 +240,7 @@ void main() {
         expect(response.headers.value(HttpHeaders.acceptRangesHeader), equals('bytes'));
         expect(response.headers.value(HttpHeaders.contentRangeHeader), isNull);
         expect(response.contentLength, equals(50));
+        await response.drain();
       } finally {
         client.close();
       }
@@ -469,6 +472,19 @@ class FakeStreamTelegramService extends TelegramService {
     final data = files[fileId];
     if (data != null) return data;
     throw Exception('File not found in fake telegram: $fileId');
+  }
+
+  @override
+  Future<Stream<List<int>>> streamByFileId(
+    String fileId, {
+    RequestPriority priority = RequestPriority.immediate,
+    int? startByte,
+    int? endByte,
+  }) async {
+    final data = await downloadByFileId(fileId, priority);
+    final start = startByte ?? 0;
+    final end = (endByte != null && endByte + 1 < data.length) ? endByte + 1 : data.length;
+    return Stream.value(data.sublist(start, end));
   }
 }
 

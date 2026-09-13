@@ -140,6 +140,18 @@ class RegisteredStreamFile {
   /// Reference count of active players holding a handle.
   int refCount;
 
+  /// Cached parsed ZIP local file header info.
+  ZipHeaderInfo? zipHeader;
+
+  /// Cached header offset in bytes.
+  int? headerOffset;
+
+  /// Cached exact video content length in bytes.
+  int? totalBytes;
+
+  /// Cached exclusive upper bound of video bytes in ZIP-space.
+  int? videoEndInZip;
+
   /// Constructs a RegisteredStreamFile with initial count of 1.
   RegisteredStreamFile(this.file) : refCount = 1;
 }

@@ -38,8 +38,12 @@ class ThumbnailImageDecoder {
       if (svgThumb != null) return svgThumb;
     }
 
-    // 2. Camera RAW: Embedded JPEG extraction
-    if (AppMimeHelper.cameraRawExtensions.contains(ext)) {
+    // 2. Camera RAW & HEIC/HEIF: Embedded JPEG extraction
+    if (AppMimeHelper.cameraRawExtensions.contains(ext) ||
+        ext == 'heic' ||
+        ext == 'heif' ||
+        mimeType == 'image/heic' ||
+        mimeType == 'image/heif') {
       final embedded = await compute(MediaPreviewHelper.extractEmbeddedJpeg, bytes);
       if (embedded != null) {
         final thumb = await _downsampleAndCompress(embedded);

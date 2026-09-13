@@ -43,9 +43,11 @@ class AppSortFilterSheet extends StatelessWidget {
         color: colors.bgSurface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      child: SafeArea(
-        top: false,
-        child: SingleChildScrollView(
+      child: Material(
+        color: Colors.transparent,
+        child: SafeArea(
+          top: false,
+          child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
           child: Column(
@@ -171,6 +173,7 @@ class AppSortFilterSheet extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

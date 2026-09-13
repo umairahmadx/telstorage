@@ -78,5 +78,22 @@ void main() {
       viewModel.skipBackward(const Duration(seconds: 100));
       expect(viewModel.position, equals(Duration.zero));
     });
+
+    test('TC-VVM-05: setMockCachedChunksForTesting merges chunks into duration ranges', () {
+      viewModel.setMockDurationForTesting(const Duration(seconds: 60));
+
+      // With 1 chunk total (default), chunk 0 covers 0s to 60s
+      viewModel.setMockCachedChunksForTesting({0});
+      expect(viewModel.cachedChunks, equals({0}));
+      expect(viewModel.mergedBuffered.length, equals(1));
+      expect(viewModel.mergedBuffered.first.start, equals(Duration.zero));
+      expect(viewModel.mergedBuffered.first.end, equals(const Duration(seconds: 60)));
+    });
+
+    test('TC-VVM-06: streaming stats reflect chunk and size calculations', () {
+      expect(viewModel.totalChunks, equals(1));
+      expect(viewModel.cachedMb, equals(0.0));
+      expect(viewModel.totalMb, equals(0.0));
+    });
   });
 }

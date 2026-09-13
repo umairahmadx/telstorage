@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../../../../../core/models/file_record.dart';
+import '../../../../../../core/services/video_chunk_cache_manager.dart';
 import '../../../../../../core/services/video_stream_server.dart';
 import '../../../../../../core/utils/app_logger.dart';
 
@@ -23,9 +24,12 @@ class VideoPlayerViewModel extends ChangeNotifier {
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   List<DurationRange> _buffered = const [];
+  Set<int> _cachedChunks = const {};
+  List<DurationRange> _mergedBuffered = const [];
   double _volume = 1.0;
   bool _areControlsVisible = true;
   String? _errorMessage;
+  bool _isListeningToChunkChanges = false;
 
   Timer? _hideControlsTimer;
 
@@ -50,8 +54,24 @@ class VideoPlayerViewModel extends ChangeNotifier {
   /// Total duration of the video.
   Duration get duration => _duration;
 
-  /// List of loaded/buffered duration segments.
+  /// List of loaded/buffered duration segments directly from video player.
   List<DurationRange> get buffered => _buffered;
+
+  /// Downloaded 19 MB chunk indices persisted on disk.
+  Set<int> get cachedChunks => _cachedChunks;
+
+  /// Total number of 19 MB chunks comprising the video.
+  int get totalChunks => _currentFile?.chunkCount ?? 1;
+
+  /// Total megabytes of chunks downloaded and cached on disk.
+  double get cachedMb =>
+      ((_cachedChunks.length * 19.0).clamp(0.0, _currentFile?.sizeMb ?? 0.0));
+
+  /// Total file size in megabytes.
+  double get totalMb => _currentFile?.sizeMb ?? 0.0;
+
+  /// Combined buffered duration ranges merging disk chunks with player buffer.
+  List<DurationRange> get mergedBuffered => _mergedBuffered;
 
   /// Current audio volume between 0.0 and 1.0.
   double get volume => _volume;
@@ -75,6 +95,10 @@ class VideoPlayerViewModel extends ChangeNotifier {
     _errorMessage = null;
     _isInitialized = false;
     _isPlaying = false;
+    _cachedChunks = const {};
+    _mergedBuffered = const [];
+    _setupChunkListener();
+    unawaited(_refreshCachedChunks());
     notifyListeners();
 
     try {
@@ -114,6 +138,7 @@ class VideoPlayerViewModel extends ChangeNotifier {
       _volume = ctrl.value.volume;
 
       ctrl.addListener(_onControllerStateChanged);
+      _computeMergedBuffered();
       await ctrl.play();
       startAutoHideTimer();
       notifyListeners();
@@ -144,6 +169,7 @@ class VideoPlayerViewModel extends ChangeNotifier {
       _position = val.position;
       _duration = val.duration;
       _buffered = val.buffered;
+      _computeMergedBuffered();
       notifyListeners();
     }
   }
@@ -238,6 +264,78 @@ class VideoPlayerViewModel extends ChangeNotifier {
     });
   }
 
+  void _setupChunkListener() {
+    if (!_isListeningToChunkChanges) {
+      _isListeningToChunkChanges = true;
+      VideoChunkCacheManager.instance.chunkChangeNotifier
+          .addListener(_onChunkCacheChanged);
+    }
+  }
+
+  void _onChunkCacheChanged() {
+    unawaited(_refreshCachedChunks());
+  }
+
+  Future<void> _refreshCachedChunks() async {
+    if (_currentFile == null) return;
+    final fileId = _currentFile!.fileId;
+    final indices =
+        await VideoChunkCacheManager.instance.getCachedChunkIndices(fileId);
+    if (_currentFile?.fileId != fileId) return;
+    _cachedChunks = indices;
+    _computeMergedBuffered();
+    notifyListeners();
+  }
+
+  void _computeMergedBuffered() {
+    if (_duration <= Duration.zero) {
+      _mergedBuffered = _buffered;
+      return;
+    }
+
+    final totalMs = _duration.inMilliseconds;
+    final chunksCount = totalChunks > 0 ? totalChunks : 1;
+    final rawRanges = <DurationRange>[..._buffered];
+
+    for (final idx in _cachedChunks) {
+      final startMs = (totalMs * idx / chunksCount).round();
+      final endMs =
+          (totalMs * (idx + 1) / chunksCount).round().clamp(0, totalMs);
+      rawRanges.add(DurationRange(
+        Duration(milliseconds: startMs),
+        Duration(milliseconds: endMs),
+      ));
+    }
+
+    if (rawRanges.isEmpty) {
+      _mergedBuffered = const [];
+      return;
+    }
+
+    rawRanges.sort((a, b) => a.start.compareTo(b.start));
+
+    final merged = <DurationRange>[rawRanges.first];
+    for (int i = 1; i < rawRanges.length; i++) {
+      final current = rawRanges[i];
+      final last = merged.last;
+      if (current.start <= last.end) {
+        if (current.end > last.end) {
+          merged[merged.length - 1] = DurationRange(last.start, current.end);
+        }
+      } else {
+        merged.add(current);
+      }
+    }
+    _mergedBuffered = merged;
+  }
+
+  /// Sets mock cached chunks for unit tests.
+  void setMockCachedChunksForTesting(Set<int> chunks) {
+    _cachedChunks = chunks;
+    _computeMergedBuffered();
+    notifyListeners();
+  }
+
   /// Sets mock duration for unit tests.
   void setMockDurationForTesting(Duration d) {
     _duration = d;
@@ -253,6 +351,11 @@ class VideoPlayerViewModel extends ChangeNotifier {
     _initGeneration++;
     _hideControlsTimer?.cancel();
     unawaited(WakelockPlus.disable().catchError((_) {}));
+    if (_isListeningToChunkChanges) {
+      VideoChunkCacheManager.instance.chunkChangeNotifier
+          .removeListener(_onChunkCacheChanged);
+      _isListeningToChunkChanges = false;
+    }
     _registration?.dispose();
     _registration = null;
     _currentFile = null;

@@ -134,5 +134,26 @@ void main() {
       expect(await manager.getCachedChunk('vid_active', 1), isNotNull);
       expect(await manager.getTotalVideoCacheBytes(), equals(200));
     });
+
+    test('TC-VCM-06: getCachedChunkIndices returns indices and saveChunk notifies chunkChangeNotifier', () async {
+      const fileId = 'vid_indices_test';
+      var notificationCount = 0;
+      manager.chunkChangeNotifier.addListener(() {
+        notificationCount++;
+      });
+
+      // Initially empty
+      final initialIndices = await manager.getCachedChunkIndices(fileId);
+      expect(initialIndices, isEmpty);
+
+      // Save chunk 0 and chunk 2
+      await manager.saveChunk(fileId, 0, Uint8List(50));
+      await manager.saveChunk(fileId, 2, Uint8List(50));
+
+      expect(notificationCount, equals(2));
+
+      final cachedIndices = await manager.getCachedChunkIndices(fileId);
+      expect(cachedIndices, equals({0, 2}));
+    });
   });
 }

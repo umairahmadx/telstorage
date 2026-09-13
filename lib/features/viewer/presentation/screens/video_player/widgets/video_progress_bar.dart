@@ -70,10 +70,15 @@ class VideoProgressBar extends StatelessWidget {
             child: SliderTheme(
               data: SliderTheme.of(context).copyWith(
                 trackHeight: 3.5,
+                trackShape: YouTubeSliderTrackShape(
+                  buffered: buffered,
+                  duration: duration,
+                  bufferedColor: colors.textSecondary.withValues(alpha: 0.45),
+                ),
                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
                 activeTrackColor: colors.accentPrimary,
-                inactiveTrackColor: colors.borderSubtle.withValues(alpha: 0.35),
+                inactiveTrackColor: colors.borderSubtle.withValues(alpha: 0.30),
                 thumbColor: colors.accentPrimary,
                 overlayColor: colors.accentPrimary.withValues(alpha: 0.2),
               ),
@@ -102,5 +107,99 @@ class VideoProgressBar extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// Custom slider track shape rendering YouTube-style multi-range buffer segments
+/// alongside active playback and inactive background tracks.
+class YouTubeSliderTrackShape extends RoundedRectSliderTrackShape {
+  /// Loaded duration ranges to paint as translucent buffer segments.
+  final List<DurationRange> buffered;
+
+  /// Total duration of the video.
+  final Duration duration;
+
+  /// Color used to paint buffered segments.
+  final Color bufferedColor;
+
+  /// Constructs YouTubeSliderTrackShape.
+  const YouTubeSliderTrackShape({
+    required this.buffered,
+    required this.duration,
+    required this.bufferedColor,
+  });
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset offset, {
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required Animation<double> enableAnimation,
+    required TextDirection textDirection,
+    required Offset thumbCenter,
+    Offset? secondaryOffset,
+    bool isDiscrete = false,
+    bool isEnabled = false,
+    double additionalActiveTrackHeight = 2,
+  }) {
+    if (sliderTheme.trackHeight == null || sliderTheme.trackHeight! <= 0) {
+      return;
+    }
+
+    final trackRect = getPreferredRect(
+      parentBox: parentBox,
+      offset: offset,
+      sliderTheme: sliderTheme,
+      isEnabled: isEnabled,
+      isDiscrete: isDiscrete,
+    );
+
+    final trackRadius = Radius.circular(trackRect.height / 2);
+
+    // 1. Inactive background track (unbuffered)
+    if (sliderTheme.inactiveTrackColor != null) {
+      final inactivePaint = Paint()..color = sliderTheme.inactiveTrackColor!;
+      context.canvas.drawRRect(
+        RRect.fromRectAndRadius(trackRect, trackRadius),
+        inactivePaint,
+      );
+    }
+
+    // 2. Buffered ranges (downloaded chunks)
+    final totalMs = duration.inMilliseconds;
+    if (totalMs > 0 && buffered.isNotEmpty) {
+      final bufferPaint = Paint()..color = bufferedColor;
+      for (final range in buffered) {
+        final startFrac =
+            (range.start.inMilliseconds / totalMs).clamp(0.0, 1.0);
+        final endFrac = (range.end.inMilliseconds / totalMs).clamp(0.0, 1.0);
+        if (endFrac > startFrac) {
+          final left = trackRect.left + trackRect.width * startFrac;
+          final right = trackRect.left + trackRect.width * endFrac;
+          final bufferRect =
+              Rect.fromLTRB(left, trackRect.top, right, trackRect.bottom);
+          context.canvas.drawRRect(
+            RRect.fromRectAndRadius(bufferRect, trackRadius),
+            bufferPaint,
+          );
+        }
+      }
+    }
+
+    // 3. Active played track (up to thumb center)
+    if (sliderTheme.activeTrackColor != null) {
+      final activeRect = Rect.fromLTRB(
+        trackRect.left,
+        trackRect.top - (additionalActiveTrackHeight / 2),
+        thumbCenter.dx.clamp(trackRect.left, trackRect.right),
+        trackRect.bottom + (additionalActiveTrackHeight / 2),
+      );
+      final activePaint = Paint()..color = sliderTheme.activeTrackColor!;
+      context.canvas.drawRRect(
+        RRect.fromRectAndRadius(activeRect, trackRadius),
+        activePaint,
+      );
+    }
   }
 }

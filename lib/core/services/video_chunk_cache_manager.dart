@@ -6,7 +6,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, ValueNotifier;
 import 'package:path_provider/path_provider.dart';
 import '../utils/app_logger.dart';
 
@@ -17,6 +17,9 @@ class VideoChunkCacheManager {
 
   /// Singleton instance of VideoChunkCacheManager.
   static final VideoChunkCacheManager instance = VideoChunkCacheManager._();
+
+  /// Listenable notifier bumped whenever a new video chunk is written to disk.
+  final ValueNotifier<int> chunkChangeNotifier = ValueNotifier(0);
 
   Directory? _baseDirForTesting;
 
@@ -100,10 +103,36 @@ class VideoChunkCacheManager {
       renamed.setLastModifiedSync(DateTime.now());
     } catch (_) {}
 
+    chunkChangeNotifier.value++;
+
     // Trigger priority eviction in background so cache ceiling is always respected.
     unawaited(evictOldestIfNeeded(activeFileId: fileId));
 
     return renamed;
+  }
+
+  /// Returns the set of chunk indices (0-based) currently persisted in the cache directory for [fileId].
+  Future<Set<int>> getCachedChunkIndices(String fileId) async {
+    if (kIsWeb) return const {};
+    try {
+      final dir = await getChunkDir(fileId);
+      if (!dir.existsSync()) return const {};
+      final indices = <int>{};
+      for (final entity in dir.listSync(followLinks: false)) {
+        if (entity is File && entity.path.endsWith('.part')) {
+          final filename = entity.uri.pathSegments.last;
+          final match = RegExp(r'^chunk_(\d+)\.part$').firstMatch(filename);
+          if (match != null) {
+            indices.add(int.parse(match.group(1)!));
+          }
+        }
+      }
+      return indices;
+    } catch (e) {
+      AppLogger.w('Failed to list cached chunk indices for $fileId: $e',
+          tag: 'VideoChunkCacheManager');
+      return const {};
+    }
   }
 
   /// Clears chunks for a specific [fileId], or all video chunks if [fileId] is null.

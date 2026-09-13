@@ -329,6 +329,63 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     );
   }
 
+  Widget _buildStreamingBadge(AppColorsExtension colors) {
+    final cached = _viewModel.cachedChunks.length;
+    final total = _viewModel.totalChunks;
+    final cachedMb = _viewModel.cachedMb.toStringAsFixed(1);
+    final totalMb = _viewModel.totalMb.toStringAsFixed(1);
+    final isComplete = cached >= total && total > 0;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: colors.bgSurface.withValues(alpha: 0.70),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: (isComplete ? colors.accentPrimary : colors.borderSubtle)
+                    .withValues(alpha: 0.40),
+                width: 0.8,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  isComplete
+                      ? Icons.check_circle_outline
+                      : Icons.cloud_sync_outlined,
+                  size: 13,
+                  color: isComplete
+                      ? colors.accentPrimary
+                      : colors.textSecondary,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  isComplete
+                      ? 'All chunks cached ($totalMb MB)'
+                      : 'Streaming: $cached/$total chunks ($cachedMb / $totalMb MB)',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: isComplete
+                        ? colors.accentPrimary
+                        : colors.textSecondary,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBottomBar(AppColorsExtension colors) {
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 250),
@@ -351,11 +408,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
             ],
           ),
         ),
-        child: VideoProgressBar(
-          position: _viewModel.position,
-          duration: _viewModel.duration,
-          buffered: _viewModel.buffered,
-          onSeek: _viewModel.seekTo,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildStreamingBadge(colors),
+            VideoProgressBar(
+              position: _viewModel.position,
+              duration: _viewModel.duration,
+              buffered: _viewModel.mergedBuffered,
+              onSeek: _viewModel.seekTo,
+            ),
+          ],
         ),
       ),
     );

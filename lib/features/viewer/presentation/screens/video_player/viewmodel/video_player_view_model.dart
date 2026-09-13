@@ -63,9 +63,16 @@ class VideoPlayerViewModel extends ChangeNotifier {
   /// Total number of 19 MB chunks comprising the video.
   int get totalChunks => _currentFile?.chunkCount ?? 1;
 
-  /// Total megabytes of chunks downloaded and cached on disk.
-  double get cachedMb =>
-      ((_cachedChunks.length * 19.0).clamp(0.0, _currentFile?.sizeMb ?? 0.0));
+  /// Total megabytes of chunks downloaded and in-flight cached.
+  double get cachedMb {
+    final completedMb = _cachedChunks.length * 19.0;
+    final inFlightMb = _getInFlightBytes() / (1024 * 1024);
+    final total = completedMb + inFlightMb;
+    if (_currentFile != null && _currentFile!.sizeMb > 0) {
+      return total.clamp(0.0, _currentFile!.sizeMb);
+    }
+    return total;
+  }
 
   /// Total file size in megabytes.
   double get totalMb => _currentFile?.sizeMb ?? 0.0;
@@ -269,11 +276,42 @@ class VideoPlayerViewModel extends ChangeNotifier {
       _isListeningToChunkChanges = true;
       VideoChunkCacheManager.instance.chunkChangeNotifier
           .addListener(_onChunkCacheChanged);
+      try {
+        VideoStreamServer.instance.prefetchCoordinator.prefetchProgressNotifier
+            .addListener(_onPrefetchProgressChanged);
+      } catch (_) {}
     }
   }
 
   void _onChunkCacheChanged() {
     unawaited(_refreshCachedChunks());
+  }
+
+  void _onPrefetchProgressChanged() {
+    _computeMergedBuffered();
+    notifyListeners();
+  }
+
+  Map<int, double> _getInFlightFractions() {
+    if (_mockInFlightFractions != null) return _mockInFlightFractions!;
+    if (_currentFile == null) return const {};
+    try {
+      return VideoStreamServer.instance.prefetchCoordinator
+          .getInFlightFractions(_currentFile!.fileId);
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  int _getInFlightBytes() {
+    if (_mockInFlightBytes != null) return _mockInFlightBytes!;
+    if (_currentFile == null) return 0;
+    try {
+      return VideoStreamServer.instance.prefetchCoordinator
+          .getInFlightBytes(_currentFile!.fileId);
+    } catch (_) {
+      return 0;
+    }
   }
 
   Future<void> _refreshCachedChunks() async {
@@ -307,6 +345,23 @@ class VideoPlayerViewModel extends ChangeNotifier {
       ));
     }
 
+    // Include continuous byte-level progress for in-flight prefetch chunks
+    final inFlightFractions = _getInFlightFractions();
+    inFlightFractions.forEach((chunkIdx, fraction) {
+      if (!_cachedChunks.contains(chunkIdx) && fraction > 0) {
+        final startMs = (totalMs * chunkIdx / chunksCount).round();
+        final endMs = (totalMs * (chunkIdx + fraction) / chunksCount)
+            .round()
+            .clamp(0, totalMs);
+        if (endMs > startMs) {
+          rawRanges.add(DurationRange(
+            Duration(milliseconds: startMs),
+            Duration(milliseconds: endMs),
+          ));
+        }
+      }
+    });
+
     if (rawRanges.isEmpty) {
       _mergedBuffered = const [];
       return;
@@ -327,6 +382,20 @@ class VideoPlayerViewModel extends ChangeNotifier {
       }
     }
     _mergedBuffered = merged;
+  }
+
+  Map<int, double>? _mockInFlightFractions;
+  int? _mockInFlightBytes;
+
+  /// Sets mock in-flight prefetch progress for unit testing.
+  void setMockInFlightProgressForTesting({
+    required Map<int, double> fractions,
+    required int bytes,
+  }) {
+    _mockInFlightFractions = fractions;
+    _mockInFlightBytes = bytes;
+    _computeMergedBuffered();
+    notifyListeners();
   }
 
   /// Sets mock cached chunks for unit tests.
@@ -354,6 +423,10 @@ class VideoPlayerViewModel extends ChangeNotifier {
     if (_isListeningToChunkChanges) {
       VideoChunkCacheManager.instance.chunkChangeNotifier
           .removeListener(_onChunkCacheChanged);
+      try {
+        VideoStreamServer.instance.prefetchCoordinator.prefetchProgressNotifier
+            .removeListener(_onPrefetchProgressChanged);
+      } catch (_) {}
       _isListeningToChunkChanges = false;
     }
     _registration?.dispose();

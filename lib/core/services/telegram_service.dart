@@ -252,7 +252,14 @@ class TelegramService {
   Future<Uint8List> downloadByFileId(
     String fileId, [
     RequestPriority priority = RequestPriority.normal,
-  ]) async {
+  ]) => downloadByFileIdWithProgress(fileId, priority: priority);
+
+  /// Download file bytes by file_id with progress callback and priority
+  Future<Uint8List> downloadByFileIdWithProgress(
+    String fileId, {
+    RequestPriority priority = RequestPriority.normal,
+    void Function(int count, int total)? onReceiveProgress,
+  }) async {
     return _withRetry(() async {
       await TelegramRateLimiter.instance.acquire(priority);
       try {
@@ -261,6 +268,7 @@ class TelegramService {
         final fileRes = await _dio.get(
           downloadUrl,
           options: Options(responseType: ResponseType.bytes),
+          onReceiveProgress: onReceiveProgress,
         );
         final bytes = Uint8List.fromList(fileRes.data as List<int>);
         AppLogger.d('Downloaded ${bytes.length} bytes', tag: 'TelegramService');
@@ -296,7 +304,6 @@ class TelegramService {
         if (startByte != null) {
           headers['Range'] = 'bytes=$startByte-${endByte ?? ""}';
         }
-
         final res = await _dio.get<ResponseBody>(
           downloadUrl,
           options: Options(
@@ -304,11 +311,8 @@ class TelegramService {
             headers: headers.isNotEmpty ? headers : null,
           ),
         );
-
         final body = res.data;
-        if (body == null) {
-          throw Exception('Empty stream response for file_id $fileId');
-        }
+        if (body == null) throw Exception('Empty stream response for file_id $fileId');
         return body.stream.cast<List<int>>();
       } on DioException {
         rethrow;
@@ -324,16 +328,8 @@ class TelegramService {
     if (messageId <= 0) return;
     await TelegramRateLimiter.instance.acquire();
     try {
-      await _dio.post(
-        '$_base/deleteMessage',
-        data: {
-          'chat_id': _channelId,
-          'message_id': messageId,
-        },
-      );
-    } catch (e) {
-      // Ignore errors - message might already be deleted
-    }
+      await _dio.post('$_base/deleteMessage', data: {'chat_id': _channelId, 'message_id': messageId});
+    } catch (_) {}
   }
 
   /// Get the file_id of a known message_id by forwarding it to the same

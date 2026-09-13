@@ -41,6 +41,14 @@ class FakeTelegramService implements TelegramService {
       Uint8List(10);
 
   @override
+  Future<Uint8List> downloadByFileIdWithProgress(
+    String fileId, {
+    RequestPriority priority = RequestPriority.normal,
+    void Function(int count, int total)? onReceiveProgress,
+  }) async =>
+      Uint8List(10);
+
+  @override
   Future<void> deleteMessage(int messageId) async {}
 
   @override

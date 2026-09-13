@@ -5,6 +5,7 @@
 
 import 'dart:async';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show ValueNotifier;
 import '../models/chunk_info.dart';
 import '../models/file_record.dart';
 import '../utils/app_logger.dart';
@@ -25,6 +26,8 @@ class _PrefetchSession {
   int currentPlaybackChunk;
   bool isCancelled = false;
   final Set<int> inFlightOrCompleted = {};
+  final Map<int, int> inFlightBytes = {};
+  final Map<int, int> inFlightTotals = {};
   Completer<void>? workerCompleter;
 
   _PrefetchSession({
@@ -45,11 +48,35 @@ class VideoPrefetchCoordinator {
   /// Lookahead window size (number of chunks to prefetch ahead).
   final int prefetchWindowSize;
 
+  /// Listenable notifier bumped whenever in-flight prefetch progress updates.
+  final ValueNotifier<int> prefetchProgressNotifier = ValueNotifier(0);
+
   final Map<String, _PrefetchSession> _sessions = {};
   PrefetchChunkDownloader? _downloaderForTesting;
 
   /// Creates a VideoPrefetchCoordinator with an optional lookahead window size.
   VideoPrefetchCoordinator({this.prefetchWindowSize = 2});
+
+  /// Returns in-flight downloaded bytes across chunks currently being prefetched for [fileId].
+  int getInFlightBytes(String fileId) {
+    final session = _sessions[fileId];
+    if (session == null || session.isCancelled) return 0;
+    return session.inFlightBytes.values.fold(0, (sum, b) => sum + b);
+  }
+
+  /// Returns map of chunkIndex -> progress fraction (0.0 .. 1.0) for in-flight prefetch chunks.
+  Map<int, double> getInFlightFractions(String fileId) {
+    final session = _sessions[fileId];
+    if (session == null || session.isCancelled) return const {};
+    final result = <int, double>{};
+    session.inFlightBytes.forEach((chunkIdx, received) {
+      final total = session.inFlightTotals[chunkIdx] ?? (19 * 1024 * 1024);
+      if (total > 0) {
+        result[chunkIdx] = (received / total).clamp(0.0, 1.0);
+      }
+    });
+    return result;
+  }
 
   /// Overrides the chunk download execution for unit test isolation.
   void setDownloaderForTesting(PrefetchChunkDownloader? downloader) {
@@ -164,7 +191,7 @@ class VideoPrefetchCoordinator {
       session.inFlightOrCompleted.add(chunkIdx);
 
       try {
-        final bytes = await _downloadChunk(record, chunkIdx, session.chunkMap);
+        final bytes = await _downloadChunk(session, chunkIdx);
         if (session.isCancelled) break;
 
         await VideoChunkCacheManager.instance.saveChunk(fileId, chunkIdx, bytes);
@@ -180,32 +207,88 @@ class VideoPrefetchCoordinator {
         }
         session.inFlightOrCompleted.remove(chunkIdx);
         break;
+      } finally {
+        session.inFlightBytes.remove(chunkIdx);
+        session.inFlightTotals.remove(chunkIdx);
+        prefetchProgressNotifier.value++;
       }
     }
   }
 
   Future<Uint8List> _downloadChunk(
-    FileRecord record,
+    _PrefetchSession session,
     int chunkIdx,
-    Map<int, ChunkInfo>? chunkMap,
   ) async {
+    final record = session.record;
+    final chunkMap = session.chunkMap;
+
     if (_downloaderForTesting != null) {
       return await _downloaderForTesting!(record, chunkIdx, RequestPriority.background);
     }
 
     final telegram = ServiceLocator.instance.telegram;
-    if (chunkMap != null) {
-      final target = chunkMap[chunkIdx + 1] ?? chunkMap[chunkIdx];
-      if (target != null && target.fileId != null && target.fileId!.isNotEmpty) {
-        return await telegram.downloadByFileId(target.fileId!, RequestPriority.background);
+    DateTime lastEmit = DateTime.now();
+
+    void onProgress(int received, int total) {
+      if (session.isCancelled) return;
+      session.inFlightBytes[chunkIdx] = received;
+      if (total > 0) session.inFlightTotals[chunkIdx] = total;
+
+      final now = DateTime.now();
+      if (now.difference(lastEmit).inMilliseconds >= 80) {
+        lastEmit = now;
+        prefetchProgressNotifier.value++;
       }
     }
 
-    if (record.chunkCount == 1 && chunkIdx == 0 && record.fileId.isNotEmpty) {
-      return await telegram.downloadByFileId(record.fileId, RequestPriority.background);
+    String? targetFileId;
+    if (chunkMap != null) {
+      final target = chunkMap[chunkIdx + 1] ?? chunkMap[chunkIdx];
+      if (target != null && target.fileId != null && target.fileId!.isNotEmpty) {
+        targetFileId = target.fileId;
+      }
+    } else if (record.chunkCount == 1 && chunkIdx == 0 && record.fileId.isNotEmpty) {
+      targetFileId = record.fileId;
+    }
+
+    if (targetFileId != null) {
+      return await telegram.downloadByFileIdWithProgress(
+        targetFileId,
+        priority: RequestPriority.background,
+        onReceiveProgress: onProgress,
+      );
     }
 
     throw StateError('Cannot download chunk $chunkIdx for ${record.fileId} without valid metadata');
+  }
+
+  /// Sets mock in-flight progress for testing.
+  void setMockInFlightProgressForTesting(
+    String fileId,
+    int chunkIdx,
+    int received,
+    int total,
+  ) {
+    var session = _sessions[fileId];
+    if (session == null) {
+      session = _PrefetchSession(
+        record: FileRecord(
+          fileId: fileId,
+          name: 'test.mp4',
+          metadataMessageId: 1,
+          sizeMb: 50.0,
+          mimeType: 'video/mp4',
+          uploadedAt: DateTime(2026),
+          chunkCount: 3,
+          sha256Hash: 'hash',
+        ),
+        currentPlaybackChunk: 0,
+      );
+      _sessions[fileId] = session;
+    }
+    session.inFlightBytes[chunkIdx] = received;
+    session.inFlightTotals[chunkIdx] = total;
+    prefetchProgressNotifier.value++;
   }
 
   /// Returns a Future that completes when the current prefetch worker for [fileId] finishes its loop (for testing).
@@ -218,6 +301,9 @@ class VideoPrefetchCoordinator {
     final session = _sessions.remove(fileId);
     if (session != null) {
       session.isCancelled = true;
+      session.inFlightBytes.clear();
+      session.inFlightTotals.clear();
+      prefetchProgressNotifier.value++;
       try {
         await session.workerCompleter?.future;
       } catch (_) {}
@@ -230,7 +316,10 @@ class VideoPrefetchCoordinator {
     _sessions.clear();
     for (final session in active) {
       session.isCancelled = true;
+      session.inFlightBytes.clear();
+      session.inFlightTotals.clear();
     }
+    prefetchProgressNotifier.value++;
     for (final session in active) {
       try {
         await session.workerCompleter?.future;

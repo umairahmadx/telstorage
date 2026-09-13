@@ -208,5 +208,31 @@ void main() {
       // Chunk 2 should not be downloaded
       expect(downloadedChunks.contains(2), isFalse);
     });
+
+    test('TC-VPC-06: in-flight chunk progress tracking updates bytes, fractions, and notifies listeners', () {
+      const fileId = 'in_flight_test_vid';
+      var notificationCount = 0;
+      coordinator.prefetchProgressNotifier.addListener(() {
+        notificationCount++;
+      });
+
+      // Initially 0
+      expect(coordinator.getInFlightBytes(fileId), equals(0));
+      expect(coordinator.getInFlightFractions(fileId), isEmpty);
+
+      // Set 10 MB of 20 MB for chunk 1
+      coordinator.setMockInFlightProgressForTesting(fileId, 1, 10 * 1024 * 1024, 20 * 1024 * 1024);
+
+      expect(notificationCount, equals(1));
+      expect(coordinator.getInFlightBytes(fileId), equals(10 * 1024 * 1024));
+      final fractions = coordinator.getInFlightFractions(fileId);
+      expect(fractions[1], closeTo(0.5, 0.001));
+
+      // Cancel clears in-flight state
+      coordinator.cancelForFile(fileId);
+      expect(coordinator.getInFlightBytes(fileId), equals(0));
+      expect(coordinator.getInFlightFractions(fileId), isEmpty);
+      expect(notificationCount, equals(2));
+    });
   });
 }

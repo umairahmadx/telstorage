@@ -95,5 +95,20 @@ void main() {
       expect(viewModel.cachedMb, equals(0.0));
       expect(viewModel.totalMb, equals(0.0));
     });
+
+    test('TC-VVM-07: in-flight chunk fractions advance mergedBuffered continuously and increment cachedMb', () {
+      viewModel.setMockDurationForTesting(const Duration(seconds: 100));
+
+      // Simulate 50% download of chunk 0 (0s to 50s out of 100s)
+      viewModel.setMockInFlightProgressForTesting(
+        fractions: {0: 0.5},
+        bytes: 10 * 1024 * 1024,
+      );
+
+      expect(viewModel.mergedBuffered.length, equals(1));
+      expect(viewModel.mergedBuffered.first.start, equals(Duration.zero));
+      expect(viewModel.mergedBuffered.first.end, equals(const Duration(seconds: 50)));
+      expect(viewModel.cachedMb, closeTo(10.0, 0.1));
+    });
   });
 }

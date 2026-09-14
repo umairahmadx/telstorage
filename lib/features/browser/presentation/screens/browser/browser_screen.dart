@@ -7,22 +7,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:telstorage/core/constants/app_constants.dart';
-import 'package:telstorage/core/services/folder_traversal_service.dart';
 import 'package:telstorage/core/services/image_viewer_cache_service.dart';
 import 'package:telstorage/core/services/service_locator.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
-import 'package:telstorage/core/utils/connectivity.dart';
 import 'package:telstorage/features/viewer/presentation/screens/image_viewer/image_viewer_screen.dart';
 import 'package:telstorage/features/viewer/presentation/screens/video_player/video_player_screen.dart';
 import 'package:telstorage/shared/widgets/app_search_field.dart';
 import 'package:telstorage/shared/widgets/bars/app_batch_action_bar.dart';
-import 'package:telstorage/shared/widgets/dialogs/app_dialogs.dart';
 import 'package:telstorage/shared/widgets/feedback/app_empty_state.dart';
 import 'package:telstorage/shared/widgets/mobile_shell.dart';
 import 'package:telstorage/shared/widgets/tiles/app_file_tile.dart';
 import 'package:telstorage/shared/widgets/tiles/app_folder_tile.dart';
 import 'package:telstorage/shared/widgets/typography/app_section_label.dart';
 import 'viewmodel/browser_view_model.dart';
+import 'widgets/browser_batch_actions.dart';
 import 'widgets/browser_dialogs.dart';
 import 'widgets/browser_floating_clipboard_bar.dart';
 import 'widgets/browser_grid_content.dart';
@@ -199,9 +197,11 @@ class _BrowserScreenState extends State<BrowserScreen> {
                               .read<BrowserBloc>()
                               .add(ToggleSelectAll(selectAll: !isAllSelected)),
                           onDownload: () =>
-                              _handleBatchDownload(context, state),
+                              BrowserBatchActions.handleBatchDownload(
+                                  context, state),
                           onDelete: () =>
-                              context.read<BrowserBloc>().add(BatchDelete()),
+                              BrowserBatchActions.handleBatchDelete(
+                                  context, state),
                           onMove: () => context.read<BrowserBloc>().add(
                                 SetClipboard(
                                   mode: ClipboardMode.move,
@@ -446,55 +446,5 @@ class _BrowserScreenState extends State<BrowserScreen> {
         ],
       ],
     );
-  }
-
-  Future<void> _handleBatchDownload(
-      BuildContext context, BrowserState state) async {
-    if (state.selectedFolderIds.isEmpty && state.selectedFileIds.isEmpty) return;
-
-    if (!await Connectivity.hasConnection()) {
-      if (!context.mounted) return;
-      await AppDialogs.showInfo(
-        context,
-        title: 'Offline',
-        message:
-            'You are currently offline. Please check your internet connection to download files.',
-      );
-      return;
-    }
-
-    final repo = ServiceLocator.instance.storageRepository;
-    final items = FolderTraversalService.resolveMultiSelection(
-      folderIds: state.selectedFolderIds,
-      fileIds: state.selectedFileIds,
-      allFolders: repo.currentFolders,
-      allFiles: repo.currentFiles,
-    );
-    final stats = FolderTraversalService.calculateStats(items);
-
-    if (stats.totalFiles == 0) {
-      if (!context.mounted) return;
-      await AppDialogs.showInfo(
-        context,
-        title: 'No Files Selected',
-        message: 'The selected item(s) contain no files to download.',
-      );
-      return;
-    }
-
-    if (!context.mounted) return;
-    final ok = await BrowserDialogs.showBatchDownloadConfirmation(
-      context,
-      fileCount: stats.totalFiles,
-      totalSizeMb: stats.totalSizeMb,
-    );
-
-    if (ok == true && context.mounted) {
-      context.read<BrowserBloc>().add(BatchDownload(
-            conflictResolver: (fileName) =>
-                AppDialogs.showFileConflictDialog(context,
-                    fileName: fileName, isBatch: true),
-          ));
-    }
   }
 }

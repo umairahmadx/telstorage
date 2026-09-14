@@ -7,6 +7,7 @@ import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/models/folder_record.dart';
 import 'package:telstorage/core/utils/app_mime_helper.dart';
 import 'package:telstorage/features/storage/domain/repositories/storage_repository_contract.dart';
+import 'package:telstorage/features/storage/data/repositories/storage_repository.dart';
 import 'browser_event.dart';
 
 /// Helper methods for sorting and filtering directory files and folders.
@@ -50,8 +51,12 @@ abstract final class BrowserFilterHelper {
 
     final Map<String, int> counts = {};
     for (final f in rawFolders) {
+      final isSynced = repository is StorageRepository
+          ? repository.isFolderPartitionSynced(f.id)
+          : true;
       final localCount = repository.getFilesInFolderCount(f.id);
-      counts[f.id] = localCount > 0 ? localCount : f.itemCount;
+      counts[f.id] =
+          isSynced ? localCount : (localCount > 0 ? localCount : f.itemCount);
     }
 
     return (

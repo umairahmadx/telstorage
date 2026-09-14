@@ -28,6 +28,19 @@ class _CacheSettingsScreenState extends State<CacheSettingsScreen> {
   void initState() {
     super.initState();
     _loadStats();
+    ServiceLocator.instance.cacheManager.cacheChangeNotifier
+        .addListener(_onCacheChanged);
+  }
+
+  @override
+  void dispose() {
+    ServiceLocator.instance.cacheManager.cacheChangeNotifier
+        .removeListener(_onCacheChanged);
+    super.dispose();
+  }
+
+  void _onCacheChanged() {
+    if (mounted) _loadStats();
   }
 
   Future<void> _loadStats() async {

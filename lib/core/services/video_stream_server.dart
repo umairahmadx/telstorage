@@ -50,7 +50,6 @@ class VideoStreamServer {
   final Map<String, Future<Map<int, ChunkInfo>>> _inFlightMetadata = {}; // In-flight metadata
   final Map<String, Map<int, ChunkInfo>> _metadataCache = {}; // Validated metadata cache
 
-  ChunkFetcher? _chunkFetcherForTesting;
   FileRecordProvider? _fileRecordProviderForTesting;
   final VideoPrefetchCoordinator _prefetchCoordinator = VideoPrefetchCoordinator();
   final VideoStreamPipeliner _pipeliner = VideoStreamPipeliner();
@@ -96,7 +95,6 @@ class VideoStreamServer {
 
   /// Sets custom chunk fetcher for unit test isolation.
   void setChunkFetcherForTesting(ChunkFetcher? fetcher) {
-    _chunkFetcherForTesting = fetcher;
     if (fetcher != null) {
       _prefetchCoordinator.setDownloaderForTesting(
         (record, chunkIdx, priority) => fetcher(record.fileId, chunkIdx, record.chunkCount),
@@ -192,7 +190,6 @@ class VideoStreamServer {
       _activeFiles.clear();
       _metadataCache.clear();
       _inFlightMetadata.clear();
-      _chunkFetcherForTesting = null;
       _fileRecordProviderForTesting = null;
       _prefetchCoordinator.setDownloaderForTesting(null);
       _pipeliner.setStreamFetcherForTesting(null);
@@ -268,8 +265,34 @@ class VideoStreamServer {
       videoEndInZip = regFile.videoEndInZip ?? 0;
     } else if (record.chunkCount > 1) {
       try {
-        final chunk0Bytes = await _getOrFetchChunk(record, 0, chunkMap: chunkMap);
-        final zipHeader = ZipHeaderInfo.tryParse(chunk0Bytes);
+        final cached0 = await VideoChunkCacheManager.instance.getCachedChunk(record.fileId, 0);
+        Uint8List? headerBytes;
+        if (cached0 != null && cached0.existsSync()) {
+          headerBytes = await cached0.readAsBytes();
+        } else {
+          final targetChunk = chunkMap?[1] ?? chunkMap?[0];
+          final targetFileId = targetChunk?.fileId;
+          if (targetFileId != null && targetFileId.isNotEmpty) {
+            try {
+              final stream = await ServiceLocator.instance.telegram.streamByFileId(
+                targetFileId,
+                priority: RequestPriority.immediate,
+                startByte: 0,
+                endByte: 512,
+              );
+              final chunks = await stream.take(1).toList();
+              if (chunks.isNotEmpty) headerBytes = Uint8List.fromList(chunks.first);
+            } catch (_) {
+              try {
+                headerBytes = await ServiceLocator.instance.telegram.downloadByFileId(
+                  targetFileId,
+                  RequestPriority.immediate,
+                );
+              } catch (_) {}
+            }
+          }
+        }
+        final zipHeader = headerBytes != null ? ZipHeaderInfo.tryParse(headerBytes) : null;
         if (zipHeader != null) {
           if (zipHeader.compressionMethod != 0) {
             AppLogger.w(
@@ -346,7 +369,7 @@ class VideoStreamServer {
       final endChunk = zEnd ~/ partSize;
 
       if (record.chunkCount > 1) {
-        _prefetchCoordinator.onChunkRequested(record, endChunk, chunkMap: chunkMap);
+        _prefetchCoordinator.onChunkRequested(record, startChunk, chunkMap: chunkMap);
       }
 
       var totalWritten = 0;
@@ -403,32 +426,7 @@ class VideoStreamServer {
     return '${record.fileId}:${record.metadataFileId ?? "direct"}';
   }
 
-  Future<Uint8List> _getOrFetchChunk(
-    FileRecord record,
-    int chunkIdx, {
-    Map<int, ChunkInfo>? chunkMap,
-  }) async {
-    final cached = await VideoChunkCacheManager.instance.getCachedChunk(record.fileId, chunkIdx);
-    if (cached != null && cached.existsSync()) {
-      return await cached.readAsBytes();
-    }
 
-    final cacheKey = '${record.fileId}:$chunkIdx';
-    if (_inFlightFetches.containsKey(cacheKey)) {
-      return await _inFlightFetches[cacheKey]!;
-    }
-
-    final future = _executeChunkFetch(record, chunkIdx, chunkMap: chunkMap);
-    _inFlightFetches[cacheKey] = future;
-
-    try {
-      final bytes = await future;
-      await VideoChunkCacheManager.instance.saveChunk(record.fileId, chunkIdx, bytes);
-      return bytes;
-    } finally {
-      _inFlightFetches.remove(cacheKey);
-    }
-  }
 
   Future<Map<int, ChunkInfo>> _getOrFetchMetadata(FileRecord record) {
     final key = _cacheKey(record);
@@ -464,34 +462,5 @@ class VideoStreamServer {
       chunkCount: record.chunkCount,
       metaBytes: metaBytes,
     );
-  }
-
-  Future<Uint8List> _executeChunkFetch(
-    FileRecord record,
-    int chunkIdx, {
-    Map<int, ChunkInfo>? chunkMap,
-  }) async {
-    if (_chunkFetcherForTesting != null) {
-      return _chunkFetcherForTesting!(record.fileId, chunkIdx, record.chunkCount);
-    }
-
-    final telegram = ServiceLocator.instance.telegram;
-    if (record.metadataFileId != null && record.metadataFileId!.trim().isNotEmpty) {
-      final map = chunkMap ?? await _getOrFetchMetadata(record);
-      // Primary: 1-based indexing; Fallback: legacy 0-based indexing
-      final targetChunk = map[chunkIdx + 1] ?? map[chunkIdx];
-      if (targetChunk?.fileId?.isNotEmpty == true) {
-        return await telegram.downloadByFileId(targetChunk!.fileId!, RequestPriority.immediate);
-      }
-
-      if (record.chunkCount == 1 && chunkIdx == 0 && record.fileId.isNotEmpty) {
-        return await telegram.downloadByFileId(record.fileId, RequestPriority.immediate);
-      }
-
-      throw Exception('Chunk ${chunkIdx + 1} not found in validated metadata for ${record.fileId}');
-    } else if (record.chunkCount == 1 && chunkIdx == 0) {
-      return await telegram.downloadByFileId(record.fileId, RequestPriority.immediate);
-    }
-    throw Exception('Cannot fetch chunk $chunkIdx for ${record.fileId} without metadata');
   }
 }

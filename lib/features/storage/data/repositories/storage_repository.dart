@@ -45,37 +45,21 @@ class StorageRepository implements StorageRepositoryContract {
 
   // ── Stats & Metadata ──────────────────────────────────────────────────
 
-  Future<AppMetadata> getAppMetadata() async {
-    return _metadataService.fetch();
-  }
+  Future<AppMetadata> getAppMetadata() => _metadataService.fetch();
+  double getTotalSizeMb() => _hive.totalSizeMb;
+  int getTotalFiles() => _hive.totalFiles;
+  Future<String?> getUserEmail() => AuthService.instance.getEmail();
+  int getTotalShares() => ServiceLocator.instance.webShareQueue.allShares.length;
 
-  double getTotalSizeMb() {
-    return _hive.totalSizeMb;
-  }
+  WebShareJob? getWebShareJob(String fileId) => ServiceLocator
+      .instance.webShareQueue.allShares
+      .where((s) => s.fileId == fileId)
+      .firstOrNull;
 
-  int getTotalFiles() {
-    return _hive.totalFiles;
-  }
-
-  Future<String?> getUserEmail() async {
-    return AuthService.instance.getEmail();
-  }
-
-  int getTotalShares() {
-    return ServiceLocator.instance.webShareQueue.allShares.length;
-  }
-
-  WebShareJob? getWebShareJob(String fileId) {
-    return ServiceLocator.instance.webShareQueue.allShares
-        .where((s) => s.fileId == fileId)
-        .firstOrNull;
-  }
-
-  int getTotalCompletedDownloads() {
-    return ServiceLocator.instance.downloadQueue.allJobs
-        .where((j) => j.isComplete)
-        .length;
-  }
+  int getTotalCompletedDownloads() => ServiceLocator
+      .instance.downloadQueue.allJobs
+      .where((j) => j.isComplete)
+      .length;
 
   @override
   List<FileRecord> get currentFiles => _hive.allFiles;
@@ -118,36 +102,27 @@ class StorageRepository implements StorageRepositoryContract {
   }
 
   @override
-  FileRecord? getFile(String fileId) {
-    return _hive.getFile(fileId);
-  }
+  FileRecord? getFile(String fileId) => _hive.getFile(fileId);
 
   @override
-  FolderRecord? getFolder(String folderId) {
-    return _hive.getFolder(folderId);
-  }
+  FolderRecord? getFolder(String folderId) => _hive.getFolder(folderId);
 
   @override
-  int getFilesInFolderCount(String folderId) {
-    return _hive.filesInFolder(folderId).length +
-        _hive.subfolders(folderId).length;
-  }
+  int getFilesInFolderCount(String folderId) =>
+      _hive.filesInFolder(folderId).length + _hive.subfolders(folderId).length;
+
+  bool isFolderPartitionSynced(String folderId) =>
+      _hive.getFolderPartitionMessageId(folderId) != null;
 
   // ── Read Operations (Offline-First) ───────────────────────────────────
 
   @override
-  List<FolderRecord> getFolders(String? parentId) {
-    return _hive.subfolders(parentId);
-  }
+  List<FolderRecord> getFolders(String? parentId) => _hive.subfolders(parentId);
 
   @override
-  List<FileRecord> getFiles(String? folderId) {
-    return _hive.filesInFolder(folderId);
-  }
+  List<FileRecord> getFiles(String? folderId) => _hive.filesInFolder(folderId);
 
-  List<FileRecord> getRecentFiles(int limit) {
-    return _hive.recentFiles(limit);
-  }
+  List<FileRecord> getRecentFiles(int limit) => _hive.recentFiles(limit);
 
   /// Returns all folders below [folderId], including the selected folder.
   Set<String> _folderTreeIds(String folderId) {
@@ -382,15 +357,24 @@ class StorageRepository implements StorageRepositoryContract {
     }
   }
 
+  Future<void> _adjustFolderCount(String? folderId, int delta) async {
+    if (folderId == null) return;
+    final f = _hive.getFolder(folderId);
+    if (f != null) {
+      f.itemCount = (f.itemCount + delta).clamp(0, 999999);
+      await f.save();
+    }
+  }
+
   @override
   Future<void> moveFile(String fileId, String? newFolderId) async {
     final oldFolderId = _hive.getFile(fileId)?.folderId;
-    await _hive.updateFile(
-      fileId,
-      folderId: newFolderId,
-      clearFolderId: newFolderId == null,
-    );
-
+    await _hive.updateFile(fileId,
+        folderId: newFolderId, clearFolderId: newFolderId == null);
+    if (oldFolderId != newFolderId) {
+      await _adjustFolderCount(oldFolderId, -1);
+      await _adjustFolderCount(newFolderId, 1);
+    }
     final pending = PendingAction(
       id: const Uuid().v4(),
       actionType: AppConstants.actionMoveFile,
@@ -398,6 +382,8 @@ class StorageRepository implements StorageRepositoryContract {
       timestamp: DateTime.now(),
     );
     await _pendingBox.put(pending.id, pending);
+    DomainEventBus.instance
+        .fire(FileMovedEvent(fileId, oldFolderId, newFolderId));
     _syncQueue.processQueue();
   }
 
@@ -434,6 +420,7 @@ class StorageRepository implements StorageRepositoryContract {
       );
 
       await _hive.saveFile(copyRecord);
+      await _adjustFolderCount(targetFolderId, 1);
 
       final pending = PendingAction(
         id: const Uuid().v4(),
@@ -467,6 +454,7 @@ class StorageRepository implements StorageRepositoryContract {
       };
 
       await _hive.deleteFile(fileId);
+      await _adjustFolderCount(record.folderId, -1);
       try {
         ServiceLocator.instance.thumbnailRepository.evict(fileId);
         await ChunkResumeService.instance.clearFileCache(record.sha256Hash);

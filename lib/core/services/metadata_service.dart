@@ -222,6 +222,11 @@ class MetadataService {
 
           final fId = ref.folderId ?? 'root';
           partitionBatch.putIfAbsent(fId, () => []).add(ref);
+          if (ref.folderId != null) {
+            for (final f in latestMeta.folders) {
+              if (f.id == ref.folderId) f.itemCount++;
+            }
+          }
 
           latestMeta.recentFiles
               .removeWhere((f) => f.fileId == fileData['file_id']);
@@ -286,11 +291,20 @@ class MetadataService {
       latestMeta.storageUsedMb += sizeMb;
 
       final category = _category(mimeType);
-      latestMeta.categories[category]!.count++;
-      latestMeta.categories[category]!.sizeMb += sizeMb;
+      final catStat = latestMeta.categories.putIfAbsent(
+        category,
+        () => CategoryStat(count: 0, sizeMb: 0.0),
+      );
+      catStat.count++;
+      catStat.sizeMb += sizeMb;
 
       final fId = ref.folderId ?? 'root';
       await _partitionService.saveFileRefsToPartition(latestMeta, fId, [ref]);
+      if (ref.folderId != null) {
+        for (final f in latestMeta.folders) {
+          if (f.id == ref.folderId) f.itemCount++;
+        }
+      }
 
       latestMeta.recentFiles.removeWhere((f) => f.fileId == ref.fileId);
       latestMeta.recentFiles.insert(0, ref);
@@ -468,17 +482,11 @@ class MetadataService {
     if (mimeType.startsWith('video/')) return 'videos';
     if (mimeType.startsWith('audio/')) return 'audio';
     final isDoc = mimeType == 'application/pdf' ||
-        mimeType.contains('document') ||
-        mimeType.contains('text') ||
-        mimeType.contains('sheet') ||
-        mimeType.contains('presentation');
+        const ['document', 'text', 'sheet', 'presentation']
+            .any(mimeType.contains);
     if (isDoc) return 'documents';
-    final isArchive = mimeType.contains('zip') ||
-        mimeType.contains('compressed') ||
-        mimeType.contains('tar') ||
-        mimeType.contains('rar') ||
-        mimeType.contains('7z');
-    if (isArchive) return 'archives';
-    return 'others';
+    final isArchive =
+        const ['zip', 'compressed', 'tar', 'rar', '7z'].any(mimeType.contains);
+    return isArchive ? 'archives' : 'others';
   }
 }

@@ -238,15 +238,15 @@ class SyncService {
     final pendingSets = _getPendingSets();
 
     if (cloudMessageId == null) {
-      // No partition in cloud yet (empty or newly created)
-      _cleanStaleLocalFilesInFolder(targetFolderId, const {}, pendingSets);
+      // No partition in cloud yet (empty or newly created).
+      // Preserve local files since the cloud partition has not been uploaded yet.
       await _hive.setFolderPartitionMessageId(folderId, 0);
       return true;
     }
 
     final partition = await _metadata.fetchFolderPartition(folderId);
     if (partition == null) {
-      _cleanStaleLocalFilesInFolder(targetFolderId, const {}, pendingSets);
+      // Partition fetch returned null; preserve local state without cleaning.
       await _hive.setFolderPartitionMessageId(folderId, cloudMessageId);
       return true;
     }

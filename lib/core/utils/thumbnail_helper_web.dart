@@ -38,4 +38,6 @@ class ThumbnailHelper {
   static Future<void> deleteCachedThumbnail(String fileId) async {}
 
   static ImageProvider? imageProviderFromPath(String path) => null;
+
+  static Future<Uint8List?> readFileBytes(String path) async => null;
 }

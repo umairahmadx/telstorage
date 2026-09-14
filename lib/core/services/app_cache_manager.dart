@@ -88,6 +88,14 @@ class AppCacheManager {
 
   static const String _prefCacheLimitKey = 'app_cache_limit_mb';
 
+  /// Listenable notifier bumped whenever any cache partition is mutated.
+  final ValueNotifier<int> cacheChangeNotifier = ValueNotifier(0);
+
+  /// Broadcasts cache mutation event across active UI components.
+  void notifyCacheChanged() {
+    cacheChangeNotifier.value++;
+  }
+
   /// Default cache ceiling in megabytes (250 MB).
   static const int defaultCacheLimitMb = 250;
 
@@ -289,6 +297,7 @@ class AppCacheManager {
     await clearImageCache();
     await clearTempCache();
     await clearFolderPartitionCache();
+    notifyCacheChanged();
     AppLogger.i('All local cache partitions successfully flushed',
         tag: 'AppCacheManager');
   }

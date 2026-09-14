@@ -242,18 +242,17 @@ class UploadService implements UploadServiceContract {
               } catch (_) {}
 
               internalOnProgress(0.0, 'Uploading thumbnail…');
+              final thumbName = name.toLowerCase().endsWith('.$ext')
+                  ? 'thumb_$name'
+                  : 'thumb_$name.$ext';
               final thumbUpload = await _telegram.uploadBytesWithFileId(
                 thumbBytes,
-                '.thumb_$name.$ext',
+                thumbName,
               );
               thumbnailFileId = thumbUpload['file_id'] as String?;
               thumbnailMessageId = thumbUpload['message_id'] as int?;
-              if (thumbnailFileId != null) {
-                await resume.saveThumbnailFileId(hash, thumbnailFileId);
-              }
-              if (thumbnailMessageId != null) {
-                await resume.saveThumbnailMessageId(hash, thumbnailMessageId);
-              }
+              if (thumbnailFileId != null) await resume.saveThumbnailFileId(hash, thumbnailFileId);
+              if (thumbnailMessageId != null) await resume.saveThumbnailMessageId(hash, thumbnailMessageId);
             }
           } catch (e) {
             AppLogger.e('Thumbnail upload step failed for $name: $e',

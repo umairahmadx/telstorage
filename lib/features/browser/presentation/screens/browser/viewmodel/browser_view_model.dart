@@ -68,7 +68,11 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
 
   /// Sets up reactive database and event bus listeners.
   void _initSubscriptions() {
-    if (_isCustomRepo || !ServiceLocator.instance.isInitialized) return;
+    if (_isCustomRepo ||
+        !ServiceLocator.instance.isInitialized ||
+        _foldersSubscription != null) {
+      return;
+    }
 
     _foldersSubscription = ServiceLocator.instance.hive.foldersListenable.value
         .watch()
@@ -91,6 +95,7 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
   /// Handles directory loading and offline synchronization check.
   Future<void> _onLoadDirectory(
       LoadDirectory event, Emitter<BrowserState> emit) async {
+    if (_foldersSubscription == null) _initSubscriptions();
     final isFolderChange = event.folderId != state.currentFolderId;
     final activeQuery = isFolderChange ? '' : state.searchQuery;
     final local = BrowserFilterHelper.loadAndFilterContents(

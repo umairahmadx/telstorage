@@ -3,7 +3,9 @@
  * Description: Widget card displaying local multi-partition cache overview and opening the cache management screen.
  */
 
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:telstorage/core/events/domain_event_bus.dart';
 import 'package:telstorage/core/services/app_cache_manager.dart';
 import 'package:telstorage/core/services/service_locator.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
@@ -21,11 +23,32 @@ class SettingsCacheCard extends StatefulWidget {
 
 class _SettingsCacheCardState extends State<SettingsCacheCard> {
   CachePartitionStats? _stats;
+  StreamSubscription? _eventSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadStats();
+    AppCacheManager.instance.cacheChangeNotifier.addListener(_onCacheChanged);
+    _eventSubscription = DomainEventBus.instance.stream.listen((event) {
+      if (event is CacheUpdatedEvent ||
+          event is FileUploadedEvent ||
+          event is FileDeletedEvent ||
+          event is SyncCompletedEvent) {
+        _loadStats();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    AppCacheManager.instance.cacheChangeNotifier.removeListener(_onCacheChanged);
+    _eventSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _onCacheChanged() {
+    if (mounted) _loadStats();
   }
 
   Future<void> _loadStats() async {

@@ -49,7 +49,6 @@ class FakeStorageRepository implements StorageRepositoryContract {
   @override
   List<FileRecord> getFiles(String? folderId) => [];
   @override
-  @override
   int getFilesInFolderCount(String folderId) => 0;
   @override
   FolderStats getFolderStats(String folderId) =>

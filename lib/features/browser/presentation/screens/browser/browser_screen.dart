@@ -202,20 +202,20 @@ class _BrowserScreenState extends State<BrowserScreen> {
                               _handleBatchDownload(context, state),
                           onDelete: () =>
                               context.read<BrowserBloc>().add(BatchDelete()),
-                          onMove: () =>
-                              context.read<BrowserBloc>().add(SetClipboard(
-                                    mode: ClipboardMode.move,
-                                    fileIds: state.selectedFileIds,
-                                    folderIds: state.selectedFolderIds,
-                                    sourceFolderId: state.currentFolderId,
-                                  )),
-                          onCopy: () =>
-                              context.read<BrowserBloc>().add(SetClipboard(
-                                    mode: ClipboardMode.copy,
-                                    fileIds: state.selectedFileIds,
-                                    folderIds: state.selectedFolderIds,
-                                    sourceFolderId: state.currentFolderId,
-                                  )),
+                          onMove: () => context.read<BrowserBloc>().add(
+                                SetClipboard(
+                                  mode: ClipboardMode.move,
+                                  fileIds: state.selectedFileIds,
+                                  folderIds: state.selectedFolderIds,
+                                  sourceFolderId: state.currentFolderId,
+                                )),
+                          onCopy: () => context.read<BrowserBloc>().add(
+                                SetClipboard(
+                                  mode: ClipboardMode.copy,
+                                  fileIds: state.selectedFileIds,
+                                  folderIds: state.selectedFolderIds,
+                                  sourceFolderId: state.currentFolderId,
+                                )),
                         );
                       }),
                   ],
@@ -229,8 +229,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
                     bottom: state.isMultiSelect ? 76 : 16,
                     child: BrowserFloatingClipboardBar(
                       state: state,
-                      onCancel: () =>
-                          context.read<BrowserBloc>().add(ClearClipboard()),
+                      onCancel: () => context.read<BrowserBloc>().add(ClearClipboard()),
                       onPaste: () => context
                           .read<BrowserBloc>()
                           .add(PasteClipboard(state.currentFolderId)),
@@ -300,12 +299,10 @@ class _BrowserScreenState extends State<BrowserScreen> {
           title: 'No internet connection',
           subtitle: 'Connect to the internet to load this folder.',
           buttonText: 'Retry',
-          onAction: () {
-            context.read<BrowserBloc>().add(LoadDirectory(
-                  folderId: state.currentFolderId,
-                  category: state.category,
-                ));
-          },
+          onAction: () => context.read<BrowserBloc>().add(LoadDirectory(
+                folderId: state.currentFolderId,
+                category: state.category,
+              )),
         );
       }
       return const AppEmptyState(
@@ -321,17 +318,15 @@ class _BrowserScreenState extends State<BrowserScreen> {
         onToggleSelection: (id, {required isFolder}) => context
             .read<BrowserBloc>()
             .add(ToggleItemSelection(id, isFolder: isFolder)),
-        onOpenFolder: (folderId) =>
-            context.read<BrowserBloc>().add(LoadDirectory(folderId: folderId)),
+        onOpenFolder: (id) =>
+            context.read<BrowserBloc>().add(LoadDirectory(folderId: id)),
       );
     }
 
+    final isMove = state.clipboardMode == ClipboardMode.move;
     bool isCutFolder(String id) =>
-        state.clipboardMode == ClipboardMode.move &&
-        state.clipboardFolderIds.contains(id);
-    bool isCutFile(String id) =>
-        state.clipboardMode == ClipboardMode.move &&
-        state.clipboardFileIds.contains(id);
+        isMove && state.clipboardFolderIds.contains(id);
+    bool isCutFile(String id) => isMove && state.clipboardFileIds.contains(id);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
@@ -431,6 +426,23 @@ class _BrowserScreenState extends State<BrowserScreen> {
             }
             return tile;
           }),
+        ] else if (state.isLoading) ...[
+          const AppSectionLabel(label: 'Files'),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Theme.of(context)
+                      .extension<AppColorsExtension>()
+                      ?.accentPrimary,
+                ),
+              ),
+            ),
+          ),
         ],
       ],
     );
@@ -438,9 +450,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
 
   Future<void> _handleBatchDownload(
       BuildContext context, BrowserState state) async {
-    if (state.selectedFolderIds.isEmpty && state.selectedFileIds.isEmpty) {
-      return;
-    }
+    if (state.selectedFolderIds.isEmpty && state.selectedFileIds.isEmpty) return;
 
     if (!await Connectivity.hasConnection()) {
       if (!context.mounted) return;

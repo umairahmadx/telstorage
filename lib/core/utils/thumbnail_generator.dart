@@ -120,47 +120,52 @@ class ThumbnailGenerator {
       final lowerName = filename.toLowerCase();
       final fileExt = lowerName.contains('.') ? lowerName.split('.').last : '';
 
+      Uint8List? effectiveBytes = bytes;
+      if (effectiveBytes == null && filePath != null && filePath.isNotEmpty) {
+        effectiveBytes = await ThumbnailHelper.readFileBytes(filePath);
+      }
+
       if (mimeType.startsWith('video/')) {
         thumbBytes = await generateVideoThumbnail(
-          bytes ?? Uint8List(0),
+          effectiveBytes ?? Uint8List(0),
           filename,
           sourceFilePath: filePath,
         );
-        if (thumbBytes == null && bytes != null && bytes.isNotEmpty) {
+        if (thumbBytes == null && effectiveBytes != null && effectiveBytes.isNotEmpty) {
           thumbBytes = await generateImageThumbnail(
-            bytes,
+            effectiveBytes,
             filename: filename,
             mimeType: mimeType,
           );
         }
-      } else if (bytes != null) {
+      } else if (effectiveBytes != null) {
         if (mimeType.startsWith('image/') ||
             AppMimeHelper.isImageExtension(filename)) {
           thumbBytes = await generateImageThumbnail(
-            bytes,
+            effectiveBytes,
             filename: filename,
             mimeType: mimeType,
           );
         } else if (mimeType == 'application/pdf' || fileExt == 'pdf') {
-          thumbBytes = await generatePdfThumbnail(bytes);
+          thumbBytes = await generatePdfThumbnail(effectiveBytes);
         } else if (fileExt == 'apk' ||
             mimeType.contains('android.package-archive')) {
-          thumbBytes = await generateApkThumbnail(bytes);
+          thumbBytes = await generateApkThumbnail(effectiveBytes);
         } else if (codeExtensions.contains(fileExt) ||
             mimeType.startsWith('text/') ||
             mimeType.contains('json') ||
             mimeType.contains('javascript')) {
-          thumbBytes = await generateCodeThumbnail(bytes, filename);
+          thumbBytes = await generateCodeThumbnail(effectiveBytes, filename);
         }
       }
 
       if (thumbBytes == null &&
-          bytes != null &&
+          effectiveBytes != null &&
           (mimeType.startsWith('image/') ||
               AppMimeHelper.isImageExtension(filename))) {
         try {
           thumbBytes = await generateImageThumbnail(
-            bytes,
+            effectiveBytes,
             filename: filename,
             mimeType: mimeType,
           );

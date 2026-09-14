@@ -39,6 +39,18 @@ class FileCopiedEvent extends DomainEvent {
   FileCopiedEvent(this.originalFileId, this.newFileId);
 }
 
+class FileMovedEvent extends DomainEvent {
+  final String fileId;
+  final String? oldFolderId;
+  final String? newFolderId;
+  FileMovedEvent(this.fileId, this.oldFolderId, this.newFolderId);
+}
+
+class CacheUpdatedEvent extends DomainEvent {
+  final String? partition;
+  CacheUpdatedEvent([this.partition]);
+}
+
 // ── Folder Lifecycle Events ───────────────────────────────────────────────────
 
 class FolderCreatedEvent extends DomainEvent {

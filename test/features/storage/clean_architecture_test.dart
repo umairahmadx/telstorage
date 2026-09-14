@@ -40,6 +40,7 @@ class MockStorageRepository implements StorageRepositoryContract {
   @override
   int getFilesInFolderCount(String folderId) => 0;
 
+
   @override
   FolderStats getFolderStats(String folderId) => const FolderStats(
         fileCount: 0,

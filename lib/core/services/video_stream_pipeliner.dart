@@ -9,6 +9,7 @@ import 'dart:math';
 import '../models/chunk_info.dart';
 import '../models/file_record.dart';
 import '../utils/app_logger.dart';
+import 'app_cache_manager.dart';
 import 'service_locator.dart';
 import 'telegram_rate_limiter.dart';
 import 'video_chunk_cache_manager.dart';
@@ -145,6 +146,8 @@ class VideoStreamPipeliner {
               try {
                 targetFile.setLastModifiedSync(DateTime.now());
               } catch (_) {}
+              VideoChunkCacheManager.instance.chunkChangeNotifier.value++;
+              AppCacheManager.instance.notifyCacheChanged();
               unawaited(VideoChunkCacheManager.instance.evictOldestIfNeeded(
                 activeFileId: record.fileId,
               ));

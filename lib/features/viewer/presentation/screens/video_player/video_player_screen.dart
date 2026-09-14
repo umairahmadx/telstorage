@@ -3,6 +3,8 @@
  * Description: Fullscreen in-app video player with gesture controls, local HTTP proxy streaming, and glassmorphic overlays.
  */
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
@@ -86,6 +88,7 @@ class VideoPlayerScreen extends StatefulWidget {
 class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   late final VideoPlayerViewModel _viewModel;
   late int _currentIndex;
+  Timer? _orientationTimer;
 
   @override
   void initState() {
@@ -114,6 +117,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
   @override
   void dispose() {
+    _orientationTimer?.cancel();
     // Restore global portrait lock when leaving video player
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
@@ -138,6 +142,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   }
 
   void _toggleOrientation() {
+    _orientationTimer?.cancel();
     final isPortrait = MediaQuery.orientationOf(context) == Orientation.portrait;
     if (isPortrait) {
       SystemChrome.setPreferredOrientations([
@@ -149,8 +154,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         DeviceOrientation.portraitUp,
       ]);
     }
-    // Re-enable all orientations after brief delay so sensor auto-rotate remains fluid
-    Future.delayed(const Duration(milliseconds: 600), () {
+    // Keep orientation locked for 3.5s grace period so user can physically
+    // turn the device before dynamic gyro auto-rotation is re-enabled.
+    _orientationTimer = Timer(const Duration(milliseconds: 3500), () {
       if (mounted) {
         SystemChrome.setPreferredOrientations([
           DeviceOrientation.portraitUp,

@@ -10,6 +10,7 @@ import 'package:telstorage/features/viewer/presentation/screens/video_player/vid
 import 'package:telstorage/shared/widgets/tiles/app_file_grid_tile.dart';
 import 'package:telstorage/shared/widgets/tiles/app_folder_grid_tile.dart';
 import 'package:telstorage/shared/widgets/typography/app_section_label.dart';
+import 'package:telstorage/core/theme/app_colors_extension.dart';
 import '../viewmodel/browser_view_model.dart';
 import 'browser_dialogs.dart';
 
@@ -168,6 +169,30 @@ class BrowserGridContent extends StatelessWidget {
                   return tile;
                 },
                 childCount: state.files.length,
+              ),
+            ),
+          ),
+        ] else if (state.isLoading) ...[
+          const SliverPadding(
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+            sliver: SliverToBoxAdapter(
+              child: AppSectionLabel(label: 'Files'),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Theme.of(context)
+                        .extension<AppColorsExtension>()
+                        ?.accentPrimary,
+                  ),
+                ),
               ),
             ),
           ),

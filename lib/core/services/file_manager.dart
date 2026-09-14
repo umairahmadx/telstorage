@@ -428,7 +428,7 @@ class FileManagerService {
       record.metadataFileId,
     );
 
-    fileMeta['id'] = newFileId;
+    fileMeta['file_id'] = newFileId;
     fileMeta['name'] = newName;
     fileMeta['folder_id'] = targetFolderId;
     fileMeta['uploaded_at'] = DateTime.now().toIso8601String();

@@ -84,4 +84,15 @@ class ThumbnailHelper {
 
   static ImageProvider? imageProviderFromPath(String path) =>
       FileImage(File(path));
+
+  /// Reads binary payload from a local file path if accessible.
+  static Future<Uint8List?> readFileBytes(String path) async {
+    try {
+      final file = File(path);
+      if (await file.exists()) {
+        return await file.readAsBytes();
+      }
+    } catch (_) {}
+    return null;
+  }
 }

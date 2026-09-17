@@ -7,6 +7,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:telstorage/core/models/file_record.dart';
@@ -221,6 +222,7 @@ class FakeStreamTelegramService extends TelegramService {
     RequestPriority priority = RequestPriority.immediate,
     int? startByte,
     int? endByte,
+    CancelToken? cancelToken,
   }) async {
     final data = await downloadByFileId(fileId, priority);
     final start = startByte ?? 0;

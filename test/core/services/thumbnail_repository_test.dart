@@ -4,6 +4,7 @@
  */
 
 import 'dart:typed_data';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:telstorage/core/services/telegram_rate_limiter.dart';
 import 'package:telstorage/core/services/telegram_service.dart';
@@ -19,6 +20,7 @@ class FakeTelegramService implements TelegramService {
     RequestPriority priority = RequestPriority.normal,
     int? startByte,
     int? endByte,
+    CancelToken? cancelToken,
   }) async =>
       Stream.value(Uint8List(10));
 
@@ -45,6 +47,7 @@ class FakeTelegramService implements TelegramService {
     String fileId, {
     RequestPriority priority = RequestPriority.normal,
     void Function(int count, int total)? onReceiveProgress,
+    CancelToken? cancelToken,
   }) async =>
       Uint8List(10);
 

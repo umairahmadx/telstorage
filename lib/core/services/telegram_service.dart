@@ -81,6 +81,7 @@ class TelegramService {
       } on TelegramPermissionException {
         rethrow;
       } on DioException catch (e) {
+        if (e.type == DioExceptionType.cancel) rethrow;
         if (e.response?.statusCode == 401) {
           AppLogger.e(
             'Telegram bot token invalid/revoked (HTTP 401). Failing fast.',
@@ -219,8 +220,7 @@ class TelegramService {
   }
 
   /// Slices [bytes] into 64KB subviews to stream continuously to HTTP socket.
-  static Stream<List<int>> _chunkedStream(Uint8List bytes,
-      [int sliceSize = 65536]) async* {
+  static Stream<List<int>> _chunkedStream(Uint8List bytes, [int sliceSize = 65536]) async* {
     for (var offset = 0; offset < bytes.length; offset += sliceSize) {
       final end = (offset + sliceSize).clamp(0, bytes.length);
       yield Uint8List.sublistView(bytes, offset, end);
@@ -228,10 +228,9 @@ class TelegramService {
   }
 
   /// Resolves the remote Telegram CDN download URL for a given file ID.
-  Future<String> _resolveDownloadUrl(String fileId) async {
-    final workerUrl =
-        (dotenv.isInitialized ? dotenv.env['WORKER_URL'] : null) ??
-            'https://telstorage-proxy.umair-ahmed-64422.workers.dev';
+  Future<String> _resolveDownloadUrl(String fileId, {CancelToken? cancelToken}) async {
+    final workerUrl = (dotenv.isInitialized ? dotenv.env['WORKER_URL'] : null) ??
+        'https://telstorage-proxy.umair-ahmed-64422.workers.dev';
 
     final getFileEndpoint = '$_base/getFile';
     final requestGetFileUrl = kIsWeb
@@ -241,6 +240,7 @@ class TelegramService {
     final filePathRes = await _dio.get(
       requestGetFileUrl,
       queryParameters: kIsWeb ? null : {'file_id': fileId},
+      cancelToken: cancelToken,
     );
 
     final filePath = filePathRes.data['result']['file_path'] as String;
@@ -259,16 +259,18 @@ class TelegramService {
     String fileId, {
     RequestPriority priority = RequestPriority.normal,
     void Function(int count, int total)? onReceiveProgress,
+    CancelToken? cancelToken,
   }) async {
     return _withRetry(() async {
       await TelegramRateLimiter.instance.acquire(priority);
       try {
         AppLogger.d('Downloading file with file_id: $fileId', tag: 'TelegramService');
-        final downloadUrl = await _resolveDownloadUrl(fileId);
+        final downloadUrl = await _resolveDownloadUrl(fileId, cancelToken: cancelToken);
         final fileRes = await _dio.get(
           downloadUrl,
           options: Options(responseType: ResponseType.bytes),
           onReceiveProgress: onReceiveProgress,
+          cancelToken: cancelToken,
         );
         final bytes = Uint8List.fromList(fileRes.data as List<int>);
         AppLogger.d('Downloaded ${bytes.length} bytes', tag: 'TelegramService');
@@ -288,6 +290,7 @@ class TelegramService {
     RequestPriority priority = RequestPriority.normal,
     int? startByte,
     int? endByte,
+    CancelToken? cancelToken,
   }) async {
     if (!_isInitialized) {
       final bytes = await downloadByFileId(fileId, priority);
@@ -299,7 +302,7 @@ class TelegramService {
       await TelegramRateLimiter.instance.acquire(priority);
       try {
         AppLogger.d('Streaming file with file_id: $fileId', tag: 'TelegramService');
-        final downloadUrl = await _resolveDownloadUrl(fileId);
+        final downloadUrl = await _resolveDownloadUrl(fileId, cancelToken: cancelToken);
         final headers = <String, String>{};
         if (startByte != null) {
           headers['Range'] = 'bytes=$startByte-${endByte ?? ""}';
@@ -310,6 +313,7 @@ class TelegramService {
             responseType: ResponseType.stream,
             headers: headers.isNotEmpty ? headers : null,
           ),
+          cancelToken: cancelToken,
         );
         final body = res.data;
         if (body == null) throw Exception('Empty stream response for file_id $fileId');
@@ -465,12 +469,7 @@ class TelegramService {
   Future<void> unpinAllMessages() async {
     await TelegramRateLimiter.instance.acquire();
     try {
-      final response = await _dio.post(
-        '$_base/unpinAllChatMessages',
-        data: {
-          'chat_id': _channelId,
-        },
-      );
+      final response = await _dio.post('$_base/unpinAllChatMessages', data: {'chat_id': _channelId});
 
       if (response.data['ok'] != true) {
         AppLogger.w('unpinAllMessages warning: ${response.data['description']}',

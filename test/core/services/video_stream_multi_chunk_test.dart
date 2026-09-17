@@ -6,6 +6,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/services/service_locator.dart';
@@ -407,9 +408,35 @@ class FakeMultiStreamTelegram extends TelegramService {
   Future<Uint8List> downloadByFileId(
     String fileId, [
     RequestPriority priority = RequestPriority.normal,
-  ]) async {
+    CancelToken? cancelToken,
+  ]) => downloadByFileIdWithProgress(fileId, priority: priority, cancelToken: cancelToken);
+
+  @override
+  Future<Uint8List> downloadByFileIdWithProgress(
+    String fileId, {
+    RequestPriority priority = RequestPriority.normal,
+    void Function(int count, int total)? onReceiveProgress,
+    CancelToken? cancelToken,
+  }) async {
     final data = files[fileId];
-    if (data != null) return data;
+    if (data != null) {
+      onReceiveProgress?.call(data.length, data.length);
+      return data;
+    }
     throw Exception('File not found in fake telegram: $fileId');
+  }
+
+  @override
+  Future<Stream<List<int>>> streamByFileId(
+    String fileId, {
+    RequestPriority priority = RequestPriority.normal,
+    int? startByte,
+    int? endByte,
+    CancelToken? cancelToken,
+  }) async {
+    final data = await downloadByFileId(fileId, priority, cancelToken);
+    final start = startByte ?? 0;
+    final end = (endByte != null && endByte + 1 < data.length) ? endByte + 1 : data.length;
+    return Stream.value(data.sublist(start, end));
   }
 }

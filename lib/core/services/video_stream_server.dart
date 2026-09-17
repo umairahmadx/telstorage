@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/chunk_info.dart';
 import '../models/file_record.dart';
@@ -88,6 +89,7 @@ class VideoStreamServer {
         _cacheGeneration++;
         _metadataCache.removeWhere((k, _) => k.startsWith('$fileId:'));
         _inFlightMetadata.removeWhere((k, _) => k.startsWith('$fileId:'));
+        _pipeliner.cancelForFile(fileId);
         _prefetchCoordinator.cancelForFile(fileId);
       }
     }
@@ -185,6 +187,7 @@ class VideoStreamServer {
       _server = null;
       _activePort = null;
       _cacheGeneration++;
+      _pipeliner.cancelAll();
       await _prefetchCoordinator.cancelAll();
       _inFlightFetches.clear();
       _activeFiles.clear();
@@ -264,65 +267,40 @@ class VideoStreamServer {
       headerOffset = regFile.headerOffset ?? 0;
       videoEndInZip = regFile.videoEndInZip ?? 0;
     } else if (record.chunkCount > 1) {
+      ZipHeaderInfo? zipHeader;
       try {
         final cached0 = await VideoChunkCacheManager.instance.getCachedChunk(record.fileId, 0);
-        Uint8List? headerBytes;
         if (cached0 != null && cached0.existsSync()) {
-          headerBytes = await cached0.readAsBytes();
-        } else {
-          final targetChunk = chunkMap?[1] ?? chunkMap?[0];
-          final targetFileId = targetChunk?.fileId;
-          if (targetFileId != null && targetFileId.isNotEmpty) {
-            try {
-              final stream = await ServiceLocator.instance.telegram.streamByFileId(
-                targetFileId,
-                priority: RequestPriority.immediate,
-                startByte: 0,
-                endByte: 512,
-              );
-              final chunks = await stream.take(1).toList();
-              if (chunks.isNotEmpty) headerBytes = Uint8List.fromList(chunks.first);
-            } catch (_) {
-              try {
-                headerBytes = await ServiceLocator.instance.telegram.downloadByFileId(
-                  targetFileId,
-                  RequestPriority.immediate,
-                );
-              } catch (_) {}
-            }
-          }
+          final headerBytes = await cached0.readAsBytes();
+          zipHeader = ZipHeaderInfo.tryParse(headerBytes);
         }
-        final zipHeader = headerBytes != null ? ZipHeaderInfo.tryParse(headerBytes) : null;
-        if (zipHeader != null) {
-          if (zipHeader.compressionMethod != 0) {
-            AppLogger.w(
-              'Unsupported compression method ${zipHeader.compressionMethod} for ${record.fileId}. Only STORE (method 0) is streamable.',
-              tag: 'VideoStreamServer',
-            );
-            request.response.statusCode = HttpStatus.unsupportedMediaType;
-            await request.response.close();
-            return;
-          }
-          final videoSize = zipHeader.uncompressedSize > 0
-              ? zipHeader.uncompressedSize
-              : max(1, (record.sizeMb * 1024 * 1024).round());
-          totalBytes = videoSize;
-          headerOffset = zipHeader.headerOffset;
-          videoEndInZip = headerOffset + videoSize;
-        } else {
-          headerOffset = calculateHeaderOffset(record.name, isZipped: true);
-          videoEndInZip = headerOffset + totalBytes;
+      } catch (_) {}
+
+      if (zipHeader != null) {
+        if (zipHeader.compressionMethod != 0) {
+          AppLogger.w(
+            'Unsupported compression method ${zipHeader.compressionMethod} for ${record.fileId}. Only STORE (method 0) is streamable.',
+            tag: 'VideoStreamServer',
+          );
+          request.response.statusCode = HttpStatus.unsupportedMediaType;
+          await request.response.close();
+          return;
         }
-        if (regFile != null) {
-          regFile.zipHeader = zipHeader;
-          regFile.totalBytes = totalBytes;
-          regFile.headerOffset = headerOffset;
-          regFile.videoEndInZip = videoEndInZip;
-        }
-      } catch (e) {
-        AppLogger.w('Header inspection fallback for $fileId: $e', tag: 'VideoStreamServer');
+        final videoSize = zipHeader.uncompressedSize > 0
+            ? zipHeader.uncompressedSize
+            : max(1, (record.sizeMb * 1024 * 1024).round());
+        totalBytes = videoSize;
+        headerOffset = zipHeader.headerOffset;
+        videoEndInZip = headerOffset + videoSize;
+      } else {
         headerOffset = calculateHeaderOffset(record.name, isZipped: true);
         videoEndInZip = headerOffset + totalBytes;
+      }
+      if (regFile != null) {
+        regFile.zipHeader = zipHeader;
+        regFile.totalBytes = totalBytes;
+        regFile.headerOffset = headerOffset;
+        regFile.videoEndInZip = videoEndInZip;
       }
     }
 
@@ -372,14 +350,17 @@ class VideoStreamServer {
         _prefetchCoordinator.onChunkRequested(record, startChunk, chunkMap: chunkMap);
       }
 
+      final wasActiveAtStart = _activeFiles.containsKey(fileId);
       var totalWritten = 0;
       for (var chunkIdx = startChunk; chunkIdx <= endChunk; chunkIdx++) {
+        if (wasActiveAtStart && !_activeFiles.containsKey(fileId)) break;
+
         final chunkBase = chunkIdx * partSize;
         final sliceStart = max(0, zStart - chunkBase);
         final sliceEnd = min(partSize, zEnd - chunkBase + 1);
 
         if (sliceEnd > sliceStart) {
-          totalWritten += await _pipeliner.pipeChunkRange(
+          final written = await _pipeliner.pipeChunkRange(
             record: record,
             chunkIndex: chunkIdx,
             sliceStart: sliceStart,
@@ -387,7 +368,14 @@ class VideoStreamServer {
             output: request.response,
             chunkMap: chunkMap,
           );
+          totalWritten += written;
+          if (wasActiveAtStart && !_activeFiles.containsKey(fileId)) break;
         }
+      }
+
+      if (wasActiveAtStart && !_activeFiles.containsKey(fileId)) {
+        try { await request.response.close(); } catch (_) {}
+        return;
       }
 
       if (totalWritten != range.length) {
@@ -395,10 +383,23 @@ class VideoStreamServer {
       }
 
       await request.response.close();
+    } on UnsupportedError catch (e) {
+      AppLogger.w('Unsupported media for $fileId: $e', tag: 'VideoStreamServer');
+      try {
+        request.response.contentLength = 0;
+        request.response.headers.removeAll(HttpHeaders.contentRangeHeader);
+        request.response.statusCode = HttpStatus.unsupportedMediaType;
+        await request.response.close();
+      } catch (_) {}
+      return;
     } on SocketException catch (_) {
       // Normal occurrence when video player cancels stream on user seek/scrub
     } on HttpException catch (_) {
       // Normal connection abort
+    } on DioException catch (e) {
+      if (e.type != DioExceptionType.cancel) {
+        AppLogger.w('Dio error streaming $fileId: $e', tag: 'VideoStreamServer');
+      }
     } catch (e, st) {
       AppLogger.e('Streaming error for $fileId range=${range.start}-${range.end}: $e',
           tag: 'VideoStreamServer', error: e, stackTrace: st);

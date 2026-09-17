@@ -6,6 +6,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/services/service_locator.dart';
@@ -467,6 +468,7 @@ class FakeStreamTelegramService extends TelegramService {
   Future<Uint8List> downloadByFileId(
     String fileId, [
     RequestPriority priority = RequestPriority.normal,
+    CancelToken? cancelToken,
   ]) async {
     downloadCallCount++;
     final data = files[fileId];
@@ -480,8 +482,9 @@ class FakeStreamTelegramService extends TelegramService {
     RequestPriority priority = RequestPriority.immediate,
     int? startByte,
     int? endByte,
+    CancelToken? cancelToken,
   }) async {
-    final data = await downloadByFileId(fileId, priority);
+    final data = await downloadByFileId(fileId, priority, cancelToken);
     final start = startByte ?? 0;
     final end = (endByte != null && endByte + 1 < data.length) ? endByte + 1 : data.length;
     return Stream.value(data.sublist(start, end));

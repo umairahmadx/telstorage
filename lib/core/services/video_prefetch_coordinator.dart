@@ -5,6 +5,7 @@
 
 import 'dart:async';
 import 'dart:typed_data';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show ValueNotifier;
 import '../models/chunk_info.dart';
 import '../models/file_record.dart';
@@ -28,6 +29,7 @@ class _PrefetchSession {
   final Set<int> inFlightOrCompleted = {};
   final Map<int, int> inFlightBytes = {};
   final Map<int, int> inFlightTotals = {};
+  final Map<int, CancelToken> inFlightCancelTokens = {};
   Completer<void>? workerCompleter;
 
   _PrefetchSession({
@@ -119,6 +121,10 @@ class VideoPrefetchCoordinator {
         );
         // Abort existing worker and clear pending chunks
         session.isCancelled = true;
+        for (final token in session.inFlightCancelTokens.values) {
+          token.cancel('Prefetch seek re-anchor');
+        }
+        session.inFlightCancelTokens.clear();
         final newSession = _PrefetchSession(
           record: record,
           currentPlaybackChunk: requestedChunk,
@@ -252,11 +258,18 @@ class VideoPrefetchCoordinator {
     }
 
     if (targetFileId != null) {
-      return await telegram.downloadByFileIdWithProgress(
-        targetFileId,
-        priority: RequestPriority.background,
-        onReceiveProgress: onProgress,
-      );
+      final cancelToken = CancelToken();
+      session.inFlightCancelTokens[chunkIdx] = cancelToken;
+      try {
+        return await telegram.downloadByFileIdWithProgress(
+          targetFileId,
+          priority: RequestPriority.background,
+          onReceiveProgress: onProgress,
+          cancelToken: cancelToken,
+        );
+      } finally {
+        session.inFlightCancelTokens.remove(chunkIdx);
+      }
     }
 
     throw StateError('Cannot download chunk $chunkIdx for ${record.fileId} without valid metadata');
@@ -301,6 +314,10 @@ class VideoPrefetchCoordinator {
     final session = _sessions.remove(fileId);
     if (session != null) {
       session.isCancelled = true;
+      for (final token in session.inFlightCancelTokens.values) {
+        token.cancel('Prefetch cancelled for $fileId');
+      }
+      session.inFlightCancelTokens.clear();
       session.inFlightBytes.clear();
       session.inFlightTotals.clear();
       prefetchProgressNotifier.value++;
@@ -316,6 +333,10 @@ class VideoPrefetchCoordinator {
     _sessions.clear();
     for (final session in active) {
       session.isCancelled = true;
+      for (final token in session.inFlightCancelTokens.values) {
+        token.cancel('All prefetching cancelled');
+      }
+      session.inFlightCancelTokens.clear();
       session.inFlightBytes.clear();
       session.inFlightTotals.clear();
     }

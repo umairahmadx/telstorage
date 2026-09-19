@@ -140,59 +140,11 @@ class RegisteredStreamFile {
   /// Reference count of active players holding a handle.
   int refCount;
 
-  /// Cached parsed ZIP local file header info.
-  ZipHeaderInfo? zipHeader;
-
-  /// Cached header offset in bytes.
-  int? headerOffset;
-
   /// Cached exact video content length in bytes.
   int? totalBytes;
 
-  /// Cached exclusive upper bound of video bytes in ZIP-space.
-  int? videoEndInZip;
-
   /// Constructs a RegisteredStreamFile with initial count of 1.
   RegisteredStreamFile(this.file) : refCount = 1;
-}
-
-/// Extracted ZIP local file header metadata for video streaming.
-class ZipHeaderInfo {
-  /// Compression method (0 = STORE, 8 = DEFLATE).
-  final int compressionMethod;
-
-  /// Exact uncompressed size in bytes.
-  final int uncompressedSize;
-
-  /// Byte offset from start of chunk 0 to the start of uncompressed payload data.
-  final int headerOffset;
-
-  /// Constructs a ZipHeaderInfo descriptor.
-  const ZipHeaderInfo({
-    required this.compressionMethod,
-    required this.uncompressedSize,
-    required this.headerOffset,
-  });
-
-  /// Parses ZIP Local File Header from chunk 0 bytes, or null if not a valid ZIP header.
-  static ZipHeaderInfo? tryParse(Uint8List chunk0) {
-    if (chunk0.length < 30) return null;
-    final view = ByteData.sublistView(chunk0);
-    final sig = view.getUint32(0, Endian.little);
-    if (sig != 0x04034b50) return null;
-
-    final method = view.getUint16(8, Endian.little);
-    final uncompressedSize = view.getUint32(22, Endian.little);
-    final nameLen = view.getUint16(26, Endian.little);
-    final extraLen = view.getUint16(28, Endian.little);
-    final headerOffset = 30 + nameLen + extraLen;
-
-    return ZipHeaderInfo(
-      compressionMethod: method,
-      uncompressedSize: uncompressedSize,
-      headerOffset: headerOffset,
-    );
-  }
 }
 
 /// Validates and parses chunk metadata from raw Telegram JSON bytes.

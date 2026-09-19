@@ -370,35 +370,21 @@ class DownloadQueueService {
 
     await TransferConcurrencyCoordinator.instance.runGuarded(() async {
       try {
-        final bytes = await _downloadService.downloadFile(fileRecord,
-            (progress, status) async {
-          if (_isCancelled(fileId)) {
-            throw Exception('Cancelled');
-          }
-          if (isPaused(fileId)) {
-            throw Exception('Paused');
-          }
-          job.progress = progress;
-          await job.save();
-
-          TransferQueueService.instance.updateTask(fileId,
-              progress: progress, currentStage: 'Downloading…');
-        });
-
-        if (_isCancelled(fileId)) {
-          throw Exception('Cancelled');
-        }
-        if (isPaused(fileId)) {
-          throw Exception('Paused');
-        }
-
-        job.progress = 0.95;
-        await job.save();
         final policy =
             _inFlightPolicies[fileId] ?? DownloadConflictPolicy.overwrite;
-        final saveResult = await _downloadService.saveAndOpen(
-          bytes,
-          job.name,
+        final saveResult = await _downloadService.downloadFileToDisk(
+          fileRecord,
+          (progress, status) async {
+            if (_isCancelled(fileId)) throw Exception('Cancelled');
+            if (isPaused(fileId)) throw Exception('Paused');
+            job.progress = progress;
+            await job.save();
+            TransferQueueService.instance.updateTask(
+              fileId,
+              progress: progress,
+              currentStage: status,
+            );
+          },
           subpath: job.subpath,
           policy: policy,
         );

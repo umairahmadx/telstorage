@@ -26,10 +26,7 @@ class TelegramAuthException implements Exception {
 /// Exception thrown when Telegram returns 400 Bad Request indicating missing admin permissions.
 class TelegramPermissionException implements Exception {
   final String message;
-  TelegramPermissionException(
-      [this.message =
-          'Bot needs admin permissions to perform this operation.']);
-
+  TelegramPermissionException([this.message = 'Bot needs admin permissions to perform this operation.']);
   @override
   String toString() => 'TelegramPermissionException: $message';
 }
@@ -327,14 +324,30 @@ class TelegramService {
     }, operationName: 'streamByFileId($fileId)');
   }
 
-  /// Delete a message (used for cleanup)
-  Future<void> deleteMessage(int messageId) async {
-    if (messageId <= 0) return;
-    await TelegramRateLimiter.instance.acquire();
-    try {
-      await _dio.post('$_base/deleteMessage', data: {'chat_id': _channelId, 'message_id': messageId});
-    } catch (_) {}
+  /// Bulk delete messages in batches of up to 100 IDs using POST /deleteMessages.
+  Future<void> deleteMessages(List<int> messageIds) async {
+    final validIds = messageIds.where((id) => id > 0).toSet().toList();
+    if (validIds.isEmpty) return;
+    if (!_isInitialized) {
+      AppLogger.w('deleteMessages skipped: uninitialized', tag: 'TelegramService');
+      return;
+    }
+    for (var i = 0; i < validIds.length; i += 100) {
+      final end = (i + 100 < validIds.length) ? i + 100 : validIds.length;
+      final batch = validIds.sublist(i, end);
+      try {
+        await _withRetry(() async {
+          await TelegramRateLimiter.instance.acquire();
+          await _dio.post('$_base/deleteMessages', data: {'chat_id': _channelId, 'message_ids': batch});
+        }, operationName: 'deleteMessages(${batch.length})');
+      } catch (e) {
+        AppLogger.w('deleteMessages failed for batch of ${batch.length}: $e', tag: 'TelegramService', error: e);
+      }
+    }
   }
+
+  /// Delete a single message.
+  Future<void> deleteMessage(int messageId) => deleteMessages([messageId]);
 
   /// Get the file_id of a known message_id by forwarding it to the same
   /// channel and reading back the document file_id, then deleting the copy.
@@ -345,7 +358,6 @@ class TelegramService {
       try {
         AppLogger.d('Getting file_id for message $messageId via forward...',
             tag: 'TelegramService');
-        // Forward the message to the same channel to get a fresh message object
         final fwdRes = await _dio.post(
           '$_base/forwardMessage',
           data: {
@@ -357,27 +369,20 @@ class TelegramService {
 
         if (fwdRes.data['ok'] != true) {
           throw Exception(
-            'forwardMessage failed: ${fwdRes.data['description']}',
-          );
+              'forwardMessage failed: ${fwdRes.data['description']}');
         }
 
         final fwdMsg = fwdRes.data['result'];
         final fwdMsgId = fwdMsg['message_id'] as int;
 
-        String? fileId;
-        if (fwdMsg['document'] != null) {
-          fileId = fwdMsg['document']['file_id'] as String?;
-        } else if (fwdMsg['sticker'] != null) {
-          fileId = fwdMsg['sticker']['file_id'] as String?;
-        } else if (fwdMsg['photo'] != null &&
-            fwdMsg['photo'] is List &&
-            (fwdMsg['photo'] as List).isNotEmpty) {
-          fileId = (fwdMsg['photo'] as List).last['file_id'] as String?;
-        } else if (fwdMsg['video'] != null) {
-          fileId = fwdMsg['video']['file_id'] as String?;
-        } else if (fwdMsg['animation'] != null) {
-          fileId = fwdMsg['animation']['file_id'] as String?;
-        }
+        final photoList = fwdMsg['photo'] is List ? fwdMsg['photo'] as List : null;
+        final fileId = fwdMsg['document']?['file_id'] as String? ??
+            fwdMsg['sticker']?['file_id'] as String? ??
+            (photoList != null && photoList.isNotEmpty
+                ? photoList.last['file_id'] as String?
+                : null) ??
+            fwdMsg['video']?['file_id'] as String? ??
+            fwdMsg['animation']?['file_id'] as String?;
 
         // Clean up the forwarded copy
         await deleteMessage(fwdMsgId);
@@ -472,13 +477,11 @@ class TelegramService {
       final response = await _dio.post('$_base/unpinAllChatMessages', data: {'chat_id': _channelId});
 
       if (response.data['ok'] != true) {
-        AppLogger.w('unpinAllMessages warning: ${response.data['description']}',
-            tag: 'TelegramService');
+        AppLogger.w('unpinAllMessages warning: ${response.data['description']}', tag: 'TelegramService');
       }
     } on DioException catch (e) {
       if (e.response?.statusCode == 429) {
-        final retryAfter =
-            e.response?.data?['parameters']?['retry_after'] as int? ?? 5;
+        final retryAfter = e.response?.data?['parameters']?['retry_after'] as int? ?? 5;
         TelegramRateLimiter.instance.report429(retryAfter);
       }
       AppLogger.w('unpinAllMessages warning: $e', tag: 'TelegramService');

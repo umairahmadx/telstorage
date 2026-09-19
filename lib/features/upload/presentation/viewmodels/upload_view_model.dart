@@ -16,7 +16,7 @@ import '../../../../core/utils/connectivity.dart';
 import '../../../../core/utils/thumbnail_generator.dart';
 import '../../../../core/utils/thumbnail_helper_native.dart'
     if (dart.library.js_interop) '../../../../core/utils/thumbnail_helper_web.dart';
-import '../../../../core/utils/zip_stream_chunker.dart';
+import '../../../../core/utils/raw_stream_chunker.dart';
 import '../../../../core/utils/file_reader_stub.dart'
     if (dart.library.io) '../../../../core/utils/file_reader_native.dart';
 
@@ -151,9 +151,8 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
         try {
           if (pending.path != null && pending.path!.isNotEmpty) {
             final hashInfo =
-                await ZipStreamChunker.hashAndCrcFile(pending.path!);
+                await RawStreamChunker.hashFile(pending.path!);
             pending.precomputedHash = hashInfo.sha256;
-            pending.precomputedCrc = hashInfo.crc32;
             pending.fileSizeOnDisk = hashInfo.fileSize;
 
             final mime =
@@ -176,9 +175,8 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
             }
           } else {
             final Uint8List b = await pending.getBytes();
-            final hashInfo = ZipStreamChunker.hashAndCrcBytes(b);
+            final hashInfo = RawStreamChunker.hashBytesSync(b);
             pending.precomputedHash = hashInfo.sha256;
-            pending.precomputedCrc = hashInfo.crc32;
 
             final mime =
                 lookupMimeType(pending.name) ?? 'application/octet-stream';
@@ -314,7 +312,6 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
       skipGlobalMetadataUpdate: isBatch,
       taskId: task.id,
       precomputedHash: task.precomputedHash,
-      precomputedCrc: task.precomputedCrc,
       precomputedThumbnailBytes: task.precomputedThumbnailBytes,
       thumbnailExtension: task.thumbnailExtension,
     );

@@ -22,4 +22,15 @@ abstract class DownloadServiceContract {
     String? subpath,
     DownloadConflictPolicy policy = DownloadConflictPolicy.overwrite,
   });
+
+  /// Streams chunks directly to disk with progressive SHA-256 and atomic finalization,
+  /// guaranteeing a bounded memory ceiling (<= 19 MB) regardless of file size.
+  Future<SaveResult> downloadFileToDisk(
+    FileRecord record,
+    void Function(double progress, String status) onProgress, {
+    String? subpath,
+    DownloadConflictPolicy policy = DownloadConflictPolicy.overwrite,
+    RequestPriority priority = RequestPriority.normal,
+    String? explicitTargetPath,
+  });
 }

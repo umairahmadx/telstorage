@@ -65,6 +65,9 @@ class _MockTelegram extends TelegramService {
 
   @override
   Future<void> deleteMessage(int messageId) async {}
+
+  @override
+  Future<void> deleteMessages(List<int> messageIds) async {}
 }
 
 class _MockMetadataService extends MetadataService {

@@ -3,17 +3,12 @@
  * Description: Bottom navigation shell container hosting persistent tab views (Home, Files, Upload, Downloads, Settings).
  */
 
-import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../../core/utils/app_logger.dart';
-import '../../core/utils/battery_optimization_helper.dart';
 import '../../core/utils/file_opener_helper.dart';
-import '../../core/utils/storage_permission_helper.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../core/navigation/navigation_intent.dart';
 import '../../core/services/notification_service.dart';
@@ -26,7 +21,7 @@ import '../../features/browser/presentation/screens/browser/viewmodel/browser_vi
 import '../../features/downloads/presentation/screens/downloads/downloads_screen.dart';
 import '../../features/home/presentation/screens/home/home_screen.dart';
 import '../../features/settings/presentation/screens/settings/settings_screen.dart';
-import '../../features/upload/presentation/viewmodels/upload_folder_helper.dart';
+import '../../features/upload/presentation/viewmodels/upload_file_picker_helper.dart';
 import '../../features/upload/presentation/viewmodels/upload_view_model.dart';
 import 'app_drawer.dart';
 import 'mobile_shell/mobile_add_action_item.dart';
@@ -281,7 +276,7 @@ class MobileShellState extends State<MobileShell> {
                 AddActionItem(
                   icon: AppIcons.uploadFolder,
                   label: 'Upload Folder',
-                  color: AppColors.primaryLight,
+                  color: colors.accentPrimary,
                   onTap: () {
                     HapticFeedback.selectionClick();
                     Navigator.pop(ctx);
@@ -310,63 +305,15 @@ class MobileShellState extends State<MobileShell> {
 
   /// Opens directory picker and enqueues folder files with hierarchy for upload.
   Future<void> _pickAndUploadFolder() async {
-    final hasPermission =
-        await StoragePermissionHelper.ensureStoragePermission(context);
-    if (!hasPermission || !mounted) return;
+    final browserState = context.read<BrowserBloc>().state;
+    final currentFolderId =
+        _currentIndex == 1 ? browserState.currentFolderId : null;
 
-    final dirPath = await FilePicker.platform.getDirectoryPath();
-    if (dirPath == null || dirPath.isEmpty) return;
-
-    if (!mounted) return;
-
-    try {
-      final browserState = context.read<BrowserBloc>().state;
-      final currentFolderId =
-          _currentIndex == 1 ? browserState.currentFolderId : null;
-
-      final scanResult = await UploadFolderHelper.scanAndQueueFolder(
-        dirPath: dirPath,
-        targetParentFolderId: currentFolderId,
-        storageRepository: ServiceLocator.instance.storageRepository,
-        uploadBloc: context.read<UploadBloc>(),
-      );
-
-      if (scanResult.filesCount > 0 && mounted) {
-        await BatteryOptimizationHelper.maybePromptBatteryOptimization(context);
-        if (!mounted) return;
-        ServiceLocator.instance.navigation
-            .navigateTo(AppDestination.transferUploads);
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('The selected folder contains no files to upload.'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } on FolderInaccessibleException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.message),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor:
-                Theme.of(context).extension<AppColorsExtension>()?.error,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to read folder: $e'),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor:
-                Theme.of(context).extension<AppColorsExtension>()?.error,
-          ),
-        );
-      }
-    }
+    await UploadFilePickerHelper.pickAndUploadFolder(
+      context: context,
+      targetParentFolderId: currentFolderId,
+      uploadBloc: context.read<UploadBloc>(),
+    );
   }
 
   /// Shows dialog for creating a new folder in browser view.
@@ -425,37 +372,15 @@ class MobileShellState extends State<MobileShell> {
 
   /// Opens file picker and enqueues selected files for upload.
   Future<void> _pickAndUpload() async {
-    final picked = await FilePicker.platform
-        .pickFiles(withData: kIsWeb, allowMultiple: true);
-    if (!mounted || picked == null || picked.files.isEmpty) return;
-
     final browserState = context.read<BrowserBloc>().state;
     final currentFolderId =
         _currentIndex == 1 ? browserState.currentFolderId : null;
 
-    final List<UploadTask> tasks = [];
-    const uuid = Uuid();
-    for (final file in picked.files) {
-      if (!kIsWeb && (file.path == null || file.path!.isEmpty)) continue;
-      if (kIsWeb && file.bytes == null) continue;
-      tasks.add(UploadTask(
-        id: uuid.v4(),
-        path: file.path,
-        bytes: file.bytes,
-        name: file.name,
-        size: file.size,
-        folderId: currentFolderId,
-        isTemporaryCacheFile: !kIsWeb,
-      ));
-    }
-
-    if (tasks.isNotEmpty && mounted) {
-      await BatteryOptimizationHelper.maybePromptBatteryOptimization(context);
-      if (!mounted) return;
-      context.read<UploadBloc>().add(AddUploads(tasks));
-      ServiceLocator.instance.navigation
-          .navigateTo(AppDestination.transferUploads);
-    }
+    await UploadFilePickerHelper.pickAndUploadFiles(
+      context: context,
+      folderId: currentFolderId,
+      uploadBloc: context.read<UploadBloc>(),
+    );
   }
 
   @override

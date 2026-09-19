@@ -209,3 +209,9 @@ class AppColorsExtension extends ThemeExtension<AppColorsExtension> {
     );
   }
 }
+
+/// Convenient accessor extension for AppColorsExtension on BuildContext.
+extension AppColorsExtensionContext on BuildContext {
+  /// Resolves the active [AppColorsExtension] design tokens.
+  AppColorsExtension get colors => Theme.of(this).extension<AppColorsExtension>()!;
+}

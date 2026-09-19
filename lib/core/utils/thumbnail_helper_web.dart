@@ -40,4 +40,6 @@ class ThumbnailHelper {
   static ImageProvider? imageProviderFromPath(String path) => null;
 
   static Future<Uint8List?> readFileBytes(String path) async => null;
+  static Future<Uint8List?> readHeaderBytes(String path, int maxBytes) async => null;
+  static int? getFileSize(String path) => null;
 }

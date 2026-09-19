@@ -43,6 +43,25 @@ class FakeDownloadService implements DownloadServiceContract {
     return const SaveResult(
         savedPath: '/fake/path', message: 'OK', success: true);
   }
+
+  @override
+  Future<SaveResult> downloadFileToDisk(
+    FileRecord record,
+    void Function(double progress, String status) onProgress, {
+    String? subpath,
+    DownloadConflictPolicy policy = DownloadConflictPolicy.overwrite,
+    RequestPriority priority = RequestPriority.normal,
+    String? explicitTargetPath,
+  }) async {
+    final bytes = await downloadFile(record, onProgress, priority: priority);
+    if (explicitTargetPath != null) {
+      final file = File(explicitTargetPath);
+      await file.parent.create(recursive: true);
+      await file.writeAsBytes(bytes);
+      return SaveResult(savedPath: explicitTargetPath, message: 'OK', success: true);
+    }
+    return saveAndOpen(bytes, record.name, subpath: subpath, policy: policy);
+  }
 }
 
 void main() {

@@ -5,7 +5,6 @@
 
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:archive/archive.dart';
 import 'package:convert/convert.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -13,6 +12,7 @@ import '../models/chunk_info.dart';
 import '../models/file_record.dart';
 import '../utils/app_logger.dart';
 import 'transfer_queue_service.dart';
+import '../utils/download_disk_writer.dart';
 import '../utils/web_download.dart'
     if (dart.library.io) '../utils/web_download_stub.dart';
 import '../utils/native_save_helper.dart'
@@ -46,8 +46,7 @@ class SaveResult {
 ///   2. Download all parts (async HTTP).
 ///   3. Reassemble bytes.
 ///   4. SHA-256 verification in 1 MB chunks (non-blocking).
-///   5. ZIP extraction if needed.
-///   6. Save to platform Downloads / Files / browser bar.
+///   5. Save to platform Downloads / Files / browser bar.
 class DownloadService implements DownloadServiceContract {
   final TelegramService _telegram;
 
@@ -72,14 +71,12 @@ class DownloadService implements DownloadServiceContract {
       // Step 2: Parse metadata
       final fileMeta =
           jsonDecode(utf8.decode(metaBytes)) as Map<String, dynamic>;
-      final isZipped = fileMeta['is_zipped'] as bool? ?? false;
       final chunks = (fileMeta['chunks'] as List)
           .map((c) => ChunkInfo.fromJson(c as Map<String, dynamic>))
           .toList();
       final expectedHash = fileMeta['sha256'] as String;
 
-      AppLogger.d('${chunks.length} part(s), is_zipped: $isZipped',
-          tag: 'DownloadService');
+      AppLogger.d('${chunks.length} part(s)', tag: 'DownloadService');
 
       // Step 3: Download all parts in parallel (max 3 concurrent downloads)
       final builder = BytesBuilder(copy: false);
@@ -129,28 +126,11 @@ class DownloadService implements DownloadServiceContract {
       final actualHash = await _sha256Chunked(
         assembled,
         (pct) =>
-            onProgress(0.80 + pct * 0.12, 'Verifying… ${(pct * 100).toInt()}%'),
+            onProgress(0.80 + pct * 0.18, 'Verifying… ${(pct * 100).toInt()}%'),
       );
 
-      Uint8List finalBytes;
-
-      if (isZipped) {
-        // Step 6a: Extract ZIP (STORE mode = instant byte unpack)
-        onProgress(0.93, 'Extracting…');
-        AppLogger.d('Extracting ZIP…', tag: 'DownloadService');
-        await Future.delayed(Duration.zero);
-        final archive = ZipDecoder().decodeBytes(assembled);
-        if (archive.isEmpty) throw Exception('ZIP archive is empty');
-
-        finalBytes = archive.first.content;
-
-        onProgress(0.96, 'Verifying extracted file…');
-        final extractedHash = await _sha256Chunked(finalBytes, (_) {});
-        if (extractedHash != expectedHash) throw FileCorruptedException();
-      } else {
-        if (actualHash != expectedHash) throw FileCorruptedException();
-        finalBytes = assembled;
-      }
+      if (actualHash != expectedHash) throw FileCorruptedException();
+      final finalBytes = assembled;
 
       onProgress(1.0, 'Download complete!');
       AppLogger.i(
@@ -159,6 +139,88 @@ class DownloadService implements DownloadServiceContract {
       return finalBytes;
     } catch (e) {
       AppLogger.e('Download failed: $e', tag: 'DownloadService', error: e);
+      throw Exception('Download failed: $e');
+    }
+  }
+
+  @override
+  Future<SaveResult> downloadFileToDisk(
+    FileRecord record,
+    void Function(double progress, String status) onProgress, {
+    String? subpath,
+    DownloadConflictPolicy policy = DownloadConflictPolicy.overwrite,
+    RequestPriority priority = RequestPriority.normal,
+    String? explicitTargetPath,
+  }) async {
+    if (kIsWeb) {
+      final bytes = await downloadFile(record, onProgress, priority: priority);
+      return saveAndOpen(bytes, record.name, subpath: subpath, policy: policy);
+    }
+
+    DownloadDiskWriter? writer;
+    try {
+      onProgress(0.0, 'Reading file index…');
+      AppLogger.d('Streaming download to disk: ${record.name}', tag: 'DownloadService');
+
+      if (record.metadataFileId == null || record.metadataFileId!.isEmpty) {
+        throw StateError('Cannot download: file has no remote metadataFileId.');
+      }
+
+      final Uint8List metaBytes =
+          await _telegram.downloadByFileId(record.metadataFileId!, priority);
+      final fileMeta = jsonDecode(utf8.decode(metaBytes)) as Map<String, dynamic>;
+      final chunks = (fileMeta['chunks'] as List)
+          .map((c) => ChunkInfo.fromJson(c as Map<String, dynamic>))
+          .toList();
+      final expectedHash = fileMeta['sha256'] as String;
+
+      AppLogger.d('Streaming ${chunks.length} part(s) directly to disk', tag: 'DownloadService');
+
+      writer = await DownloadDiskWriter.create(
+        filename: record.name,
+        subpath: subpath,
+        policy: policy,
+        explicitTargetPath: explicitTargetPath,
+      );
+
+      for (var i = 0; i < chunks.length; i++) {
+        if (TransferQueueService.instance.isCancelled(record.fileId)) {
+          throw Exception('Download cancelled by user');
+        }
+        while (TransferQueueService.instance.isPaused(record.fileId)) {
+          await Future.delayed(const Duration(seconds: 1));
+          if (TransferQueueService.instance.isCancelled(record.fileId)) {
+            throw Exception('Download cancelled by user');
+          }
+        }
+
+        final part = chunks[i];
+        final Uint8List partBytes =
+            await _telegram.downloadByFileId(part.fileId!, priority);
+
+        await writer.appendChunk(partBytes);
+
+        final pct = (i + 1) / chunks.length;
+        onProgress(
+          0.05 + pct * 0.90,
+          'Downloading parts (${i + 1}/${chunks.length})…',
+        );
+      }
+
+      onProgress(0.98, 'Finalizing download…');
+      final result = await writer.closeAndFinalize(expectedHash);
+      onProgress(1.0, 'Download complete!');
+      return SaveResult(
+        savedPath: result.savedPath,
+        message: result.message,
+        success: result.success,
+      );
+    } catch (e) {
+      if (writer != null) {
+        await writer.abort();
+      }
+      AppLogger.e('Stream-to-disk download failed: $e', tag: 'DownloadService', error: e);
+      if (e is FileCorruptedException || e is StateError) rethrow;
       throw Exception('Download failed: $e');
     }
   }

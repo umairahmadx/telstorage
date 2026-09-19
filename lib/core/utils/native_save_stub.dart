@@ -45,3 +45,14 @@ Future<NativeSaveResult> saveNative(
 }) =>
     throw UnsupportedError('Use web download on web platform');
 
+Future<dynamic> createStagedTempFile(String filename, {String? subpath}) async =>
+    throw UnsupportedError('Streaming to disk is not supported on web');
+
+Future<NativeSaveResult> finalizeStagedFile(
+  dynamic tempFile,
+  String filename, {
+  String? subpath,
+  DownloadConflictPolicy policy = DownloadConflictPolicy.overwrite,
+}) async =>
+    throw UnsupportedError('Streaming to disk is not supported on web');
+

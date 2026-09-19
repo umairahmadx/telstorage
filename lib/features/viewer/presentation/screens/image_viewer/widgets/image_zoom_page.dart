@@ -170,8 +170,12 @@ class _ImageZoomPageState extends State<ImageZoomPage> {
           fit: StackFit.expand,
           alignment: Alignment.center,
           children: [
-            // 1. Instant thumbnail placeholder beneath (never causes black dip)
-            Center(child: _buildThumbnail(colors)),
+            // 1. Instant thumbnail placeholder beneath (never causes black dip for raster images)
+            // For SVGs, avoid rendering underneath once full vector is ready to prevent bleed-through
+            if (_cachedFullFile == null ||
+                !(widget.file.name.toLowerCase().endsWith('.svg') ||
+                    widget.file.mimeType.toLowerCase() == 'image/svg+xml'))
+              Center(child: _buildThumbnail(colors)),
 
             // 2. Full resolution image on top fading in once decoded
             if (_cachedFullFile != null)
@@ -182,6 +186,11 @@ class _ImageZoomPageState extends State<ImageZoomPage> {
                         _cachedFullFile!,
                         fit: BoxFit.contain,
                         placeholderBuilder: (_) => _buildThumbnail(colors),
+                        errorBuilder: (context, error, stackTrace) {
+                          AppLogger.w('Failed to render full SVG: $error',
+                              tag: 'ImageZoomPage');
+                          return _buildThumbnail(colors);
+                        },
                       )
                     : Image.file(
                         _cachedFullFile!,

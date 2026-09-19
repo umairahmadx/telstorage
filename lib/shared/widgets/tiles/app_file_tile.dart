@@ -9,6 +9,7 @@ import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/services/image_viewer_cache_service.dart';
 import 'package:telstorage/core/theme/app_icons.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
+import 'package:telstorage/features/viewer/presentation/screens/audio_player/audio_player_screen.dart';
 import 'package:telstorage/features/viewer/presentation/screens/video_player/video_player_screen.dart';
 import 'package:telstorage/shared/widgets/app_surface_card.dart';
 import 'package:telstorage/shared/widgets/thumbnail_widget.dart';
@@ -131,11 +132,22 @@ class AppFileTile extends StatelessWidget {
                             height: 44,
                           ),
                         )
-                      : ThumbnailWidget(
-                          file: file,
-                          width: 44,
-                          height: 44,
-                        )),
+                      : (AudioPlayerScreen.isAudioRecord(file)
+                          ? Hero(
+                              tag: heroPrefix != null
+                                  ? '${heroPrefix}_audio_hero_${file.fileId}'
+                                  : 'audio_hero_${file.fileId}',
+                              child: ThumbnailWidget(
+                                file: file,
+                                width: 44,
+                                height: 44,
+                              ),
+                            )
+                          : ThumbnailWidget(
+                              file: file,
+                              width: 44,
+                              height: 44,
+                            ))),
             ),
             const SizedBox(width: 14),
             Expanded(

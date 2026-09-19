@@ -248,6 +248,89 @@ Future<void> _writeWithAtomicRename(File targetFile, Uint8List bytes) async {
   }
 }
 
+/// Creates a temporary hidden staging file in the target directory for streaming downloads.
+Future<File> createStagedTempFile(String filename, {String? subpath}) async {
+  final safeFilename = resolveSafeFilename(filename);
+  final safeSubpath = resolveSafeSubpath(subpath, safeFilename);
+  Directory targetDir;
+  try {
+    targetDir = await resolveTargetDirectory(subpath: safeSubpath);
+  } catch (_) {
+    targetDir = Directory.systemTemp;
+  }
+  if (!targetDir.existsSync()) {
+    try {
+      await targetDir.create(recursive: true);
+    } catch (_) {
+      targetDir = Directory.systemTemp;
+    }
+  }
+  final randSuffix = const Uuid().v4().substring(0, 8);
+  return File(p.join(
+    targetDir.path,
+    '.$safeFilename.tmp_${DateTime.now().microsecondsSinceEpoch}_$randSuffix',
+  ));
+}
+
+/// Atomically finalizes a streamed [tempFile] into destination [filename] adhering to [policy].
+Future<NativeSaveResult> finalizeStagedFile(
+  File tempFile,
+  String filename, {
+  String? subpath,
+  DownloadConflictPolicy policy = DownloadConflictPolicy.overwrite,
+}) async {
+  try {
+    if (!tempFile.existsSync()) {
+      return const NativeSaveResult(success: false, message: 'Temporary staging file not found.');
+    }
+    var safeFilename = resolveSafeFilename(filename);
+    final safeSubpath = resolveSafeSubpath(subpath, safeFilename);
+
+    if (policy == DownloadConflictPolicy.keepBoth) {
+      safeFilename = await resolveNonCollidingFilename(safeFilename, subpath: safeSubpath);
+    } else if (policy == DownloadConflictPolicy.skip) {
+      if (await doesTargetFileExist(safeFilename, subpath: safeSubpath)) {
+        try { await tempFile.delete(); } catch (_) {}
+        final existingPath = await resolveTargetFilePath(safeFilename, subpath: safeSubpath);
+        return NativeSaveResult(
+          success: true,
+          savedPath: existingPath,
+          message: 'File already exists (skipped download).',
+        );
+      }
+    }
+
+    final targetPath = await resolveTargetFilePath(safeFilename, subpath: safeSubpath);
+    final targetFile = File(targetPath);
+
+    if (targetFile.existsSync()) {
+      try { await targetFile.delete(); } catch (_) {}
+    }
+
+    try {
+      await tempFile.rename(targetFile.path);
+    } catch (_) {
+      await tempFile.copy(targetFile.path);
+      try { if (tempFile.existsSync()) await tempFile.delete(); } catch (_) {}
+    }
+
+    AppLogger.i('Streamed file finalized: ${targetFile.path}', tag: 'SaveHelper');
+    final isPublic = targetFile.path.contains('/Download');
+    return NativeSaveResult(
+      success: true,
+      savedPath: targetFile.path,
+      message: isPublic
+          ? '✅ Saved to Downloads: TelStorage/$safeSubpath/$safeFilename'
+          : '✅ Saved to: TelStorage/$safeSubpath/$safeFilename',
+    );
+  } catch (e) {
+    if (tempFile.existsSync()) {
+      try { await tempFile.delete(); } catch (_) {}
+    }
+    return NativeSaveResult(success: false, message: '❌ Save failed: $e');
+  }
+}
+
 /// Save [bytes] as [filename] to the platform's public Downloads/Files location.
 /// Optionally preserves a nested [subpath] directory structure safely.
 Future<NativeSaveResult> saveNative(

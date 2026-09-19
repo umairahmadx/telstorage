@@ -1,12 +1,12 @@
 /*
- * File: zip_stream_web.dart
- * Description: Web stub for disk-based zip streaming operations.
+ * File: raw_stream_web.dart
+ * Description: Web platform stub for disk-based raw stream chunking operations.
  */
 
 import 'dart:typed_data';
 
-/// Throws UnsupportedError because file paths are unavailable on web.
-Future<({String sha256, int crc32, int fileSize})> hashAndCrcPath(
+/// Throws UnsupportedError because filesystem paths are unavailable on web.
+Future<({String sha256, int fileSize})> hashFilePath(
   String path, {
   void Function(double progress)? onProgress,
 }) async {
@@ -14,7 +14,7 @@ Future<({String sha256, int crc32, int fileSize})> hashAndCrcPath(
       'Disk file path streaming is not supported on web platforms.');
 }
 
-/// Throws UnsupportedError because file paths are unavailable on web.
+/// Throws UnsupportedError because filesystem paths are unavailable on web.
 Future<Uint8List> readDiskSlice(
   String path,
   int offset,

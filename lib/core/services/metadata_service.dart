@@ -18,6 +18,7 @@ import 'telegram_service.dart';
 class MetadataService {
   final TelegramService _telegram;
   late final MetadataPartitionService _partitionService;
+  MetadataPartitionService get partitionService => _partitionService;
   static const _storage = FlutterSecureStorage();
 
   // Mutex lock to prevent parallel upload race conditions on metadata index
@@ -358,6 +359,13 @@ class MetadataService {
     return _partitionService.fetchFolderPartition(folderId, fetch);
   }
 
+  /// Overwrite partition files with a sanitized list of FileRefs.
+  Future<void> updatePartitionFiles(
+    AppMetadata meta,
+    String folderId,
+    List<FileRef> files,
+  ) => _partitionService.updatePartitionFiles(meta, folderId, files);
+
   /// Safely move a file between folders (Append to Dest -> Confirm Write -> Remove from Src)
   Future<void> moveFileBetweenFolders(
     String fileId,
@@ -434,10 +442,8 @@ class MetadataService {
       metadataMessageId: 0,
       folders: [],
       categories: {
-        'images': CategoryStat(count: 0, sizeMb: 0),
-        'videos': CategoryStat(count: 0, sizeMb: 0),
-        'docs': CategoryStat(count: 0, sizeMb: 0),
-        'others': CategoryStat(count: 0, sizeMb: 0),
+        'images': CategoryStat(count: 0, sizeMb: 0), 'videos': CategoryStat(count: 0, sizeMb: 0),
+        'docs': CategoryStat(count: 0, sizeMb: 0), 'others': CategoryStat(count: 0, sizeMb: 0),
       },
       lastSynced: DateTime.now(),
     );
@@ -482,8 +488,7 @@ class MetadataService {
     if (mimeType.startsWith('video/')) return 'videos';
     if (mimeType.startsWith('audio/')) return 'audio';
     final isDoc = mimeType == 'application/pdf' ||
-        const ['document', 'text', 'sheet', 'presentation']
-            .any(mimeType.contains);
+        const ['document', 'text', 'sheet', 'presentation'].any(mimeType.contains);
     if (isDoc) return 'documents';
     final isArchive =
         const ['zip', 'compressed', 'tar', 'rar', '7z'].any(mimeType.contains);

@@ -6,11 +6,9 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import '../models/chunk_info.dart';
 import '../models/file_record.dart';
-import '../models/video_stream_models.dart';
 import '../utils/app_logger.dart';
 import 'app_cache_manager.dart';
 import 'service_locator.dart';
@@ -144,19 +142,6 @@ class VideoStreamPipeliner {
             subscription.cancel();
             if (!completer.isCompleted) completer.complete(totalWritten);
             return;
-          }
-
-          if (chunkIndex == 0 && currentByteOffset == 0 && record.chunkCount > 1) {
-            final header = ZipHeaderInfo.tryParse(Uint8List.fromList(packet));
-            if (header != null && header.compressionMethod != 0) {
-              subscription.cancel();
-              if (!completer.isCompleted) {
-                completer.completeError(
-                  UnsupportedError('Unsupported compression method: ${header.compressionMethod}'),
-                );
-              }
-              return;
-            }
           }
 
           // Concurrently append full packet to disk cache

@@ -3,7 +3,6 @@
  * Description: Loopback HTTP proxy serving RFC 7233/9110 HTTP 206 Partial Content byte ranges for on-demand video streaming.
  */
 
-import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -15,7 +14,6 @@ import '../models/video_stream_models.dart';
 import '../utils/app_logger.dart';
 import 'service_locator.dart';
 import 'telegram_rate_limiter.dart';
-import 'video_chunk_cache_manager.dart';
 import 'video_prefetch_coordinator.dart';
 import 'video_stream_pipeliner.dart';
 
@@ -125,20 +123,14 @@ class VideoStreamServer {
   /// Sets custom part size for unit testing boundary conditions.
   void setPartSizeForTesting(int? size) => _partSize = size ?? defaultPartSize;
 
-  /// Calculates the ZIP local file header offset.
-  static int calculateHeaderOffset(String filename, {required bool isZipped}) =>
-      !isZipped ? 0 : 30 + utf8.encode(filename).length;
-
   /// Computes the chunk index and byte offset within that chunk for any video byte.
   static ChunkByteMapping mapByteToChunk({
     required int videoByteOffset,
-    required int headerOffset,
     required int partSize,
   }) {
-    final zipOffset = videoByteOffset + headerOffset;
     return ChunkByteMapping(
-      chunkIndex: zipOffset ~/ partSize,
-      chunkOffset: zipOffset % partSize,
+      chunkIndex: videoByteOffset ~/ partSize,
+      chunkOffset: videoByteOffset % partSize,
     );
   }
 
@@ -147,12 +139,17 @@ class VideoStreamServer {
   static ByteRange? parseByteRange(String? header, int totalSize) =>
       ByteRange.parse(header, totalSize);
 
-  /// Resolves the appropriate video MIME type based on record and file extension.
+  /// Resolves the appropriate media (video or audio) MIME type based on record and file extension.
   static String resolveMimeType(String filename, String? recordMime) {
     if (recordMime != null && recordMime.isNotEmpty && recordMime != 'application/octet-stream') {
       return recordMime;
     }
     final lower = filename.toLowerCase();
+    if (lower.endsWith('.mp3')) return 'audio/mpeg';
+    if (lower.endsWith('.m4a') || lower.endsWith('.aac')) return 'audio/mp4';
+    if (lower.endsWith('.ogg') || lower.endsWith('.oga') || lower.endsWith('.opus')) return 'audio/ogg';
+    if (lower.endsWith('.flac')) return 'audio/flac';
+    if (lower.endsWith('.wav')) return 'audio/wav';
     if (lower.endsWith('.mov')) return 'video/quicktime';
     if (lower.endsWith('.mkv')) return 'video/x-matroska';
     if (lower.endsWith('.webm')) return 'video/webm';
@@ -256,53 +253,8 @@ class VideoStreamServer {
       }
     }
 
-    int totalBytes = max(1, (record.sizeMb * 1024 * 1024).round());
-    int headerOffset = 0;
-    /// Exclusive upper bound of video bytes in ZIP-space (0 = not applicable).
-    int videoEndInZip = 0;
-
     final regFile = _activeFiles[fileId];
-    if (regFile != null && regFile.totalBytes != null) {
-      totalBytes = regFile.totalBytes!;
-      headerOffset = regFile.headerOffset ?? 0;
-      videoEndInZip = regFile.videoEndInZip ?? 0;
-    } else if (record.chunkCount > 1) {
-      ZipHeaderInfo? zipHeader;
-      try {
-        final cached0 = await VideoChunkCacheManager.instance.getCachedChunk(record.fileId, 0);
-        if (cached0 != null && cached0.existsSync()) {
-          final headerBytes = await cached0.readAsBytes();
-          zipHeader = ZipHeaderInfo.tryParse(headerBytes);
-        }
-      } catch (_) {}
-
-      if (zipHeader != null) {
-        if (zipHeader.compressionMethod != 0) {
-          AppLogger.w(
-            'Unsupported compression method ${zipHeader.compressionMethod} for ${record.fileId}. Only STORE (method 0) is streamable.',
-            tag: 'VideoStreamServer',
-          );
-          request.response.statusCode = HttpStatus.unsupportedMediaType;
-          await request.response.close();
-          return;
-        }
-        final videoSize = zipHeader.uncompressedSize > 0
-            ? zipHeader.uncompressedSize
-            : max(1, (record.sizeMb * 1024 * 1024).round());
-        totalBytes = videoSize;
-        headerOffset = zipHeader.headerOffset;
-        videoEndInZip = headerOffset + videoSize;
-      } else {
-        headerOffset = calculateHeaderOffset(record.name, isZipped: true);
-        videoEndInZip = headerOffset + totalBytes;
-      }
-      if (regFile != null) {
-        regFile.zipHeader = zipHeader;
-        regFile.totalBytes = totalBytes;
-        regFile.headerOffset = headerOffset;
-        regFile.videoEndInZip = videoEndInZip;
-      }
-    }
+    final totalBytes = regFile?.totalBytes ?? max(1, (record.sizeMb * 1024 * 1024).round());
 
     final rangeHeader = request.headers.value(HttpHeaders.rangeHeader);
     final hasRangeHeader = rangeHeader != null && rangeHeader.trim().isNotEmpty;
@@ -338,13 +290,8 @@ class VideoStreamServer {
       }
 
       final partSize = record.chunkCount > 1 ? _partSize : max(_partSize, totalBytes);
-      final zStart = range.start + headerOffset;
-      // Clamp to videoEndInZip to exclude ZIP trailer bytes from served range.
-      final zEnd = videoEndInZip > 0
-          ? min(range.end + headerOffset, videoEndInZip - 1)
-          : range.end + headerOffset;
-      final startChunk = zStart ~/ partSize;
-      final endChunk = zEnd ~/ partSize;
+      final startChunk = range.start ~/ partSize;
+      final endChunk = range.end ~/ partSize;
 
       if (record.chunkCount > 1) {
         _prefetchCoordinator.onChunkRequested(record, startChunk, chunkMap: chunkMap);
@@ -356,8 +303,8 @@ class VideoStreamServer {
         if (wasActiveAtStart && !_activeFiles.containsKey(fileId)) break;
 
         final chunkBase = chunkIdx * partSize;
-        final sliceStart = max(0, zStart - chunkBase);
-        final sliceEnd = min(partSize, zEnd - chunkBase + 1);
+        final sliceStart = max(0, range.start - chunkBase);
+        final sliceEnd = min(partSize, range.end - chunkBase + 1);
 
         if (sliceEnd > sliceStart) {
           final written = await _pipeliner.pipeChunkRange(

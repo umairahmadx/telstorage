@@ -19,7 +19,7 @@ import '../utils/thumbnail_helper_native.dart'
     if (dart.library.js_interop) '../utils/thumbnail_helper_web.dart';
 import '../utils/file_reader_stub.dart'
     if (dart.library.io) '../utils/file_reader_native.dart';
-import '../utils/zip_stream_chunker.dart';
+import '../utils/raw_stream_chunker.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'chunk_resume_service.dart';
 import 'hive_service.dart';
@@ -68,7 +68,6 @@ class UploadService implements UploadServiceContract {
     bool skipGlobalMetadataUpdate = false,
     String? taskId,
     String? precomputedHash,
-    int? precomputedCrc,
     Uint8List? precomputedThumbnailBytes,
     String? thumbnailExtension,
   }) async {
@@ -90,7 +89,7 @@ class UploadService implements UploadServiceContract {
         final totalBytes = bytes?.length ??
             (fileLength != null && fileLength > 0 ? fileLength : null) ??
             (filePath != null
-                ? (await ZipStreamChunker.hashAndCrcFile(filePath)).fileSize
+                ? (await RawStreamChunker.hashFile(filePath)).fileSize
                 : null);
         if (totalBytes == null) {
           return const Failure(
@@ -135,7 +134,6 @@ class UploadService implements UploadServiceContract {
 
         // ── Step 1: SHA-256 (precomputed or chunked) ───────────────────────────
         final String hash;
-        int crc = precomputedCrc ?? 0;
         if (precomputedHash != null && precomputedHash.isNotEmpty) {
           hash = precomputedHash;
         } else {
@@ -143,11 +141,10 @@ class UploadService implements UploadServiceContract {
           void onP(double pct) =>
               internalOnProgress(0.0, 'Verifying… ${(pct * 100).toInt()}%');
           final hashInfo = filePath != null
-              ? await ZipStreamChunker.hashAndCrcFile(filePath, onProgress: onP)
-              : await ZipStreamChunker.hashAndCrcBytesChunked(bytes!,
+              ? await RawStreamChunker.hashFile(filePath, onProgress: onP)
+              : await RawStreamChunker.hashBytes(bytes!,
                   onProgress: onP);
           hash = hashInfo.sha256;
-          crc = hashInfo.crc32;
         }
         fileHash = hash;
 
@@ -288,26 +285,23 @@ class UploadService implements UploadServiceContract {
             partName: name,
           ));
         } else {
-          // ── Large file: ZIP (store) → split → upload parts ────────────────────
-          internalOnProgress(0.0, 'Packaging file…');
-          AppLogger.d('Large file — streaming in ZIP (store mode)',
+          // ── Large file: Raw Partitioning → split → upload parts ──────────────
+          internalOnProgress(0.0, 'Preparing file…');
+          AppLogger.d('Large file — streaming in raw partition parts',
               tag: 'UploadService');
 
-          final chunker = ZipStreamChunker(
+          final chunker = RawStreamChunker(
             filename: name,
             fileSize: totalBytes,
-            crc32: crc,
             bytes: bytes,
             filePath: filePath,
             chunkSize: _partSize,
           );
           final totalParts = chunker.partCount;
-          final baseName = name.replaceAll(RegExp(r'\.[^.]+$'), '');
-          final totalUploadBytes =
-              chunker.totalZipSize > 0 ? chunker.totalZipSize : totalBytes;
+          final totalUploadBytes = totalBytes;
 
           AppLogger.d(
-              'ZIP size: ${(chunker.totalZipSize / 1048576).toStringAsFixed(2)} MB, $totalParts part(s)',
+              'File size: ${(totalBytes / 1048576).toStringAsFixed(2)} MB, $totalParts part(s)',
               tag: 'UploadService');
 
           final existingChunks =
@@ -325,9 +319,7 @@ class UploadService implements UploadServiceContract {
               throw Exception('Upload cancelled by user');
             }
 
-            final partName = totalParts == 1
-                ? '$baseName.zip'
-                : '$baseName.zip.${chunkIndex.toString().padLeft(3, '0')}';
+            final partName = chunker.getPartName(chunkIndex);
 
             final cachedChunk = existingChunks[chunkIndex];
             if (cachedChunk != null) {
@@ -386,7 +378,6 @@ class UploadService implements UploadServiceContract {
           'size_mb': sizeMb,
           'mime_type': mimeType,
           'chunk_count': chunkInfos.length,
-          'is_zipped': totalBytes > _partSize,
           'chunks': chunkInfos.map((c) => c.toJson()).toList(),
           'uploaded_at': DateTime.now().toIso8601String(),
           if (thumbnailFileId != null) 'thumbnail_file_id': thumbnailFileId,

@@ -30,6 +30,11 @@ class _FakeTelegramResetService extends TelegramService {
   }
 
   @override
+  Future<void> deleteMessages(List<int> messageIds) async {
+    deletedMessageIds.addAll(messageIds.where((id) => id > 0));
+  }
+
+  @override
   Future<void> unpinAllMessages() async {
     unpinnedAll = true;
   }

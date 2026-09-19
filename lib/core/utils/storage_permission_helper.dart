@@ -12,8 +12,13 @@ import 'app_logger.dart';
 
 /// Utility class for verifying and requesting storage permissions required for directory scanning.
 abstract final class StoragePermissionHelper {
+  /// Test hook to override storage permission evaluations during automated unit/widget testing.
+  @visibleForTesting
+  static bool? permissionOverrideForTesting;
+
   /// Checks if storage permissions are granted to scan and read folders.
   static Future<bool> hasStoragePermission() async {
+    if (permissionOverrideForTesting != null) return permissionOverrideForTesting!;
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       return true;
     }
@@ -35,6 +40,7 @@ abstract final class StoragePermissionHelper {
 
   /// Prompts user and requests appropriate storage permissions for folder upload.
   static Future<bool> ensureStoragePermission(BuildContext context) async {
+    if (permissionOverrideForTesting != null) return permissionOverrideForTesting!;
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       return true;
     }

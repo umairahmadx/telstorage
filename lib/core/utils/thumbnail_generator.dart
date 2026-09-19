@@ -121,11 +121,9 @@ class ThumbnailGenerator {
       final fileExt = lowerName.contains('.') ? lowerName.split('.').last : '';
 
       Uint8List? effectiveBytes = bytes;
-      if (effectiveBytes == null && filePath != null && filePath.isNotEmpty) {
-        effectiveBytes = await ThumbnailHelper.readFileBytes(filePath);
-      }
 
       if (mimeType.startsWith('video/')) {
+        // Zero-copy direct video path: Never load 1GB/100GB video bytes into Dart heap!
         thumbBytes = await generateVideoThumbnail(
           effectiveBytes ?? Uint8List(0),
           filename,
@@ -138,24 +136,40 @@ class ThumbnailGenerator {
             mimeType: mimeType,
           );
         }
-      } else if (effectiveBytes != null) {
-        if (mimeType.startsWith('image/') ||
-            AppMimeHelper.isImageExtension(filename)) {
-          thumbBytes = await generateImageThumbnail(
-            effectiveBytes,
-            filename: filename,
-            mimeType: mimeType,
-          );
-        } else if (mimeType == 'application/pdf' || fileExt == 'pdf') {
-          thumbBytes = await generatePdfThumbnail(effectiveBytes);
-        } else if (fileExt == 'apk' ||
-            mimeType.contains('android.package-archive')) {
-          thumbBytes = await generateApkThumbnail(effectiveBytes);
-        } else if (codeExtensions.contains(fileExt) ||
-            mimeType.startsWith('text/') ||
-            mimeType.contains('json') ||
-            mimeType.contains('javascript')) {
+      } else if (codeExtensions.contains(fileExt) ||
+          mimeType.startsWith('text/') ||
+          mimeType.contains('json') ||
+          mimeType.contains('javascript')) {
+        // Read ONLY the first 4 KB header for text/code preview without loading entire log/file
+        if (effectiveBytes == null && filePath != null && filePath.isNotEmpty) {
+          effectiveBytes = await ThumbnailHelper.readHeaderBytes(filePath, 4096);
+        }
+        if (effectiveBytes != null && effectiveBytes.isNotEmpty) {
           thumbBytes = await generateCodeThumbnail(effectiveBytes, filename);
+        }
+      } else {
+        // For images, PDFs, APKs, etc., only read file from disk if <= 50 MB ceiling
+        if (effectiveBytes == null && filePath != null && filePath.isNotEmpty) {
+          final size = ThumbnailHelper.getFileSize(filePath);
+          if (size == null || size <= 50 * 1024 * 1024) {
+            effectiveBytes = await ThumbnailHelper.readFileBytes(filePath);
+          }
+        }
+
+        if (effectiveBytes != null) {
+          if (mimeType.startsWith('image/') ||
+              AppMimeHelper.isImageExtension(filename)) {
+            thumbBytes = await generateImageThumbnail(
+              effectiveBytes,
+              filename: filename,
+              mimeType: mimeType,
+            );
+          } else if (mimeType == 'application/pdf' || fileExt == 'pdf') {
+            thumbBytes = await generatePdfThumbnail(effectiveBytes);
+          } else if (fileExt == 'apk' ||
+              mimeType.contains('android.package-archive')) {
+            thumbBytes = await generateApkThumbnail(effectiveBytes);
+          }
         }
       }
 

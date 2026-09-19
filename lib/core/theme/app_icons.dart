@@ -34,11 +34,22 @@ abstract final class AppIcons {
   static const IconData filterOff = Icons.filter_alt_off_rounded;
   static const IconData logout = Icons.logout_rounded;
   static const IconData rotate = Icons.screen_rotation_rounded;
+  static const IconData skipNext = Icons.skip_next_rounded;
+  static const IconData skipPrevious = Icons.skip_previous_rounded;
+  static const IconData replay10 = Icons.replay_10_rounded;
+  static const IconData forward10 = Icons.forward_10_rounded;
+  static const IconData repeat = Icons.repeat_rounded;
+  static const IconData repeatOne = Icons.repeat_one_rounded;
+  static const IconData playlist = Icons.queue_music_rounded;
+  static const IconData speed = Icons.speed_rounded;
+  static const IconData volumeUp = Icons.volume_up_rounded;
+  static const IconData volumeOff = Icons.volume_off_rounded;
 
   // -- File types ------------------------------------------------------------
   static const IconData fileGeneric = Icons.insert_drive_file_rounded;
   static const IconData fileImage = Icons.image_rounded;
   static const IconData fileVideo = Icons.play_circle_fill_rounded;
+  static const IconData fileAudio = Icons.audiotrack_rounded;
   static const IconData filePdf = Icons.picture_as_pdf_rounded;
   static const IconData fileArchive = Icons.folder_zip_rounded;
   static const IconData filePalette = Icons.palette_outlined;

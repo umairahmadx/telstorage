@@ -8,6 +8,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image/image.dart' as img;
+import '../theme/app_colors.dart';
 import 'app_logger.dart';
 import 'app_mime_helper.dart';
 import 'media_preview_helper.dart';
@@ -125,26 +126,38 @@ class ThumbnailImageDecoder {
           await vg.loadPicture(SvgStringLoader(rawSvg), null);
 
       final size = pictureInfo.size;
-      int targetW = size.width.round();
-      int targetH = size.height.round();
+      final double targetDim = maxDimension.toDouble();
 
-      if (targetW <= 0 || targetH <= 0) {
-        targetW = maxDimension;
-        targetH = maxDimension;
-      } else if (targetW > maxDimension || targetH > maxDimension) {
-        if (targetW >= targetH) {
-          targetH = (targetH * maxDimension / targetW).round();
-          targetW = maxDimension;
-        } else {
-          targetW = (targetW * maxDimension / targetH).round();
-          targetH = maxDimension;
-        }
-      }
+      final double originalW = size.width > 0 ? size.width : targetDim;
+      final double originalH = size.height > 0 ? size.height : targetDim;
 
-      final ui.Image rendered = await pictureInfo.picture.toImage(
-        targetW.clamp(1, maxDimension),
-        targetH.clamp(1, maxDimension),
+      // Calculate scale to fit inside 400x400 box preserving aspect ratio
+      final double scaleX = targetDim / originalW;
+      final double scaleY = targetDim / originalH;
+      final double scale = scaleX < scaleY ? scaleX : scaleY;
+
+      final int targetW = (originalW * scale).round().clamp(1, maxDimension);
+      final int targetH = (originalH * scale).round().clamp(1, maxDimension);
+
+      final recorder = ui.PictureRecorder();
+      final canvas = ui.Canvas(recorder);
+
+      // Dark neutral surface (AppColors.navy800) prevents harsh white boxes on dark theme
+      final bgPaint = ui.Paint()..color = AppColors.navy800;
+      canvas.drawRect(
+        ui.Rect.fromLTWH(0, 0, targetW.toDouble(), targetH.toDouble()),
+        bgPaint,
       );
+
+      final double dx = (targetW - (originalW * scale)) / 2;
+      final double dy = (targetH - (originalH * scale)) / 2;
+      canvas.translate(dx, dy);
+      canvas.scale(scale, scale);
+      canvas.drawPicture(pictureInfo.picture);
+
+      final scaledPicture = recorder.endRecording();
+      final ui.Image rendered = await scaledPicture.toImage(targetW, targetH);
+      scaledPicture.dispose();
       pictureInfo.picture.dispose();
 
       final ByteData? byteData =

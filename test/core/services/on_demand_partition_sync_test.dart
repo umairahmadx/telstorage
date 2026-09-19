@@ -31,6 +31,11 @@ class MockTelegramService extends TelegramService {
   }
 
   @override
+  Future<void> deleteMessages(List<int> messageIds) async {
+    deletedMessageIds.addAll(messageIds.where((id) => id > 0));
+  }
+
+  @override
   Future<Uint8List> downloadByFileId(
     String fileId, [
     RequestPriority priority = RequestPriority.normal,

@@ -15,6 +15,7 @@ import '../../../../../core/theme/app_theme.dart';
 import '../../../../../shared/widgets/dialogs/app_dialogs.dart';
 import '../../../../../shared/widgets/mobile_shell.dart';
 import '../../../../../shared/widgets/share_link_sheet.dart';
+import 'package:telstorage/features/viewer/presentation/screens/audio_player/audio_player_screen.dart';
 import 'package:telstorage/features/viewer/presentation/screens/image_viewer/image_viewer_screen.dart';
 import 'package:telstorage/features/viewer/presentation/screens/video_player/video_player_screen.dart';
 import 'viewmodel/home_view_model.dart';
@@ -101,6 +102,17 @@ class _HomeScreenState extends State<HomeScreen> {
       VideoPlayerScreen.open(
         context,
         videos: videos,
+        initialIndex: initialIndex >= 0 ? initialIndex : 0,
+        heroPrefix: 'recent',
+      );
+    } else if (AudioPlayerScreen.isAudioRecord(file)) {
+      final tracks =
+          recentFiles.where(AudioPlayerScreen.isAudioRecord).toList();
+      final initialIndex =
+          tracks.indexWhere((t) => t.fileId == file.fileId);
+      AudioPlayerScreen.open(
+        context,
+        tracks: tracks,
         initialIndex: initialIndex >= 0 ? initialIndex : 0,
         heroPrefix: 'recent',
       );

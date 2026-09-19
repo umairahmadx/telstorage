@@ -41,47 +41,41 @@ void main() {
   });
 
   group('VideoStreamServer Math & Range Unit Tests', () {
-    test('TC-VSS-01: calculateHeaderOffset calculates 0 for uncompressed and 30+nameLen for ZIP STORE', () {
-      expect(VideoStreamServer.calculateHeaderOffset('video.mp4', isZipped: false), equals(0));
-
-      const filename = 'test_clip.mp4';
-      final expectedOffset = 30 + utf8.encode(filename).length;
-      expect(
-        VideoStreamServer.calculateHeaderOffset(filename, isZipped: true),
-        equals(expectedOffset),
-      );
-    });
-
-    test('TC-VSS-02: mapByteToChunk correctly computes chunk index and offset', () {
+    test('TC-VSS-01: mapByteToChunk computes exact 1:1 chunk index and byte offset without header shift', () {
       const partSize = 1000;
-      const headerOffset = 40;
 
-      // Video byte 0 -> ZIP byte 40 -> Chunk 0, offset 40
+      // Video byte 0 -> Chunk 0, offset 0
       final map0 = VideoStreamServer.mapByteToChunk(
         videoByteOffset: 0,
-        headerOffset: headerOffset,
         partSize: partSize,
       );
       expect(map0.chunkIndex, equals(0));
-      expect(map0.chunkOffset, equals(40));
+      expect(map0.chunkOffset, equals(0));
 
-      // Video byte 959 -> ZIP byte 999 -> Chunk 0, offset 999
-      final map959 = VideoStreamServer.mapByteToChunk(
-        videoByteOffset: 959,
-        headerOffset: headerOffset,
+      // Video byte 999 -> Chunk 0, offset 999
+      final map999 = VideoStreamServer.mapByteToChunk(
+        videoByteOffset: 999,
         partSize: partSize,
       );
-      expect(map959.chunkIndex, equals(0));
-      expect(map959.chunkOffset, equals(999));
+      expect(map999.chunkIndex, equals(0));
+      expect(map999.chunkOffset, equals(999));
 
-      // Video byte 960 -> ZIP byte 1000 -> Chunk 1, offset 0
-      final map960 = VideoStreamServer.mapByteToChunk(
-        videoByteOffset: 960,
-        headerOffset: headerOffset,
+      // Video byte 1000 -> Chunk 1, offset 0
+      final map1000 = VideoStreamServer.mapByteToChunk(
+        videoByteOffset: 1000,
         partSize: partSize,
       );
-      expect(map960.chunkIndex, equals(1));
-      expect(map960.chunkOffset, equals(0));
+      expect(map1000.chunkIndex, equals(1));
+      expect(map1000.chunkOffset, equals(0));
+
+      // Arbitrary offset 500 MB with 19 MB chunks
+      const largePartSize = 19 * 1024 * 1024;
+      final mapLarge = VideoStreamServer.mapByteToChunk(
+        videoByteOffset: 500 * 1024 * 1024,
+        partSize: largePartSize,
+      );
+      expect(mapLarge.chunkIndex, equals((500 * 1024 * 1024) ~/ largePartSize));
+      expect(mapLarge.chunkOffset, equals((500 * 1024 * 1024) % largePartSize));
     });
 
     test('TC-VSS-03: parseByteRange parses various RFC 7233 range expressions', () {

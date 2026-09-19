@@ -17,7 +17,6 @@ abstract class UploadServiceContract {
     bool skipGlobalMetadataUpdate = false,
     String? taskId,
     String? precomputedHash,
-    int? precomputedCrc,
     Uint8List? precomputedThumbnailBytes,
     String? thumbnailExtension,
   });

@@ -10,6 +10,7 @@ import 'package:telstorage/core/constants/app_constants.dart';
 import 'package:telstorage/core/services/image_viewer_cache_service.dart';
 import 'package:telstorage/core/services/service_locator.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
+import 'package:telstorage/features/viewer/presentation/screens/audio_player/audio_player_screen.dart';
 import 'package:telstorage/features/viewer/presentation/screens/image_viewer/image_viewer_screen.dart';
 import 'package:telstorage/features/viewer/presentation/screens/video_player/video_player_screen.dart';
 import 'package:telstorage/shared/widgets/app_search_field.dart';
@@ -405,6 +406,18 @@ class _BrowserScreenState extends State<BrowserScreen> {
                   VideoPlayerScreen.open(
                     context,
                     videos: videos,
+                    initialIndex: initialIndex >= 0 ? initialIndex : 0,
+                    heroPrefix: 'browser',
+                  );
+                } else if (AudioPlayerScreen.isAudioRecord(file)) {
+                  final tracks = state.files
+                      .where(AudioPlayerScreen.isAudioRecord)
+                      .toList();
+                  final initialIndex =
+                      tracks.indexWhere((t) => t.fileId == file.fileId);
+                  AudioPlayerScreen.open(
+                    context,
+                    tracks: tracks,
                     initialIndex: initialIndex >= 0 ? initialIndex : 0,
                     heroPrefix: 'browser',
                   );

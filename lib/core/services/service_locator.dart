@@ -20,6 +20,7 @@ import 'upload_service.dart';
 import 'web_share_queue_service.dart';
 import 'sync_queue_service.dart';
 import 'thumbnail_repository.dart';
+import 'metadata_sync_coordinator.dart';
 import 'navigation_service.dart';
 import 'transfer_queue_service.dart';
 import 'transfer_concurrency_coordinator.dart';
@@ -36,6 +37,7 @@ import 'download_service_contract.dart';
 import '../../features/storage/domain/repositories/storage_repository_contract.dart';
 import '../../features/storage/domain/usecases/download_file_usecase.dart';
 import '../../features/storage/domain/usecases/generate_web_share_usecase.dart';
+import 'storage_reconciler.dart';
 
 /// Single initialization point for all services.
 /// Call [ServiceLocator.instance.init()] after login.
@@ -55,6 +57,7 @@ class ServiceLocator {
   late TelegramService _telegram;
   late HiveService _hive;
   late MetadataService _metadata;
+  late MetadataSyncCoordinator _metadataSyncCoordinator;
   late SyncService _syncService;
   late UploadService _uploadService;
   late DownloadService _downloadService;
@@ -67,6 +70,7 @@ class ServiceLocator {
   late DownloadFileUseCase _downloadFileUseCase;
   late GenerateWebShareUseCase _generateWebShareUseCase;
   late AccountResetService _accountResetService;
+  late StorageReconciler _storageReconciler;
 
   // These are always available as they don't depend on user credentials for creation
   final NavigationService _navigation = NavigationService.instance;
@@ -76,7 +80,9 @@ class ServiceLocator {
   TelegramService get telegram => _telegram;
   HiveService get hive => _hive;
   MetadataService get metadata => _metadata;
+  MetadataSyncCoordinator get metadataSyncCoordinator => _metadataSyncCoordinator;
   SyncService get syncService => _syncService;
+  StorageReconciler get storageReconciler => _storageReconciler;
   AccountResetService get accountResetService => _accountResetService;
 
   UploadServiceContract get uploadServiceContract => _uploadService;
@@ -134,6 +140,11 @@ class ServiceLocator {
     _telegram = telegram;
   }
 
+  /// Injects metadata sync coordinator instance for test isolation.
+  void setMetadataSyncCoordinatorForTesting(MetadataSyncCoordinator coordinator) {
+    _metadataSyncCoordinator = coordinator;
+  }
+
   ThumbnailRepository get thumbnailRepository => _thumbnailRepository;
   WebShareQueueService get webShareQueue => _webShareQueue;
   DownloadFileUseCase get downloadFileUseCase => _downloadFileUseCase;
@@ -180,12 +191,16 @@ class ServiceLocator {
       _hive = HiveService.instance;
 
       _metadata = MetadataService(_telegram);
-      _syncService = SyncService(_metadata, _hive);
+      _metadataSyncCoordinator =
+          MetadataSyncCoordinator(_metadata, _metadata.partitionService);
+      _storageReconciler = StorageReconciler(_metadata, _telegram, _hive);
+      _syncService = SyncService(_metadata, _hive, _storageReconciler);
       _uploadService = UploadService(_telegram, _metadata, _hive);
       _downloadService = DownloadService(_telegram);
       _downloadQueue =
           DownloadQueueService(_downloadService, AppConstants.downloadsBox);
-      _fileManager = FileManagerService(_metadata, _telegram, _hive);
+      _fileManager =
+          FileManagerService(_metadata, _telegram, _hive, _metadataSyncCoordinator);
       _syncQueue = SyncQueueService(_fileManager);
       _storageRepository = StorageRepository(_hive, _fileManager, _metadata);
       _thumbnailRepository = ThumbnailRepository(_telegram);

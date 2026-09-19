@@ -13,17 +13,30 @@ import '../utils/app_logger.dart';
 import '../utils/connectivity.dart';
 import 'hive_service.dart';
 import 'metadata_service.dart';
+import 'storage_reconciler.dart';
 
 /// Keeps the local Hive cache in sync with Telegram's global metadata partitions.
 class SyncService {
   final MetadataService _metadata;
   final HiveService _hive;
+  final StorageReconciler? _reconciler;
 
-  SyncService(this._metadata, this._hive);
+  SyncService(this._metadata, this._hive, [this._reconciler]);
+
+  /// Audits and purges orphaned remote files and partitions in one go.
+  Future<ReconciliationReport> reconcileRemoteStorage({
+    Function(double progress, String status)? onProgress,
+  }) async {
+    if (_reconciler != null) {
+      return _reconciler.reconcileAndCleanRemoteStorage(onProgress: onProgress);
+    }
+    throw StateError('StorageReconciler is not configured.');
+  }
 
   /// Merges Telegram partition truth → local Hive cache.
   Future<SyncResult> syncFromTelegram({
     Function(double progress, String status)? onProgress,
+    bool autoCleanOrphans = false,
   }) async {
     int added = 0;
     int removed = 0;
@@ -198,6 +211,14 @@ class SyncService {
       onProgress?.call(0.6, 'Syncing root directory...');
       await syncFolderPartition(AppConstants.rootFolderPartitionId,
           meta: appMeta);
+
+      if (autoCleanOrphans && _reconciler != null) {
+        onProgress?.call(0.85, 'Reconciling remote storage...');
+        final cleanReport = await _reconciler.reconcileAndCleanRemoteStorage(
+          onProgress: (p, s) => onProgress?.call(0.85 + (p * 0.15), s),
+        );
+        removed += cleanReport.orphanedFilesCleaned;
+      }
 
       onProgress?.call(1.0, 'Sync complete!');
       AppLogger.i(

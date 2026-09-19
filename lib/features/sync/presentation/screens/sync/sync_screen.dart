@@ -10,6 +10,7 @@ import '../../../../../core/services/sync_queue_service.dart';
 import '../../../../../core/theme/app_icons.dart';
 import '../../../../../core/theme/app_theme.dart';
 import '../../../../../core/utils/connectivity.dart';
+import 'widgets/reconcile_storage_card.dart';
 
 /// Screen component rendering synchronization status, logs, and manual sync action.
 class SyncScreen extends StatefulWidget {
@@ -198,6 +199,8 @@ class _SyncScreenState extends State<SyncScreen> {
                 padding: const EdgeInsets.all(20),
                 children: [
                   _buildStatusCard(colors, syncQueue, pendingCount),
+                  const SizedBox(height: 20),
+                  const ReconcileStorageCard(),
                   const SizedBox(height: 24),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,

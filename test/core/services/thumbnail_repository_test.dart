@@ -55,6 +55,9 @@ class FakeTelegramService implements TelegramService {
   Future<void> deleteMessage(int messageId) async {}
 
   @override
+  Future<void> deleteMessages(List<int> messageIds) async {}
+
+  @override
   Future<String> getFileIdOfMessage(int messageId) async => 'mock_id';
 
   @override

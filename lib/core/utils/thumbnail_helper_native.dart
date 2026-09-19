@@ -95,4 +95,31 @@ class ThumbnailHelper {
     } catch (_) {}
     return null;
   }
+
+  /// Reads up to [maxBytes] from the beginning of a file without buffering the entire file into RAM.
+  static Future<Uint8List?> readHeaderBytes(String path, int maxBytes) async {
+    try {
+      final file = File(path);
+      if (!file.existsSync()) return null;
+      final raf = await file.open(mode: FileMode.read);
+      try {
+        final len = await raf.length();
+        final toRead = len < maxBytes ? len : maxBytes;
+        return await raf.read(toRead);
+      } finally {
+        await raf.close();
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Returns file size in bytes if file exists on disk, or null.
+  static int? getFileSize(String path) {
+    try {
+      final file = File(path);
+      return file.existsSync() ? file.lengthSync() : null;
+    } catch (_) {
+      return null;
+    }
+  }
 }

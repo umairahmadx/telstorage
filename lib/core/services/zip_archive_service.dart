@@ -119,7 +119,10 @@ abstract final class ZipArchiveService {
           'Preparing ${i + 1}/$total: ${item.file.name}',
         );
 
-        final bytes = await downloadService.downloadFile(
+        final safeArchivePath =
+            disambiguateArchivePath(item.relativePath, usedArchivePaths);
+        final targetFile = File('${tempDir.path}/$safeArchivePath');
+        await downloadService.downloadFileToDisk(
           item.file,
           (chunkProgress, _) {
             final fileBase = total > 0 ? (i / total) * 0.7 : 0.0;
@@ -129,13 +132,8 @@ abstract final class ZipArchiveService {
               'Downloading ${i + 1}/$total: ${item.file.name}',
             );
           },
+          explicitTargetPath: targetFile.path,
         );
-
-        final safeArchivePath =
-            disambiguateArchivePath(item.relativePath, usedArchivePaths);
-        final targetFile = File('${tempDir.path}/$safeArchivePath');
-        await targetFile.parent.create(recursive: true);
-        await targetFile.writeAsBytes(bytes);
 
         zipEntries.add(ZipEntry(file: targetFile, archivePath: safeArchivePath));
       }
@@ -272,7 +270,11 @@ abstract final class ZipArchiveService {
             currentStage: 'Downloading ${i + 1}/$total: ${item.file.name}',
           );
 
-          final bytes = await downloadService.downloadFile(
+          // EC-14: Disambiguate duplicate archive paths
+          final safeArchivePath =
+              disambiguateArchivePath(item.relativePath, usedArchivePaths);
+          final targetFile = File('${tempDir.path}/$safeArchivePath');
+          await downloadService.downloadFileToDisk(
             item.file,
             (chunkProgress, _) {
               final overall =
@@ -280,14 +282,8 @@ abstract final class ZipArchiveService {
               TransferQueueService.instance
                   .updateTask(taskId, progress: overall);
             },
+            explicitTargetPath: targetFile.path,
           );
-
-          // EC-14: Disambiguate duplicate archive paths
-          final safeArchivePath =
-              disambiguateArchivePath(item.relativePath, usedArchivePaths);
-          final targetFile = File('${tempDir.path}/$safeArchivePath');
-          await targetFile.parent.create(recursive: true);
-          await targetFile.writeAsBytes(bytes);
 
           zipEntries
               .add(ZipEntry(file: targetFile, archivePath: safeArchivePath));

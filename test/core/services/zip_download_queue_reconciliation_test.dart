@@ -12,6 +12,7 @@ import 'package:telstorage/core/models/download_job.dart';
 import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/models/folder_record.dart';
 import 'package:telstorage/core/models/transfer_task.dart';
+import 'package:telstorage/core/models/download_conflict_policy.dart';
 import 'package:telstorage/core/services/download_queue_service.dart';
 import 'package:telstorage/core/services/download_service.dart';
 import 'package:telstorage/core/services/download_service_contract.dart';
@@ -38,6 +39,25 @@ class _MockDownloadService implements DownloadServiceContract {
       return await customDownload!(file);
     }
     return Uint8List.fromList([1, 2, 3, 4, 5]);
+  }
+
+  @override
+  Future<SaveResult> downloadFileToDisk(
+    FileRecord record,
+    void Function(double progress, String status) onProgress, {
+    String? subpath,
+    DownloadConflictPolicy policy = DownloadConflictPolicy.overwrite,
+    RequestPriority priority = RequestPriority.normal,
+    String? explicitTargetPath,
+  }) async {
+    final bytes = await downloadFile(record, onProgress, priority: priority);
+    if (explicitTargetPath != null) {
+      final file = File(explicitTargetPath);
+      await file.parent.create(recursive: true);
+      await file.writeAsBytes(bytes);
+      return SaveResult(savedPath: explicitTargetPath, message: 'OK', success: true);
+    }
+    return SaveResult(savedPath: '/mock/${record.name}', message: 'OK', success: true);
   }
 
   @override

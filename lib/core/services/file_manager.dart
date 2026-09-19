@@ -14,6 +14,7 @@ import '../utils/thumbnail_helper_native.dart'
     if (dart.library.js_interop) '../utils/thumbnail_helper_web.dart';
 import 'hive_service.dart';
 import 'metadata_service.dart';
+import 'metadata_sync_coordinator.dart';
 import 'service_locator.dart';
 import 'telegram_service.dart';
 
@@ -28,8 +29,9 @@ class FileManagerService {
   final MetadataService _meta;
   final TelegramService _telegram;
   final HiveService _hive;
+  final MetadataSyncCoordinator? _coordinator;
 
-  FileManagerService(this._meta, this._telegram, this._hive);
+  FileManagerService(this._meta, this._telegram, this._hive, [this._coordinator]);
 
   MetadataService get metadataService => _meta;
 
@@ -220,7 +222,11 @@ class FileManagerService {
       metadataMessageId: newMsgId,
       thumbnailFileId: record.thumbnailFileId,
     );
-    await _meta.updateFileRef(updatedRef);
+    if (_coordinator != null) {
+      _coordinator.enqueueUpdateFileRef(updatedRef);
+    } else {
+      await _meta.updateFileRef(updatedRef);
+    }
   }
 
   Future<void> moveFile(String fileId, String? newFolderId,
@@ -265,63 +271,51 @@ class FileManagerService {
       metadataMessageId: newMsgId,
       thumbnailFileId: record.thumbnailFileId,
     );
-    await _meta.updateFileRef(
-      updatedRef,
-      oldFolderId: effectiveOldFolderId,
-      folderChanged: true,
-    );
+    if (_coordinator != null) {
+      _coordinator.enqueueUpdateFileRef(
+        updatedRef,
+        oldFolderId: effectiveOldFolderId,
+        folderChanged: true,
+      );
+    } else {
+      await _meta.updateFileRef(
+        updatedRef,
+        oldFolderId: effectiveOldFolderId,
+        folderChanged: true,
+      );
+    }
   }
 
   Future<void> deleteFile(String fileId) async {
     final record = _hive.getFile(fileId);
     if (record == null) return;
 
-    Map<String, dynamic>? fileMeta;
-    if (record.metadataFileId != null && record.metadataFileId!.isNotEmpty) {
-      try {
-        fileMeta = await _fetchFileMeta(
-          record.metadataMessageId,
-          record.metadataFileId,
-        );
-      } catch (e) {
-        AppLogger.w('Could not fetch remote chunk metadata for $fileId: $e',
-            tag: 'FileManager');
-      }
-    }
+    await _deleteRemoteFileMessages(
+      record.metadataMessageId,
+      record.metadataFileId,
+    );
 
-    if (fileMeta != null) {
-      final chunks = fileMeta['chunks'] as List? ?? [];
-      for (final chunk in chunks) {
-        try {
-          await _telegram.deleteMessage(chunk['message_id'] as int);
-        } catch (_) {}
-      }
-      final thumbMsgId = fileMeta['thumbnail_message_id'] as int?;
-      if (thumbMsgId != null && thumbMsgId > 0) {
-        try {
-          await _telegram.deleteMessage(thumbMsgId);
-        } catch (_) {}
-      }
-    }
-
-    if (record.metadataMessageId > 0) {
-      try {
-        await _telegram.deleteMessage(record.metadataMessageId);
-      } catch (_) {}
-    }
-
-    try {
-      final meta = await _meta.fetch();
-      await _meta.removeFile(
-        meta,
+    if (_coordinator != null) {
+      _coordinator.enqueueRemoveFile(
         fileId,
         record.sizeMb,
         record.mimeType,
         folderId: record.folderId,
       );
-    } catch (e) {
-      AppLogger.w('Could not remove file $fileId from remote partition: $e',
-          tag: 'FileManager');
+    } else {
+      try {
+        final meta = await _meta.fetch();
+        await _meta.removeFile(
+          meta,
+          fileId,
+          record.sizeMb,
+          record.mimeType,
+          folderId: record.folderId,
+        );
+      } catch (e) {
+        AppLogger.w('Could not remove file $fileId from remote partition: $e',
+            tag: 'FileManager', error: e);
+      }
     }
 
     await _hive.deleteFile(fileId);
@@ -361,7 +355,7 @@ class FileManagerService {
           tag: 'FileManager');
     } catch (e) {
       AppLogger.e('Failed to remove $fileId from global metadata: $e',
-          tag: 'FileManager');
+          tag: 'FileManager', error: e);
       rethrow;
     }
   }
@@ -370,27 +364,36 @@ class FileManagerService {
     int? metadataMessageId,
     String? metadataFileId,
   ) async {
+    final messageIdsToDelete = <int>{};
     if (metadataMessageId != null && metadataMessageId > 0) {
+      messageIdsToDelete.add(metadataMessageId);
+    }
+
+    if (metadataFileId != null && metadataFileId.isNotEmpty) {
       try {
         final fileMeta =
             await _fetchFileMeta(metadataMessageId, metadataFileId);
         final chunks = fileMeta['chunks'] as List? ?? [];
         for (final chunk in chunks) {
-          try {
-            await _telegram.deleteMessage(chunk['message_id'] as int);
-          } catch (_) {}
+          final cId = chunk['message_id'];
+          if (cId is int && cId > 0) messageIdsToDelete.add(cId);
         }
-        final thumbMsgId = fileMeta['thumbnail_message_id'] as int?;
-        if (thumbMsgId != null && thumbMsgId > 0) {
-          try {
-            await _telegram.deleteMessage(thumbMsgId);
-          } catch (_) {}
+        final thumbMsgId = fileMeta['thumbnail_message_id'];
+        if (thumbMsgId is int && thumbMsgId > 0) {
+          messageIdsToDelete.add(thumbMsgId);
         }
-        await _telegram.deleteMessage(metadataMessageId);
       } catch (e) {
-        AppLogger.w(
-            'Could not clean up remote Telegram messages: $e',
-            tag: 'FileManager');
+        AppLogger.w('Could not fetch remote chunk metadata: $e',
+            tag: 'FileManager', error: e);
+      }
+    }
+
+    if (messageIdsToDelete.isNotEmpty) {
+      try {
+        await _telegram.deleteMessages(messageIdsToDelete.toList());
+      } catch (e) {
+        AppLogger.w('Bulk deletion failed for file messages: $e',
+            tag: 'FileManager', error: e);
       }
     }
   }

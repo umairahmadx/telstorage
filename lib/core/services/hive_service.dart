@@ -8,8 +8,10 @@ import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../constants/app_constants.dart';
 import '../events/domain_event_bus.dart';
+import '../models/download_job.dart';
 import '../models/file_record.dart';
 import '../models/folder_record.dart';
+import '../models/pending_action.dart';
 import '../utils/app_logger.dart';
 
 /// Local cache management using Hive
@@ -287,6 +289,52 @@ class HiveService {
   Future<void> removeFolderPartitionMessageId(String folderId) async {
     if (!Hive.isBoxOpen(AppConstants.partitionSyncBox)) return;
     await _partitionSyncBox.delete(folderId);
+  }
+
+  // ── Compaction & Memory Optimization ─────────────────────
+
+  /// Compacts a specific open Hive box to reclaim disk space from deleted/overwritten entries.
+  Future<void> compactBox<T>(String boxName) async {
+    try {
+      if (Hive.isBoxOpen(boxName)) {
+        await Hive.box<T>(boxName).compact();
+        AppLogger.d('Compacted box: $boxName', tag: 'HiveService');
+      }
+    } catch (e) {
+      AppLogger.w('Failed to compact box $boxName: $e', tag: 'HiveService');
+    }
+  }
+
+  /// Compacts all core TelStorage Hive boxes (files, folders, partitions, downloads, pending actions).
+  Future<void> compactAll() async {
+    try {
+      if (Hive.isBoxOpen(AppConstants.filesBox)) await _files.compact();
+    } catch (_) {}
+    try {
+      if (Hive.isBoxOpen(AppConstants.foldersBox)) await _folders.compact();
+    } catch (_) {}
+    try {
+      if (Hive.isBoxOpen(AppConstants.partitionSyncBox)) {
+        await _partitionSyncBox.compact();
+      }
+    } catch (_) {}
+    try {
+      if (Hive.isBoxOpen(AppConstants.downloadsBox)) {
+        await Hive.box<DownloadJob>(AppConstants.downloadsBox).compact();
+      }
+    } catch (_) {}
+    try {
+      if (Hive.isBoxOpen(AppConstants.pendingActionsBox)) {
+        await Hive.box<PendingAction>(AppConstants.pendingActionsBox).compact();
+      }
+    } catch (_) {}
+    try {
+      if (Hive.isBoxOpen(AppConstants.errorLogsBox)) {
+        await Hive.box(AppConstants.errorLogsBox).compact();
+      }
+    } catch (_) {}
+    AppLogger.i('Hive compaction completed for all open boxes.',
+        tag: 'HiveService');
   }
 
   // ── Clear All ────────────────────────────────────────────

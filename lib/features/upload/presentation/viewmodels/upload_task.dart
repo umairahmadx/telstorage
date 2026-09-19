@@ -17,7 +17,6 @@ class UploadTask {
   final String? folderId;
   final bool isTemporaryCacheFile;
   String? precomputedHash;
-  int? precomputedCrc;
   int? fileSizeOnDisk;
   Uint8List? precomputedThumbnailBytes;
   String? thumbnailExtension;
@@ -31,7 +30,6 @@ class UploadTask {
     this.folderId,
     this.isTemporaryCacheFile = false,
     this.precomputedHash,
-    this.precomputedCrc,
     this.fileSizeOnDisk,
     this.precomputedThumbnailBytes,
     this.thumbnailExtension,

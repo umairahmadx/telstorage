@@ -3,7 +3,9 @@
  * Description: Unified helper providing in-app device storage picking, directory uploads, and concurrency locking.
  */
 
+import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
@@ -13,7 +15,9 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/app_logger.dart';
 import '../../../../core/utils/battery_optimization_helper.dart';
 import '../../../../core/utils/storage_permission_helper.dart';
-import '../../../../shared/widgets/device_file_picker_sheet.dart';
+import '../../../../shared/widgets/device_file_picker/device_file_picker_sheet.dart';
+import '../../../../shared/widgets/device_file_picker/device_media_picker_sheet.dart';
+import '../../../../shared/widgets/device_file_picker/device_media_scanner.dart';
 import 'upload_folder_helper.dart';
 import 'upload_view_model.dart';
 
@@ -72,6 +76,91 @@ abstract final class UploadFilePickerHelper {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error selecting files: $e'),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: colors?.error,
+          ),
+        );
+      }
+    } finally {
+      _isPicking = false;
+    }
+  }
+
+  /// Opens the device media picker for zero-copy photo/video selection and upload.
+  static Future<void> pickAndUploadMedia({
+    required BuildContext context,
+    required String? folderId,
+    required UploadBloc uploadBloc,
+  }) async {
+    if (_isPicking) return;
+    _isPicking = true;
+
+    try {
+      if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) {
+        // Web/Desktop fallback: use FilePicker with media filter
+        final result = await FilePicker.platform.pickFiles(
+          type: FileType.media,
+          allowMultiple: true,
+        );
+        if (result == null || !context.mounted) return;
+        final tasks = result.files
+            .where((f) => f.path != null || f.bytes != null)
+            .map((f) => UploadTask(
+                  id: const Uuid().v4(),
+                  path: f.path,
+                  bytes: f.bytes,
+                  name: f.name,
+                  size: f.size,
+                  folderId: folderId,
+                ))
+            .toList();
+        if (tasks.isNotEmpty && context.mounted) {
+          uploadBloc.add(AddUploads(tasks));
+          ServiceLocator.instance.navigation
+              .navigateTo(AppDestination.transferUploads);
+        }
+        return;
+      }
+
+      // Mobile: open our custom media picker
+      final selectedAssets = await DeviceMediaPickerSheet.show(context);
+      if (selectedAssets == null || selectedAssets.isEmpty || !context.mounted) {
+        return;
+      }
+
+      final List<UploadTask> tasks = [];
+      const uuid = Uuid();
+
+      for (final asset in selectedAssets) {
+        final (path, isTemporary) =
+            await DeviceMediaScanner.resolveUploadPath(asset);
+        final file = File(path);
+        if (!file.existsSync()) continue;
+
+        tasks.add(UploadTask(
+          id: uuid.v4(),
+          path: path,
+          name: asset.title ?? 'media_${asset.id}',
+          size: await file.length(),
+          folderId: folderId,
+          isTemporaryCacheFile: isTemporary,
+        ));
+      }
+
+      if (tasks.isNotEmpty && context.mounted) {
+        await BatteryOptimizationHelper.maybePromptBatteryOptimization(context);
+        if (!context.mounted) return;
+        uploadBloc.add(AddUploads(tasks));
+        ServiceLocator.instance.navigation
+            .navigateTo(AppDestination.transferUploads);
+      }
+    } catch (e) {
+      AppLogger.e('Failed to pick media: $e', tag: 'UploadFilePicker');
+      if (context.mounted) {
+        final colors = Theme.of(context).extension<AppColorsExtension>();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error selecting media: $e'),
             behavior: SnackBarBehavior.floating,
             backgroundColor: colors?.error,
           ),

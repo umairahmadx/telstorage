@@ -17,7 +17,7 @@ import 'package:telstorage/features/downloads/presentation/screens/downloads/vie
 import 'package:telstorage/features/home/presentation/screens/home/viewmodel/home_view_model.dart';
 import 'package:telstorage/features/upload/presentation/viewmodels/upload_file_picker_helper.dart';
 import 'package:telstorage/features/upload/presentation/viewmodels/upload_view_model.dart';
-import 'package:telstorage/shared/widgets/device_file_picker_sheet.dart';
+import 'package:telstorage/shared/widgets/device_file_picker/device_file_picker_sheet.dart';
 import 'package:telstorage/shared/widgets/mobile_shell.dart';
 import 'package:telstorage/shared/widgets/mobile_shell/mobile_bottom_nav.dart';
 

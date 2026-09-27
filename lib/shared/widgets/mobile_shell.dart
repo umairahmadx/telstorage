@@ -14,7 +14,6 @@ import '../../core/navigation/navigation_intent.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/services/service_locator.dart';
 import '../../core/services/transfer_queue_service.dart';
-import '../../core/theme/app_icons.dart';
 import '../../core/theme/app_theme.dart';
 import '../../features/browser/presentation/screens/browser/browser_screen.dart';
 import '../../features/browser/presentation/screens/browser/viewmodel/browser_view_model.dart';
@@ -24,7 +23,7 @@ import '../../features/settings/presentation/screens/settings/settings_screen.da
 import '../../features/upload/presentation/viewmodels/upload_file_picker_helper.dart';
 import '../../features/upload/presentation/viewmodels/upload_view_model.dart';
 import 'app_drawer.dart';
-import 'mobile_shell/mobile_add_action_item.dart';
+import 'mobile_shell/mobile_add_action_sheet.dart';
 import 'mobile_shell/mobile_bottom_nav.dart';
 
 /// Shell component providing unified navigation scaffold with drawer and bottom bar.
@@ -238,68 +237,25 @@ class MobileShellState extends State<MobileShell> {
   /// Shows floating add/upload modal action bottom sheet.
   void _showAddMenu() {
     HapticFeedback.mediumImpact();
-    final colors = Theme.of(context).extension<AppColorsExtension>()!;
-    showModalBottomSheet(
+    MobileAddActionSheet.show(
+      context,
+      onMedia: () => _pickAndUploadMedia(),
+      onFiles: () => _pickAndUpload(),
+      onFolder: () => _pickAndUploadFolder(),
+      onNewFolder: _currentIndex == 1 ? () => _showCreateFolderDialog() : null,
+    );
+  }
+
+  /// Opens device media picker and enqueues selected photos/videos for upload.
+  Future<void> _pickAndUploadMedia() async {
+    final browserState = context.read<BrowserBloc>().state;
+    final currentFolderId =
+        _currentIndex == 1 ? browserState.currentFolderId : null;
+
+    await UploadFilePickerHelper.pickAndUploadMedia(
       context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: colors.bgSurface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: colors.borderSubtle,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                AddActionItem(
-                  icon: AppIcons.uploadFile,
-                  label: 'Upload Files',
-                  color: colors.accentPrimary,
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    Navigator.pop(ctx);
-                    _pickAndUpload();
-                  },
-                ),
-                AddActionItem(
-                  icon: AppIcons.uploadFolder,
-                  label: 'Upload Folder',
-                  color: colors.accentPrimary,
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    Navigator.pop(ctx);
-                    _pickAndUploadFolder();
-                  },
-                ),
-                if (_currentIndex == 1)
-                  AddActionItem(
-                    icon: AppIcons.newFolder,
-                    label: 'New Folder',
-                    color: colors.warning,
-                    onTap: () {
-                      HapticFeedback.selectionClick();
-                      Navigator.pop(ctx);
-                      _showCreateFolderDialog();
-                    },
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
+      folderId: currentFolderId,
+      uploadBloc: context.read<UploadBloc>(),
     );
   }
 

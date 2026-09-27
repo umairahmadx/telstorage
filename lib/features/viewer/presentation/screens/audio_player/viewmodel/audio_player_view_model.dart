@@ -8,6 +8,8 @@ import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../../../../../core/models/file_record.dart';
+import '../../../../../../core/models/lyric_line.dart';
+import '../../../../../../core/services/lyrics_service.dart';
 import '../../../../../../core/services/video_chunk_cache_manager.dart';
 import '../../../../../../core/services/video_stream_server.dart';
 import '../../../../../../core/utils/app_logger.dart';
@@ -39,6 +41,12 @@ class AudioPlayerViewModel extends ChangeNotifier {
   AudioRepeatMode _repeatMode = AudioRepeatMode.off;
   String? _errorMessage;
 
+  List<LyricLine> _lyrics = const [];
+  int _currentLyricIndex = -1;
+  bool _isLoadingLyrics = false;
+  Duration _lyricsOffset = Duration.zero;
+  bool _isLyricsViewActive = false;
+
   StreamRegistration? _registration;
   int _initGeneration = 0;
   final List<StreamSubscription> _subscriptions = [];
@@ -46,9 +54,7 @@ class AudioPlayerViewModel extends ChangeNotifier {
   List<FileRecord> get playlist => _playlist;
   int get currentIndex => _currentIndex;
   FileRecord? get currentTrack =>
-      (_currentIndex >= 0 && _currentIndex < _playlist.length)
-          ? _playlist[_currentIndex]
-          : null;
+      (_currentIndex >= 0 && _currentIndex < _playlist.length) ? _playlist[_currentIndex] : null;
   Player? get player => _player;
   bool get isInitialized => _isInitialized;
   bool get isPlaying => _isPlaying;
@@ -62,6 +68,12 @@ class AudioPlayerViewModel extends ChangeNotifier {
   double get playbackSpeed => _playbackSpeed;
   AudioRepeatMode get repeatMode => _repeatMode;
   String? get errorMessage => _errorMessage;
+
+  List<LyricLine> get lyrics => _lyrics;
+  int get currentLyricIndex => _currentLyricIndex;
+  bool get isLoadingLyrics => _isLoadingLyrics;
+  Duration get lyricsOffset => _lyricsOffset;
+  bool get isLyricsViewActive => _isLyricsViewActive;
 
   /// Initializes the player with a [playlist] and begins streaming [initialIndex].
   Future<void> initialize(List<FileRecord> playlist, int initialIndex) async {
@@ -90,7 +102,12 @@ class AudioPlayerViewModel extends ChangeNotifier {
     _isPlaying = false;
     _cachedChunks = const {};
     _mergedBuffered = const [];
+    _lyrics = const [];
+    _currentLyricIndex = -1;
+    _lyricsOffset = Duration.zero;
+    _isLoadingLyrics = true;
     unawaited(_refreshCachedChunks(track.fileId));
+    unawaited(loadLyricsForCurrentTrack());
     notifyListeners();
 
     try {
@@ -146,6 +163,7 @@ class AudioPlayerViewModel extends ChangeNotifier {
 
     _subscriptions.add(p.stream.position.listen((pos) {
       _position = pos;
+      _updateCurrentLyric();
       notifyListeners();
     }));
 
@@ -184,22 +202,14 @@ class AudioPlayerViewModel extends ChangeNotifier {
   }
 
   void _handleTrackEnded() {
-    switch (_repeatMode) {
-      case AudioRepeatMode.one:
-        seekTo(Duration.zero);
-        play();
-        break;
-      case AudioRepeatMode.all:
-        nextTrack();
-        break;
-      case AudioRepeatMode.off:
-        if (_currentIndex < _playlist.length - 1) {
-          nextTrack();
-        } else {
-          _isPlaying = false;
-          unawaited(WakelockPlus.disable().catchError((_) {}));
-        }
-        break;
+    if (_repeatMode == AudioRepeatMode.one) {
+      seekTo(Duration.zero);
+      play();
+    } else if (_repeatMode == AudioRepeatMode.all || _currentIndex < _playlist.length - 1) {
+      nextTrack();
+    } else {
+      _isPlaying = false;
+      unawaited(WakelockPlus.disable().catchError((_) {}));
     }
   }
 
@@ -294,17 +304,11 @@ class AudioPlayerViewModel extends ChangeNotifier {
 
   /// Cycles through repeat modes: off -> all -> one -> off.
   void toggleRepeat() {
-    switch (_repeatMode) {
-      case AudioRepeatMode.off:
-        _repeatMode = AudioRepeatMode.all;
-        break;
-      case AudioRepeatMode.all:
-        _repeatMode = AudioRepeatMode.one;
-        break;
-      case AudioRepeatMode.one:
-        _repeatMode = AudioRepeatMode.off;
-        break;
-    }
+    _repeatMode = switch (_repeatMode) {
+      AudioRepeatMode.off => AudioRepeatMode.all,
+      AudioRepeatMode.all => AudioRepeatMode.one,
+      AudioRepeatMode.one => AudioRepeatMode.off,
+    };
     notifyListeners();
   }
 
@@ -367,6 +371,97 @@ class AudioPlayerViewModel extends ChangeNotifier {
     _player = null;
   }
 
+  /// Toggles visibility of the synchronized lyrics view.
+  void toggleLyricsView() {
+    _isLyricsViewActive = !_isLyricsViewActive;
+    notifyListeners();
+  }
+
+  /// Automatically searches and loads lyrics for the currently active track.
+  Future<void> loadLyricsForCurrentTrack() async {
+    final track = currentTrack;
+    if (track == null) return;
+    _isLoadingLyrics = true;
+    notifyListeners();
+
+    try {
+      final lines = await LyricsService.instance.fetchLyrics(
+        filename: track.name,
+        duration: _duration,
+        fileId: track.fileId,
+      );
+      if (currentTrack?.fileId == track.fileId) {
+        _lyrics = lines;
+        _isLoadingLyrics = false;
+        _updateCurrentLyric();
+        notifyListeners();
+      }
+    } catch (_) {
+      if (currentTrack?.fileId == track.fileId) {
+        _isLoadingLyrics = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  /// Adjusts timing offset for lyrics synchronization.
+  void adjustLyricsOffset(Duration delta) {
+    _lyricsOffset += delta;
+    _updateCurrentLyric();
+    notifyListeners();
+  }
+
+  /// Resets lyrics timing offset to zero.
+  void resetLyricsOffset() {
+    _lyricsOffset = Duration.zero;
+    _updateCurrentLyric();
+    notifyListeners();
+  }
+
+  /// Overrides the current lyrics list directly.
+  void setLyrics(List<LyricLine> newLyrics) {
+    _lyrics = newLyrics;
+    _updateCurrentLyric();
+    notifyListeners();
+  }
+
+  /// Seeks audio playback directly to the timestamp of [index] lyric line.
+  void seekToLyric(int index) {
+    if (index >= 0 && index < _lyrics.length) {
+      var target = _lyrics[index].timestamp - _lyricsOffset;
+      if (target < Duration.zero) target = Duration.zero;
+      seekTo(target);
+    }
+  }
+
+  /// Prompts user to select a local .lrc file for the current track.
+  Future<void> pickLocalLyrics() async {
+    final track = currentTrack;
+    final lines = await LyricsService.instance.pickLocalLyricsFile(
+      cacheKey: track?.fileId,
+    );
+    if (lines != null && lines.isNotEmpty) {
+      setLyrics(lines);
+    }
+  }
+
+  void _updateCurrentLyric() {
+    if (_lyrics.isEmpty) {
+      _currentLyricIndex = -1;
+      return;
+    }
+    final effective = _position + _lyricsOffset;
+    int idx = -1;
+    for (int i = 0; i < _lyrics.length; i++) {
+      if (_lyrics[i].timestamp <= effective) {
+        idx = i;
+      } else {
+        break;
+      }
+    }
+    _currentLyricIndex = idx;
+  }
+
   @override
   void dispose() {
     _registration?.dispose();
@@ -381,6 +476,7 @@ class AudioPlayerViewModel extends ChangeNotifier {
   @visibleForTesting
   void setMockPositionForTesting(Duration pos) {
     _position = pos;
+    _updateCurrentLyric();
     notifyListeners();
   }
 

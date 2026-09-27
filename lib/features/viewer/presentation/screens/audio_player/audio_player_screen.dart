@@ -11,8 +11,11 @@ import '../../../../../../core/theme/app_icons.dart';
 import '../../../../../../core/theme/app_theme.dart';
 import '../../../../../../shared/widgets/thumbnail_widget.dart';
 import 'viewmodel/audio_player_view_model.dart';
+import 'widgets/audio_lyrics_view.dart';
 import 'widgets/audio_player_controls.dart';
+import 'widgets/audio_playlist_sheet.dart';
 import 'widgets/audio_progress_bar.dart';
+import 'widgets/audio_speed_sheet.dart';
 
 /// Fullscreen audio player screen providing chunk-level streaming and playlist management.
 class AudioPlayerScreen extends StatefulWidget {
@@ -122,134 +125,6 @@ class _AudioPlayerScreenState extends State<AudioPlayerScreen>
       ServiceLocator.instance.thumbnailRepository.resumeDownloads();
     }
     super.dispose();
-  }
-
-  void _showPlaylistSheet() {
-    final colors = context.colors;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: colors.bgSurface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => ListenableBuilder(
-        listenable: _viewModel,
-        builder: (context, _) => SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Playlist (${_viewModel.playlist.length})',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: colors.textPrimary,
-                      ),
-                    ),
-                    IconButton(
-                      icon: Icon(AppIcons.close, color: colors.textSecondary),
-                      onPressed: () => Navigator.of(ctx).pop(),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: _viewModel.playlist.length,
-                  itemBuilder: (context, idx) {
-                    final item = _viewModel.playlist[idx];
-                    final isCurrent = idx == _viewModel.currentIndex;
-                    return ListTile(
-                      leading: Icon(
-                        isCurrent ? AppIcons.play : AppIcons.fileAudio,
-                        color: isCurrent ? colors.accentPrimary : colors.textSecondary,
-                      ),
-                      title: Text(
-                        item.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: isCurrent ? FontWeight.w600 : FontWeight.normal,
-                          color: isCurrent ? colors.accentPrimary : colors.textPrimary,
-                        ),
-                      ),
-                      subtitle: Text(
-                        item.formattedSize,
-                        style: TextStyle(fontSize: 12, color: colors.textSecondary),
-                      ),
-                      onTap: () {
-                        Navigator.of(ctx).pop();
-                        _viewModel.selectTrack(idx);
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showSpeedSheet() {
-    final colors = context.colors;
-    const speeds = [0.75, 1.0, 1.25, 1.5, 2.0];
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: colors.bgSurface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Text(
-                'Playback Speed',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: colors.textPrimary,
-                ),
-              ),
-            ),
-            ...speeds.map(
-              (spd) => ListTile(
-                title: Text(
-                  '${spd}x',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: _viewModel.playbackSpeed == spd
-                        ? FontWeight.w700
-                        : FontWeight.normal,
-                    color: _viewModel.playbackSpeed == spd
-                        ? colors.accentPrimary
-                        : colors.textPrimary,
-                  ),
-                ),
-                onTap: () {
-                  _viewModel.setSpeed(spd);
-                  Navigator.of(ctx).pop();
-                },
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
   }
 
   Widget _buildArtwork(FileRecord track, AppColorsExtension colors) {
@@ -372,8 +247,19 @@ class _AudioPlayerScreenState extends State<AudioPlayerScreen>
                   ),
 
                   Expanded(
-                    child: Center(
-                      child: _buildArtwork(track, colors),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 320),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      child: _viewModel.isLyricsViewActive
+                          ? AudioLyricsView(
+                              key: const ValueKey('audio_lyrics_view'),
+                              viewModel: _viewModel,
+                            )
+                          : Center(
+                              key: const ValueKey('audio_artwork_view'),
+                              child: _buildArtwork(track, colors),
+                            ),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -448,7 +334,7 @@ class _AudioPlayerScreenState extends State<AudioPlayerScreen>
 
                   const SizedBox(height: 18),
 
-                  // Secondary Controls (Repeat, Speed, Playlist)
+                  // Secondary Controls (Repeat, Lyrics, Speed, Playlist)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
@@ -463,6 +349,16 @@ class _AudioPlayerScreenState extends State<AudioPlayerScreen>
                         ),
                         onPressed: _viewModel.toggleRepeat,
                       ),
+                      IconButton(
+                        icon: Icon(
+                          AppIcons.subtitles,
+                          color: _viewModel.isLyricsViewActive
+                              ? colors.accentPrimary
+                              : colors.textTertiary,
+                        ),
+                        tooltip: 'Lyrics',
+                        onPressed: _viewModel.toggleLyricsView,
+                      ),
                       ActionChip(
                         label: Text(
                           '${_viewModel.playbackSpeed}x',
@@ -473,11 +369,11 @@ class _AudioPlayerScreenState extends State<AudioPlayerScreen>
                           ),
                         ),
                         backgroundColor: colors.bgSurfaceInset,
-                        onPressed: _showSpeedSheet,
+                        onPressed: () => AudioSpeedSheet.show(context, _viewModel),
                       ),
                       IconButton(
                         icon: Icon(AppIcons.playlist, color: colors.textPrimary),
-                        onPressed: _showPlaylistSheet,
+                        onPressed: () => AudioPlaylistSheet.show(context, _viewModel),
                       ),
                     ],
                   ),

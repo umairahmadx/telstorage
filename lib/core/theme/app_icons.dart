@@ -107,5 +107,8 @@ abstract final class AppIcons {
   static const IconData linkOff = Icons.link_off_rounded;
   static const IconData copy = Icons.copy_rounded;
   static const IconData subtitles = Icons.subtitles_rounded;
+  static const IconData photoLibrary = Icons.photo_library_rounded;
+  static const IconData camera = Icons.camera_alt_rounded;
+  static const IconData videocam = Icons.videocam_rounded;
 }
 

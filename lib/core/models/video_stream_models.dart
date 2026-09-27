@@ -194,3 +194,21 @@ class ChunkMetadataParser {
   }
 }
 
+/// Represents a continuous time range [start] to [end] for buffered media playback.
+class DurationRange {
+  final Duration start;
+  final Duration end;
+
+  const DurationRange(this.start, this.end);
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DurationRange &&
+          runtimeType == other.runtimeType &&
+          start == other.start &&
+          end == other.end;
+
+  @override
+  int get hashCode => start.hashCode ^ end.hashCode;
+}

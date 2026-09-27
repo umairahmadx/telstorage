@@ -44,10 +44,10 @@ class VideoStreamServer {
   int? _activePort;
   int _cacheGeneration = 0;
 
-  final Map<String, Future<Uint8List>> _inFlightFetches = {}; // In-flight chunk downloads
   final Map<String, RegisteredStreamFile> _activeFiles = {}; // Registered stream files
   final Map<String, Future<Map<int, ChunkInfo>>> _inFlightMetadata = {}; // In-flight metadata
   final Map<String, Map<int, ChunkInfo>> _metadataCache = {}; // Validated metadata cache
+  final Map<String, int> _streamGenerations = {};
 
   FileRecordProvider? _fileRecordProviderForTesting;
   final VideoPrefetchCoordinator _prefetchCoordinator = VideoPrefetchCoordinator();
@@ -84,6 +84,7 @@ class VideoStreamServer {
       existing.refCount--;
       if (existing.refCount <= 0) {
         _activeFiles.remove(fileId);
+        _streamGenerations.remove(fileId);
         _cacheGeneration++;
         _metadataCache.removeWhere((k, _) => k.startsWith('$fileId:'));
         _inFlightMetadata.removeWhere((k, _) => k.startsWith('$fileId:'));
@@ -186,8 +187,8 @@ class VideoStreamServer {
       _cacheGeneration++;
       _pipeliner.cancelAll();
       await _prefetchCoordinator.cancelAll();
-      _inFlightFetches.clear();
       _activeFiles.clear();
+      _streamGenerations.clear();
       _metadataCache.clear();
       _inFlightMetadata.clear();
       _fileRecordProviderForTesting = null;
@@ -230,7 +231,8 @@ class VideoStreamServer {
     }
 
     final metaId = record.metadataFileId?.trim();
-    if ((metaId == null || metaId.isEmpty) && record.chunkCount > 1) {
+    final hasSeeded = _metadataCache.containsKey(fileId) || _metadataCache.containsKey(_cacheKey(record));
+    if (!hasSeeded && (metaId == null || metaId.isEmpty) && record.chunkCount > 1) {
       request.response.statusCode = HttpStatus.internalServerError;
       request.response.headers.contentType = ContentType.text;
       request.response.write('Multi-chunk file missing metadataFileId for $fileId');
@@ -239,7 +241,7 @@ class VideoStreamServer {
     }
 
     Map<int, ChunkInfo>? chunkMap;
-    if (metaId != null) {
+    if (hasSeeded || (metaId != null && metaId.isNotEmpty)) {
       try {
         chunkMap = await _getOrFetchMetadata(record);
       } catch (e, st) {
@@ -259,6 +261,12 @@ class VideoStreamServer {
     final rangeHeader = request.headers.value(HttpHeaders.rangeHeader);
     final hasRangeHeader = rangeHeader != null && rangeHeader.trim().isNotEmpty;
     final range = parseByteRange(rangeHeader, totalBytes);
+    AppLogger.i(
+      '[STREAM_REQ] HTTP ${request.method} /stream/$fileId '
+      'range="$rangeHeader" -> [${range?.start ?? 0}..${range?.end ?? 0}/$totalBytes] '
+      '(chunks: ${range != null ? range.start ~/ _partSize : 0}..${range != null ? range.end ~/ _partSize : 0})',
+      tag: 'VideoStreamServer',
+    );
 
     if (range == null) {
       request.response.statusCode = HttpStatus.requestedRangeNotSatisfiable;
@@ -297,10 +305,20 @@ class VideoStreamServer {
         _prefetchCoordinator.onChunkRequested(record, startChunk, chunkMap: chunkMap);
       }
 
+      final generation = (_streamGenerations[fileId] ?? 0) + 1;
+      _streamGenerations[fileId] = generation;
+
       final wasActiveAtStart = _activeFiles.containsKey(fileId);
       var totalWritten = 0;
       for (var chunkIdx = startChunk; chunkIdx <= endChunk; chunkIdx++) {
         if (wasActiveAtStart && !_activeFiles.containsKey(fileId)) break;
+        if (_streamGenerations[fileId] != generation) {
+          AppLogger.i(
+            '[STREAM_ABORT] Aborting superseded stream request for $fileId at chunk $chunkIdx',
+            tag: 'VideoStreamServer',
+          );
+          break;
+        }
 
         final chunkBase = chunkIdx * partSize;
         final sliceStart = max(0, range.start - chunkBase);
@@ -317,7 +335,13 @@ class VideoStreamServer {
           );
           totalWritten += written;
           if (wasActiveAtStart && !_activeFiles.containsKey(fileId)) break;
+          if (_streamGenerations[fileId] != generation) break;
         }
+      }
+
+      if (_streamGenerations[fileId] != generation) {
+        try { await request.response.close(); } catch (_) {}
+        return;
       }
 
       if (wasActiveAtStart && !_activeFiles.containsKey(fileId)) {
@@ -343,9 +367,10 @@ class VideoStreamServer {
       // Normal occurrence when video player cancels stream on user seek/scrub
     } on HttpException catch (_) {
       // Normal connection abort
-    } on DioException catch (e) {
+    } on DioException catch (e, st) {
       if (e.type != DioExceptionType.cancel) {
-        AppLogger.w('Dio error streaming $fileId: $e', tag: 'VideoStreamServer');
+        final resp = e.response?.data != null ? ' (response: ${e.response?.data})' : '';
+        AppLogger.e('Dio error streaming $fileId: $e$resp', tag: 'VideoStreamServer', error: e, stackTrace: st);
       }
     } catch (e, st) {
       AppLogger.e('Streaming error for $fileId range=${range.start}-${range.end}: $e',
@@ -367,6 +392,10 @@ class VideoStreamServer {
     if (_fileRecordProviderForTesting != null) {
       return _fileRecordProviderForTesting!(fileId);
     }
+    if (ServiceLocator.instance.isInitialized) {
+      final fromHive = ServiceLocator.instance.hive.getFile(fileId);
+      if (fromHive != null) return fromHive;
+    }
     return null;
   }
 
@@ -374,11 +403,15 @@ class VideoStreamServer {
     return '${record.fileId}:${record.metadataFileId ?? "direct"}';
   }
 
-
+  /// Seeds metadata cache directly (e.g. immediately after upload completes)
+  /// so playback can start instantly without an extra Telegram metadata roundtrip.
+  void seedMetadata(String fileId, Map<int, ChunkInfo> chunkMap) {
+    _metadataCache[fileId] = chunkMap;
+  }
 
   Future<Map<int, ChunkInfo>> _getOrFetchMetadata(FileRecord record) {
     final key = _cacheKey(record);
-    final cached = _metadataCache[key];
+    final cached = _metadataCache[key] ?? _metadataCache[record.fileId];
     if (cached != null) return Future.value(cached);
 
     final inFlight = _inFlightMetadata[key];
@@ -400,9 +433,13 @@ class VideoStreamServer {
   }
 
   Future<Map<int, ChunkInfo>> _executeMetadataFetch(FileRecord record) async {
+    final metaId = record.metadataFileId?.trim();
+    if (metaId == null || metaId.isEmpty) {
+      throw StateError('Cannot fetch remote metadata for ${record.fileId}: metadataFileId is missing');
+    }
     final telegram = ServiceLocator.instance.telegram;
     final metaBytes = await telegram.downloadByFileId(
-      record.metadataFileId!,
+      metaId,
       RequestPriority.immediate,
     );
     return ChunkMetadataParser.parseAndValidate(

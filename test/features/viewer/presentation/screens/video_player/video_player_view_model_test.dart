@@ -110,5 +110,65 @@ void main() {
       expect(viewModel.mergedBuffered.first.end, equals(const Duration(seconds: 50)));
       expect(viewModel.cachedMb, closeTo(10.0, 0.1));
     });
+
+    test('TC-VVM-08: playback speed updates rate state', () async {
+      expect(viewModel.playbackSpeed, equals(1.0));
+      await viewModel.setPlaybackSpeed(1.5);
+      expect(viewModel.playbackSpeed, equals(1.5));
+      await viewModel.setPlaybackSpeed(2.0);
+      expect(viewModel.playbackSpeed, equals(2.0));
+    });
+
+    test('TC-VVM-09: subtitle delay updates offset state', () async {
+      expect(viewModel.subtitleDelay, equals(Duration.zero));
+      await viewModel.adjustSubtitleDelay(const Duration(milliseconds: 500));
+      expect(viewModel.subtitleDelay, equals(const Duration(milliseconds: 500)));
+      await viewModel.adjustSubtitleDelay(const Duration(milliseconds: -200));
+      expect(viewModel.subtitleDelay, equals(const Duration(milliseconds: 300)));
+    });
+
+    test('TC-VVM-10: onDragStart, onDragUpdate, and onDragEnd compute target scrub duration', () {
+      viewModel.setMockDurationForTesting(const Duration(seconds: 120));
+      viewModel.setMockPositionForTesting(const Duration(seconds: 30));
+
+      viewModel.onDragStart();
+      expect(viewModel.isDragging, isTrue);
+      expect(viewModel.dragTarget, equals(const Duration(seconds: 30)));
+
+      // Drag right by 25% of screen width (totalWidth = 400, delta = 100)
+      // 100 / 400 * 120s = +30s. Target = 30 + 30 = 60s
+      viewModel.onDragUpdate(100.0, 400.0);
+      expect(viewModel.dragDelta, equals(const Duration(seconds: 30)));
+      expect(viewModel.dragTarget, equals(const Duration(seconds: 60)));
+
+      viewModel.onDragEnd();
+      expect(viewModel.isDragging, isFalse);
+      expect(viewModel.position, equals(const Duration(seconds: 60)));
+    });
+
+    test('TC-VVM-11: multi-frame drag updates accumulate rather than resetting on slow frames', () {
+      viewModel.setMockDurationForTesting(const Duration(seconds: 120));
+      viewModel.setMockPositionForTesting(const Duration(seconds: 10));
+
+      viewModel.onDragStart();
+      // First frame: 50px on 400px screen => +15s (delta = 15s, target = 25s)
+      viewModel.onDragUpdate(50.0, 400.0);
+      expect(viewModel.dragDelta, equals(const Duration(seconds: 15)));
+      expect(viewModel.dragTarget, equals(const Duration(seconds: 25)));
+
+      // Second frame: finger pauses (0px) => still 15s, NOT reset to 0s!
+      viewModel.onDragUpdate(0.0, 400.0);
+      expect(viewModel.dragDelta, equals(const Duration(seconds: 15)));
+      expect(viewModel.dragTarget, equals(const Duration(seconds: 25)));
+
+      // Third frame: another 50px => accumulated +30s (delta = 30s, target = 40s)
+      viewModel.onDragUpdate(50.0, 400.0);
+      expect(viewModel.dragDelta, equals(const Duration(seconds: 30)));
+      expect(viewModel.dragTarget, equals(const Duration(seconds: 40)));
+
+      viewModel.onDragEnd();
+      expect(viewModel.position, equals(const Duration(seconds: 40)));
+    });
   });
 }
+

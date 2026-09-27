@@ -74,9 +74,15 @@ class ImageViewerCacheService {
       final cacheFile = await getCacheTargetFile(file);
       if (cacheFile.existsSync()) {
         try {
+          if (cacheFile.lengthSync() == 0) {
+            try {
+              cacheFile.deleteSync();
+            } catch (_) {}
+            return null;
+          }
           cacheFile.setLastModifiedSync(DateTime.now());
+          return cacheFile;
         } catch (_) {}
-        return cacheFile;
       }
 
       // Check permanent completed downloads partition
@@ -86,7 +92,11 @@ class ImageViewerCacheService {
         if (completedPath != null) {
           final completedFile = File(completedPath);
           if (completedFile.existsSync()) {
-            return completedFile;
+            try {
+              if (completedFile.lengthSync() > 0) {
+                return completedFile;
+              }
+            } catch (_) {}
           }
         }
       }

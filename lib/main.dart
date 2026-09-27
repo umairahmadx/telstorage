@@ -3,11 +3,13 @@
  * Description: Entry point for TelStorage initializing WorkManager, Hive boxes, adapters, and environment variables.
  */
 
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:workmanager/workmanager.dart';
 
 import 'app.dart';
@@ -72,6 +74,9 @@ void callbackDispatcher() {
 /// Main application entry point initializing core bindings and persistence.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (!Platform.environment.containsKey('FLUTTER_TEST')) {
+    MediaKit.ensureInitialized();
+  }
 
   // Initialize WorkManager
   try {

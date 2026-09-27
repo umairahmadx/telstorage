@@ -4,6 +4,7 @@
  */
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../../../../../core/models/file_record.dart';
 import '../../../../../../core/theme/app_icons.dart';
 import '../../../../../../core/theme/app_theme.dart';
@@ -29,7 +30,19 @@ class VideoPlayerTopBar extends StatelessWidget {
   final VoidCallback onSave;
 
   /// Callback to toggle device orientation.
-  final VoidCallback onRotate;
+  final VoidCallback? onRotate;
+
+  /// Current playback rate.
+  final double playbackSpeed;
+
+  /// Callback when speed button is pressed.
+  final VoidCallback? onSpeed;
+
+  /// Callback when audio tracks button is pressed.
+  final VoidCallback? onAudioTracks;
+
+  /// Callback when subtitles button is pressed.
+  final VoidCallback? onSubtitles;
 
   /// Callback when share button is pressed.
   final VoidCallback onShare;
@@ -46,7 +59,11 @@ class VideoPlayerTopBar extends StatelessWidget {
     required this.isVisible,
     required this.onBack,
     required this.onSave,
-    required this.onRotate,
+    this.onRotate,
+    this.playbackSpeed = 1.0,
+    this.onSpeed,
+    this.onAudioTracks,
+    this.onSubtitles,
     required this.onShare,
     required this.onMore,
   });
@@ -108,7 +125,7 @@ class VideoPlayerTopBar extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${currentIndex + 1} of $totalCount • ${file.formattedSize}',
+                    '${file.formattedSize} • ${DateFormat('dd MMM yyyy, HH:mm').format(file.uploadedAt)}',
                     style: TextStyle(
                       color: colors.textTertiary,
                       fontSize: 12,
@@ -119,16 +136,59 @@ class VideoPlayerTopBar extends StatelessWidget {
                 ],
               ),
             ),
-            Material(
-              color: Colors.transparent,
-              clipBehavior: Clip.antiAlias,
-              shape: const CircleBorder(),
-              child: IconButton(
-                icon: Icon(AppIcons.rotate, color: colors.textPrimary, size: 20),
-                onPressed: onRotate,
-                tooltip: 'Rotate orientation',
+            if (onSpeed != null)
+              Material(
+                color: Colors.transparent,
+                clipBehavior: Clip.antiAlias,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                child: InkWell(
+                  onTap: onSpeed,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Text(
+                      '${playbackSpeed == 1.0 ? '1.0' : playbackSpeed.toString()}x',
+                      style: TextStyle(
+                        color: colors.textPrimary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
               ),
-            ),
+            if (onAudioTracks != null)
+              Material(
+                color: Colors.transparent,
+                clipBehavior: Clip.antiAlias,
+                shape: const CircleBorder(),
+                child: IconButton(
+                  icon: Icon(AppIcons.fileAudio, color: colors.textPrimary, size: 20),
+                  onPressed: onAudioTracks,
+                  tooltip: 'Audio Tracks',
+                ),
+              ),
+            if (onSubtitles != null)
+              Material(
+                color: Colors.transparent,
+                clipBehavior: Clip.antiAlias,
+                shape: const CircleBorder(),
+                child: IconButton(
+                  icon: Icon(AppIcons.subtitles, color: colors.textPrimary, size: 20),
+                  onPressed: onSubtitles,
+                  tooltip: 'Subtitles',
+                ),
+              ),
+            if (onRotate != null)
+              Material(
+                color: Colors.transparent,
+                clipBehavior: Clip.antiAlias,
+                shape: const CircleBorder(),
+                child: IconButton(
+                  icon: Icon(AppIcons.rotate, color: colors.textPrimary, size: 20),
+                  onPressed: onRotate,
+                  tooltip: 'Rotate orientation',
+                ),
+              ),
             Material(
               color: Colors.transparent,
               clipBehavior: Clip.antiAlias,

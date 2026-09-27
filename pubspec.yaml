@@ -68,6 +68,8 @@ dependencies:
   share_plus: ^12.0.2
   flutter_local_notifications: ^22.0.0
   wakelock_plus: ^1.2.8
+  screen_brightness: ^2.1.11
+  flutter_volume_controller: ^2.0.2
 
   # Video thumbnail extraction
   get_thumbnail_video: ^0.7.3
@@ -88,8 +90,10 @@ dependencies:
   # Native Photo Gallery & Zoom
   photo_view: ^0.15.0
 
-  # Video playback engine
-  video_player: ^2.9.2
+  # Video & Audio playback engine (unified under libmpv / media_kit)
+  media_kit: ^1.2.6
+  media_kit_video: ^2.0.1
+  media_kit_libs_video: ^1.0.7
 
   # Vector & Advanced Image Codecs
   flutter_svg: ^2.0.17

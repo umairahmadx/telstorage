@@ -1,111 +1,114 @@
 /*
  * File: video_player_view_model.dart
- * Description: State management for VideoPlayerScreen coordinating playback state, seeking, buffering ranges, wakelock, and control visibility.
+ * Description: State management for VideoPlayerScreen coordinating media_kit playback, tracks, speed, subtitles, seeking, and control visibility.
  */
 
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:video_player/video_player.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../../../../../core/models/file_record.dart';
-import '../../../../../../core/services/video_chunk_cache_manager.dart';
 import '../../../../../../core/services/video_stream_server.dart';
 import '../../../../../../core/utils/app_logger.dart';
+import 'video_buffer_sync_controller.dart';
+import 'video_drag_scrubber.dart';
 
-/// Manages playback lifecycle, streaming URL resolution, seek commands,
-/// and interactive toolbar auto-hiding for video playback.
+/// Manages media_kit playback lifecycle, streaming resolution, audio/subtitle tracks, speed, and viewport scrub state.
 class VideoPlayerViewModel extends ChangeNotifier {
   FileRecord? _currentFile;
-  VideoPlayerController? _controller;
+  Player? _player;
+  VideoController? _videoController;
 
-  bool _isInitialized = false;
-  bool _isPlaying = false;
-  bool _isBuffering = false;
-  Duration _position = Duration.zero;
-  Duration _duration = Duration.zero;
+  bool _isInitialized = false, _isPlaying = false, _isBuffering = false;
+  bool _forceSoftwareDecoding = false;
+  Duration _position = Duration.zero, _duration = Duration.zero;
   List<DurationRange> _buffered = const [];
-  Set<int> _cachedChunks = const {};
-  List<DurationRange> _mergedBuffered = const [];
-  double _volume = 1.0;
+  double _volume = 1.0, _playbackSpeed = 1.0;
+  int? _videoWidth, _videoHeight;
   bool _areControlsVisible = true;
   String? _errorMessage;
-  bool _isListeningToChunkChanges = false;
+
+  final _bufferSync = VideoBufferSyncController();
+
+  List<AudioTrack> _audioTracks = const [];
+  AudioTrack? _selectedAudioTrack;
+  List<SubtitleTrack> _subtitleTracks = const [];
+  SubtitleTrack? _selectedSubtitleTrack;
+  Duration _subtitleDelay = Duration.zero;
+
+  final _scrubber = VideoDragScrubber();
 
   Timer? _hideControlsTimer;
+  final List<StreamSubscription> _subscriptions = [];
 
-  /// Currently loaded FileRecord.
   FileRecord? get currentFile => _currentFile;
-
-  /// Underlying VideoPlayerController.
-  VideoPlayerController? get controller => _controller;
-
-  /// Whether the player is ready to render video frames.
+  Player? get player => _player;
+  VideoController? get videoController => _videoController;
   bool get isInitialized => _isInitialized;
-
-  /// Whether video is currently playing.
   bool get isPlaying => _isPlaying;
-
-  /// Whether video is currently waiting on chunk buffering.
   bool get isBuffering => _isBuffering;
-
-  /// Current playback timestamp.
   Duration get position => _position;
-
-  /// Total duration of the video.
   Duration get duration => _duration;
-
-  /// List of loaded/buffered duration segments directly from video player.
   List<DurationRange> get buffered => _buffered;
-
-  /// Downloaded 19 MB chunk indices persisted on disk.
-  Set<int> get cachedChunks => _cachedChunks;
-
-  /// Total number of 19 MB chunks comprising the video.
+  Set<int> get cachedChunks => _bufferSync.cachedChunks;
   int get totalChunks => _currentFile?.chunkCount ?? 1;
-
-  /// Total megabytes of chunks downloaded and in-flight cached.
-  double get cachedMb {
-    final completedMb = _cachedChunks.length * 19.0;
-    final inFlightMb = _getInFlightBytes() / (1024 * 1024);
-    final total = completedMb + inFlightMb;
-    if (_currentFile != null && _currentFile!.sizeMb > 0) {
-      return total.clamp(0.0, _currentFile!.sizeMb);
-    }
-    return total;
-  }
-
-  /// Total file size in megabytes.
+  double get cachedMb => _bufferSync.computeCachedMb(_currentFile?.sizeMb);
   double get totalMb => _currentFile?.sizeMb ?? 0.0;
-
-  /// Combined buffered duration ranges merging disk chunks with player buffer.
-  List<DurationRange> get mergedBuffered => _mergedBuffered;
-
-  /// Current audio volume between 0.0 and 1.0.
+  List<DurationRange> get mergedBuffered => _bufferSync.mergedBuffered;
   double get volume => _volume;
-
-  /// Whether playback controls and navigation bars are visible.
+  double get playbackSpeed => _playbackSpeed;
+  int? get videoWidth => _videoWidth;
+  int? get videoHeight => _videoHeight;
+  double? get naturalAspectRatio =>
+      (_videoWidth != null && _videoHeight != null && _videoHeight! > 0)
+          ? (_videoWidth! / _videoHeight!)
+          : null;
   bool get areControlsVisible => _areControlsVisible;
-
-  /// Active error message, if playback initialization failed.
   String? get errorMessage => _errorMessage;
+
+  List<AudioTrack> get audioTracks => _audioTracks;
+  AudioTrack? get selectedAudioTrack => _selectedAudioTrack;
+  List<SubtitleTrack> get subtitleTracks => _subtitleTracks;
+  SubtitleTrack? get selectedSubtitleTrack => _selectedSubtitleTrack;
+  Duration get subtitleDelay => _subtitleDelay;
+
+  bool get isDragging => _scrubber.isDragging;
+  Duration get dragTarget => _scrubber.dragTarget;
+  Duration get dragDelta => _scrubber.dragDelta;
+  bool get isSoftwareDecoding => _forceSoftwareDecoding;
 
   StreamRegistration? _registration;
   int _initGeneration = 0;
 
   /// Initializes the video controller with the proxy loopback stream URL for [file].
-  Future<void> initialize(FileRecord file) async {
+  Future<void> initialize(
+    FileRecord file, {
+    bool preserveSoftwareDecoding = false,
+    Duration? resumePosition,
+  }) async {
     final gen = ++_initGeneration;
     _registration?.dispose();
     _registration = null;
 
+    if (!preserveSoftwareDecoding) {
+      _forceSoftwareDecoding = false;
+    }
     _currentFile = file;
     _errorMessage = null;
     _isInitialized = false;
     _isPlaying = false;
-    _cachedChunks = const {};
-    _mergedBuffered = const [];
-    _setupChunkListener();
-    unawaited(_refreshCachedChunks());
+    _bufferSync.reset();
+    _bufferSync.attach(
+      fileId: file.fileId,
+      totalChunks: file.chunkCount,
+      onUpdateCallback: () {
+        _bufferSync.compute(_duration, _buffered);
+        notifyListeners();
+      },
+    );
+    unawaited(_bufferSync.refresh(file.fileId, _duration, _buffered).then((_) => notifyListeners()));
     notifyListeners();
 
     try {
@@ -120,38 +123,55 @@ class VideoPlayerViewModel extends ChangeNotifier {
       _registration = reg;
 
       final streamUrl = VideoStreamServer.instance.getStreamUrl(file.fileId, file.name);
-      AppLogger.i('Initializing video stream: $streamUrl', tag: 'VideoPlayerViewModel');
+      AppLogger.i('Initializing video stream: $streamUrl (softwareFallback: $_forceSoftwareDecoding)', tag: 'VideoPlayerViewModel');
 
-      final ctrl = VideoPlayerController.networkUrl(Uri.parse(streamUrl));
+      _cleanupPlayer();
+
+      final p = Player(
+        configuration: const PlayerConfiguration(
+          osc: false,
+          logLevel: MPVLogLevel.warn,
+        ),
+      );
+      try {
+        final platform = (p.platform as dynamic);
+        await platform?.setProperty('network-timeout', '60');
+        await platform?.setProperty('demuxer-lavf-o', 'timeout=60000000');
+        await platform?.setProperty('cache-on-disk', 'no');
+      } catch (_) {}
+      final vc = VideoController(
+        p,
+        configuration: VideoControllerConfiguration(
+          hwdec: _forceSoftwareDecoding ? 'no' : null,
+          enableHardwareAcceleration: !_forceSoftwareDecoding,
+        ),
+      );
+      _player = p;
+      _videoController = vc;
+      _attachPlayerListeners();
+      notifyListeners();
+
+      await p.open(Media(streamUrl), play: true);
       if (gen != _initGeneration) {
-        ctrl.dispose();
-        return;
-      }
-
-      final oldCtrl = _controller;
-      _controller = ctrl;
-      oldCtrl?.removeListener(_onControllerStateChanged);
-      oldCtrl?.dispose();
-
-      await ctrl.initialize();
-      if (gen != _initGeneration) {
-        ctrl.removeListener(_onControllerStateChanged);
-        ctrl.dispose();
+        _cleanupPlayer();
         return;
       }
 
       _isInitialized = true;
-      _duration = ctrl.value.duration;
-      _volume = ctrl.value.volume;
-
-      ctrl.addListener(_onControllerStateChanged);
-      _computeMergedBuffered();
-      await ctrl.play();
+      if (resumePosition != null && resumePosition > Duration.zero) {
+        seekTo(resumePosition);
+      }
       startAutoHideTimer();
       notifyListeners();
-    } catch (e) {
+    } catch (e, st) {
       if (gen != _initGeneration) return;
-      AppLogger.e('Failed to initialize video player: $e', tag: 'VideoPlayerViewModel');
+      if (!_forceSoftwareDecoding && isHardwareDecodeError(e.toString()) && _currentFile != null) {
+        AppLogger.w('Hardware initialization error ($e). Retrying with software decoding...', tag: 'VideoPlayerViewModel');
+        _forceSoftwareDecoding = true;
+        unawaited(initialize(_currentFile!, preserveSoftwareDecoding: true, resumePosition: resumePosition));
+        return;
+      }
+      AppLogger.e('Failed to initialize video player: $e', tag: 'VideoPlayerViewModel', error: e, stackTrace: st);
       _registration?.dispose();
       _registration = null;
       _currentFile = null;
@@ -160,39 +180,116 @@ class VideoPlayerViewModel extends ChangeNotifier {
     }
   }
 
-  void _onControllerStateChanged() {
-    if (_controller == null) return;
-    final val = _controller!.value;
+  void _attachPlayerListeners() {
+    final p = _player;
+    if (p == null) return;
 
-    final hasChanges = _isPlaying != val.isPlaying ||
-        _isBuffering != val.isBuffering ||
-        _position != val.position ||
-        _duration != val.duration ||
-        _buffered != val.buffered;
-
-    if (hasChanges) {
-      _isPlaying = val.isPlaying;
-      _isBuffering = val.isBuffering;
-      _position = val.position;
-      _duration = val.duration;
-      _buffered = val.buffered;
-      _computeMergedBuffered();
+    _subscriptions.add(p.stream.position.listen((pos) {
+      _position = pos;
       notifyListeners();
-    }
+    }));
+
+    _subscriptions.add(p.stream.duration.listen((dur) {
+      _duration = dur;
+      _bufferSync.compute(_duration, _buffered);
+      notifyListeners();
+    }));
+
+    _subscriptions.add(p.stream.playing.listen((playing) {
+      _isPlaying = playing;
+      if (playing) {
+        unawaited(WakelockPlus.enable().catchError((_) {}));
+        startAutoHideTimer();
+      } else {
+        unawaited(WakelockPlus.disable().catchError((_) {}));
+      }
+      notifyListeners();
+    }));
+
+    _subscriptions.add(p.stream.buffering.listen((buffering) {
+      _isBuffering = buffering;
+      notifyListeners();
+    }));
+
+    _subscriptions.add(p.stream.buffer.listen((b) {
+      _buffered = [DurationRange(Duration.zero, b)];
+      _bufferSync.compute(_duration, _buffered);
+      notifyListeners();
+    }));
+
+    _subscriptions.add(p.stream.tracks.listen((tracks) {
+      _audioTracks = tracks.audio;
+      _subtitleTracks = tracks.subtitle;
+      notifyListeners();
+    }));
+
+    _subscriptions.add(p.stream.track.listen((track) {
+      _selectedAudioTrack = track.audio;
+      _selectedSubtitleTrack = track.subtitle;
+      notifyListeners();
+    }));
+
+    _subscriptions.add(p.stream.rate.listen((rate) {
+      _playbackSpeed = rate;
+      notifyListeners();
+    }));
+
+    _subscriptions.add(p.stream.volume.listen((vol) {
+      _volume = vol / 100.0;
+      notifyListeners();
+    }));
+
+    _subscriptions.add(p.stream.width.listen((w) {
+      _videoWidth = w;
+      notifyListeners();
+    }));
+
+    _subscriptions.add(p.stream.height.listen((h) {
+      _videoHeight = h;
+      notifyListeners();
+    }));
+
+    _subscriptions.add(p.stream.log.listen((event) {
+      if (event.level == 'warn' || event.level == 'error') {
+        final isBenign = event.text.contains('native_window are NULL') ||
+            event.text.contains('plaintext playlist') ||
+            event.text.contains('file cache');
+        if (isBenign) {
+          AppLogger.d('[mpv ${event.level}] [${event.prefix}] ${event.text}', tag: 'MediaKit');
+        } else {
+          AppLogger.w('[mpv ${event.level}] [${event.prefix}] ${event.text}', tag: 'MediaKit');
+        }
+      }
+    }));
+
+    _subscriptions.add(p.stream.error.listen((err) {
+      if (err.isNotEmpty) {
+        if (!_forceSoftwareDecoding && isHardwareDecodeError(err) && _currentFile != null) {
+          AppLogger.w('Hardware decoding error encountered: "$err". Falling back to software decoding (hwdec: no)...', tag: 'VideoPlayerViewModel');
+          _forceSoftwareDecoding = true;
+          final savedPos = _position;
+          unawaited(initialize(_currentFile!, preserveSoftwareDecoding: true, resumePosition: savedPos));
+          return;
+        }
+        _errorMessage = err;
+        AppLogger.e('MediaKit Player Error: $err', tag: 'VideoPlayerViewModel');
+        notifyListeners();
+      }
+    }));
   }
 
-  /// Begins video playback and engages wakelock to prevent screen sleep.
+  /// Begins video playback.
   void play() {
-    _controller?.play();
+    _player?.play();
     _isPlaying = true;
     unawaited(WakelockPlus.enable().catchError((_) {}));
     startAutoHideTimer();
     notifyListeners();
   }
 
-  /// Pauses video playback and disengages screen wakelock.
+  /// Pauses video playback.
   void pause() {
-    _controller?.pause();
+    _player?.pause();
     _isPlaying = false;
     unawaited(WakelockPlus.disable().catchError((_) {}));
     showControlsTemporarily();
@@ -200,51 +297,118 @@ class VideoPlayerViewModel extends ChangeNotifier {
   }
 
   /// Toggles between play and pause states.
-  void togglePlay() {
-    if (_isPlaying) {
-      pause();
-    } else {
-      play();
-    }
-  }
+  void togglePlay() => _isPlaying ? pause() : play();
 
   /// Seeks to a specific [target] playback duration with boundary clamping.
   void seekTo(Duration target) {
-    var clamped = target;
-    if (clamped < Duration.zero) clamped = Duration.zero;
-    if (_duration > Duration.zero && clamped > _duration) clamped = _duration;
-
+    final clamped = target < Duration.zero
+        ? Duration.zero
+        : (_duration > Duration.zero && target > _duration ? _duration : target);
     _position = clamped;
-    _controller?.seekTo(clamped);
+    _player?.seek(clamped);
     showControlsTemporarily();
     notifyListeners();
   }
 
   /// Fast-forwards playback position by [delta] (defaults to 10 seconds).
-  void skipForward([Duration delta = const Duration(seconds: 10)]) {
-    seekTo(_position + delta);
-  }
+  void skipForward([Duration delta = const Duration(seconds: 10)]) => seekTo(_position + delta);
 
   /// Rewinds playback position by [delta] (defaults to 10 seconds).
-  void skipBackward([Duration delta = const Duration(seconds: 10)]) {
-    seekTo(_position - delta);
-  }
+  void skipBackward([Duration delta = const Duration(seconds: 10)]) => seekTo(_position - delta);
 
   /// Updates audio volume (clamped between 0.0 and 1.0).
   void setVolume(double vol) {
     _volume = vol.clamp(0.0, 1.0);
-    _controller?.setVolume(_volume);
+    _player?.setVolume(_volume * 100.0);
     notifyListeners();
   }
 
-  /// Toggles interactive control visibility.
-  void toggleControls() {
-    if (_areControlsVisible) {
-      hideControls();
-    } else {
-      showControlsTemporarily();
+  /// Updates playback rate (e.g. 0.5x to 2.0x).
+  Future<void> setPlaybackSpeed(double speed) async {
+    _playbackSpeed = speed;
+    await _player?.setRate(speed);
+    notifyListeners();
+  }
+
+  /// Changes the active audio track.
+  Future<void> setAudioTrack(AudioTrack track) async {
+    _selectedAudioTrack = track;
+    await _player?.setAudioTrack(track);
+    notifyListeners();
+  }
+
+  /// Changes the active subtitle track.
+  Future<void> setSubtitleTrack(SubtitleTrack track) async {
+    _selectedSubtitleTrack = track;
+    await _player?.setSubtitleTrack(track);
+    notifyListeners();
+  }
+
+  /// Loads an external subtitle file into media_kit player.
+  Future<void> loadExternalSubtitle(String filePath, {String? title}) async {
+    final trackName = title ?? filePath.split(Platform.pathSeparator).last;
+    final isUri = filePath.startsWith('file://') || filePath.startsWith('http');
+    final fileUri = isUri ? filePath : Uri.file(filePath).toString();
+    final track = SubtitleTrack.uri(fileUri, title: trackName);
+    await setSubtitleTrack(track);
+  }
+
+  /// Adjusts subtitle synchronization delay (+/- duration offset).
+  Future<void> adjustSubtitleDelay(Duration delta) async {
+    _subtitleDelay += delta;
+    if (_player != null) {
+      try {
+        final seconds = _subtitleDelay.inMilliseconds / 1000.0;
+        await (_player!.platform as dynamic)?.setProperty('sub-delay', seconds.toString());
+      } catch (_) {}
+    }
+    notifyListeners();
+  }
+
+  /// Initiates viewport horizontal drag scrubbing.
+  void onDragStart() {
+    _scrubber.start(_position);
+    notifyListeners();
+  }
+
+  /// Updates viewport drag scrubbing with responsive sensitivity.
+  void onDragUpdate(double deltaPixels, double totalWidth) {
+    if (_scrubber.update(deltaPixels, totalWidth, _duration)) {
+      notifyListeners();
     }
   }
+
+  /// Concludes viewport drag scrubbing and seeks to target position.
+  void onDragEnd() {
+    if (_scrubber.isDragging) {
+      final target = _scrubber.end();
+      seekTo(target);
+      notifyListeners();
+    }
+  }
+
+  /// Manually triggers fallback to software decoding for the current video.
+  Future<void> fallbackToSoftwareDecoding() async {
+    if (_currentFile == null) return;
+    _forceSoftwareDecoding = true;
+    final savedPos = _position;
+    await initialize(_currentFile!, preserveSoftwareDecoding: true, resumePosition: savedPos);
+  }
+
+  /// Checks if [errorText] represents a hardware acceleration or codec binding error.
+  static bool isHardwareDecodeError(String errorText) {
+    final lower = errorText.toLowerCase();
+    return lower.contains('mediacodec') ||
+        lower.contains('decoder') ||
+        lower.contains('hwdec') ||
+        lower.contains('surface') ||
+        lower.contains('hardware acceleration') ||
+        lower.contains('omx') ||
+        lower.contains('codec init failed');
+  }
+
+  /// Toggles interactive control visibility.
+  void toggleControls() => _areControlsVisible ? hideControls() : showControlsTemporarily();
 
   /// Immediately hides playback controls.
   void hideControls() {
@@ -271,148 +435,50 @@ class VideoPlayerViewModel extends ChangeNotifier {
     });
   }
 
-  void _setupChunkListener() {
-    if (!_isListeningToChunkChanges) {
-      _isListeningToChunkChanges = true;
-      VideoChunkCacheManager.instance.chunkChangeNotifier
-          .addListener(_onChunkCacheChanged);
-      try {
-        VideoStreamServer.instance.prefetchCoordinator.prefetchProgressNotifier
-            .addListener(_onPrefetchProgressChanged);
-      } catch (_) {}
-    }
-  }
-
-  void _onChunkCacheChanged() {
-    unawaited(_refreshCachedChunks());
-  }
-
-  void _onPrefetchProgressChanged() {
-    _computeMergedBuffered();
-    notifyListeners();
-  }
-
-  Map<int, double> _getInFlightFractions() {
-    if (_mockInFlightFractions != null) return _mockInFlightFractions!;
-    if (_currentFile == null) return const {};
-    try {
-      return VideoStreamServer.instance.prefetchCoordinator
-          .getInFlightFractions(_currentFile!.fileId);
-    } catch (_) {
-      return const {};
-    }
-  }
-
-  int _getInFlightBytes() {
-    if (_mockInFlightBytes != null) return _mockInFlightBytes!;
-    if (_currentFile == null) return 0;
-    try {
-      return VideoStreamServer.instance.prefetchCoordinator
-          .getInFlightBytes(_currentFile!.fileId);
-    } catch (_) {
-      return 0;
-    }
-  }
-
-  Future<void> _refreshCachedChunks() async {
-    if (_currentFile == null) return;
-    final fileId = _currentFile!.fileId;
-    final indices =
-        await VideoChunkCacheManager.instance.getCachedChunkIndices(fileId);
-    if (_currentFile?.fileId != fileId) return;
-    _cachedChunks = indices;
-    _computeMergedBuffered();
-    notifyListeners();
-  }
-
-  void _computeMergedBuffered() {
-    if (_duration <= Duration.zero) {
-      _mergedBuffered = _buffered;
-      return;
-    }
-
-    final totalMs = _duration.inMilliseconds;
-    final chunksCount = totalChunks > 0 ? totalChunks : 1;
-    final rawRanges = <DurationRange>[..._buffered];
-
-    for (final idx in _cachedChunks) {
-      final startMs = (totalMs * idx / chunksCount).round();
-      final endMs =
-          (totalMs * (idx + 1) / chunksCount).round().clamp(0, totalMs);
-      rawRanges.add(DurationRange(
-        Duration(milliseconds: startMs),
-        Duration(milliseconds: endMs),
-      ));
-    }
-
-    // Include continuous byte-level progress for in-flight prefetch chunks
-    final inFlightFractions = _getInFlightFractions();
-    inFlightFractions.forEach((chunkIdx, fraction) {
-      if (!_cachedChunks.contains(chunkIdx) && fraction > 0) {
-        final startMs = (totalMs * chunkIdx / chunksCount).round();
-        final endMs = (totalMs * (chunkIdx + fraction) / chunksCount)
-            .round()
-            .clamp(0, totalMs);
-        if (endMs > startMs) {
-          rawRanges.add(DurationRange(
-            Duration(milliseconds: startMs),
-            Duration(milliseconds: endMs),
-          ));
-        }
-      }
-    });
-
-    if (rawRanges.isEmpty) {
-      _mergedBuffered = const [];
-      return;
-    }
-
-    rawRanges.sort((a, b) => a.start.compareTo(b.start));
-
-    final merged = <DurationRange>[rawRanges.first];
-    for (int i = 1; i < rawRanges.length; i++) {
-      final current = rawRanges[i];
-      final last = merged.last;
-      if (current.start <= last.end) {
-        if (current.end > last.end) {
-          merged[merged.length - 1] = DurationRange(last.start, current.end);
-        }
-      } else {
-        merged.add(current);
-      }
-    }
-    _mergedBuffered = merged;
-  }
-
-  Map<int, double>? _mockInFlightFractions;
-  int? _mockInFlightBytes;
-
   /// Sets mock in-flight prefetch progress for unit testing.
-  void setMockInFlightProgressForTesting({
-    required Map<int, double> fractions,
-    required int bytes,
-  }) {
-    _mockInFlightFractions = fractions;
-    _mockInFlightBytes = bytes;
-    _computeMergedBuffered();
+  void setMockInFlightProgressForTesting({required Map<int, double> fractions, required int bytes}) {
+    _bufferSync.setMockInFlightProgress(fractions: fractions, bytes: bytes);
+    _bufferSync.compute(_duration, _buffered);
     notifyListeners();
   }
 
   /// Sets mock cached chunks for unit tests.
   void setMockCachedChunksForTesting(Set<int> chunks) {
-    _cachedChunks = chunks;
-    _computeMergedBuffered();
+    _bufferSync.setMockCachedChunks(chunks);
+    _bufferSync.compute(_duration, _buffered);
     notifyListeners();
   }
 
   /// Sets mock duration for unit tests.
   void setMockDurationForTesting(Duration d) {
     _duration = d;
+    _bufferSync.compute(_duration, _buffered);
+    notifyListeners();
   }
 
   /// Sets mock position for unit tests.
-  void setMockPositionForTesting(Duration p) {
-    _position = p;
+  void setMockPositionForTesting(Duration p) => _position = p;
+
+  /// Sets mock video dimensions for unit tests.
+  void setMockDimensionsForTesting(int w, int h) {
+    _videoWidth = w;
+    _videoHeight = h;
+  }
+
+  /// Sets mock player and controller for unit tests.
+  void setPlayerForTesting(Player p, VideoController vc) {
+    _player = p;
+    _videoController = vc;
+    _isInitialized = true;
+    _attachPlayerListeners();
+  }
+
+  void _cleanupPlayer() {
+    for (final s in _subscriptions) { s.cancel(); }
+    _subscriptions.clear();
+    _player?.dispose();
+    _player = null;
+    _videoController = null;
   }
 
   @override
@@ -420,23 +486,11 @@ class VideoPlayerViewModel extends ChangeNotifier {
     _initGeneration++;
     _hideControlsTimer?.cancel();
     unawaited(WakelockPlus.disable().catchError((_) {}));
-    if (_isListeningToChunkChanges) {
-      VideoChunkCacheManager.instance.chunkChangeNotifier
-          .removeListener(_onChunkCacheChanged);
-      try {
-        VideoStreamServer.instance.prefetchCoordinator.prefetchProgressNotifier
-            .removeListener(_onPrefetchProgressChanged);
-      } catch (_) {}
-      _isListeningToChunkChanges = false;
-    }
+    _bufferSync.dispose();
     _registration?.dispose();
     _registration = null;
     _currentFile = null;
-    if (_controller != null) {
-      _controller!.removeListener(_onControllerStateChanged);
-      _controller!.dispose();
-      _controller = null;
-    }
+    _cleanupPlayer();
     super.dispose();
   }
 }

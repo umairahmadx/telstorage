@@ -4,7 +4,7 @@
  */
 
 import 'package:flutter/material.dart';
-import 'package:video_player/video_player.dart';
+import '../../../../../../core/models/video_stream_models.dart';
 import '../../../../../../core/theme/app_theme.dart';
 
 /// Progress bar widget managing video position seeking and duration formatting.
@@ -21,6 +21,12 @@ class VideoProgressBar extends StatelessWidget {
   /// Callback when user seeks to a new timestamp.
   final ValueChanged<Duration> onSeek;
 
+  /// Whether the video is currently in landscape orientation.
+  final bool isLandscape;
+
+  /// Optional callback to toggle orientation (YouTube style).
+  final VoidCallback? onRotate;
+
   /// Constructs VideoProgressBar.
   const VideoProgressBar({
     super.key,
@@ -28,6 +34,8 @@ class VideoProgressBar extends StatelessWidget {
     required this.duration,
     required this.buffered,
     required this.onSeek,
+    this.isLandscape = false,
+    this.onRotate,
   });
 
   /// Formats duration into "mm:ss" or "hh:mm:ss".
@@ -104,6 +112,27 @@ class VideoProgressBar extends StatelessWidget {
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
+          if (onRotate != null) ...[
+            const SizedBox(width: 6),
+            Material(
+              color: Colors.transparent,
+              clipBehavior: Clip.antiAlias,
+              shape: const CircleBorder(),
+              child: IconButton(
+                icon: Icon(
+                  isLandscape
+                      ? Icons.fullscreen_exit_rounded
+                      : Icons.fullscreen_rounded,
+                  color: colors.textPrimary,
+                  size: 22,
+                ),
+                tooltip: 'Rotate orientation',
+                onPressed: onRotate,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              ),
+            ),
+          ],
         ],
       ),
     );

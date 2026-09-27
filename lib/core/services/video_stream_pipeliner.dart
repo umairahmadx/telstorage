@@ -11,6 +11,7 @@ import '../models/chunk_info.dart';
 import '../models/file_record.dart';
 import '../utils/app_logger.dart';
 import 'app_cache_manager.dart';
+import 'in_flight_chunk_registry.dart';
 import 'service_locator.dart';
 import 'telegram_rate_limiter.dart';
 import 'video_chunk_cache_manager.dart';
@@ -31,6 +32,7 @@ class VideoStreamPipeliner {
 
   /// Cancels any active network streams for [fileId] and cleans up.
   void cancelForFile(String fileId) {
+    InFlightChunkRegistry.instance.cancelForFile(fileId);
     final tokens = _activeTokens.remove(fileId);
     if (tokens != null) {
       for (final token in tokens) {
@@ -41,6 +43,7 @@ class VideoStreamPipeliner {
 
   /// Cancels all active network streams across all files.
   void cancelAll() {
+    InFlightChunkRegistry.instance.cancelAll();
     final all = _activeTokens.values.expand((s) => s).toList();
     _activeTokens.clear();
     for (final token in all) {
@@ -72,20 +75,34 @@ class VideoStreamPipeliner {
 
     if (cachedChunk != null && cachedChunk.existsSync()) {
       final fileSize = cachedChunk.lengthSync();
-      final boundedStart = sliceStart.clamp(0, fileSize);
-      final boundedEnd = sliceEnd.clamp(boundedStart, fileSize);
+      final expectedSize = _resolveExpectedChunkSize(record, chunkIndex, chunkMap);
+      if (fileSize < expectedSize) {
+        AppLogger.w(
+          'Cached chunk $chunkIndex for ${record.fileId} incomplete ($fileSize < $expectedSize bytes). Purging corrupt chunk.',
+          tag: 'VideoStreamPipeliner',
+        );
+        try { cachedChunk.deleteSync(); } catch (_) {}
+      } else {
+        final boundedStart = sliceStart.clamp(0, fileSize);
+        final boundedEnd = sliceEnd.clamp(boundedStart, fileSize);
 
-      if (boundedEnd > boundedStart) {
-        final stream = cachedChunk.openRead(boundedStart, boundedEnd);
-        await for (final chunk in stream) {
-          output.add(chunk);
-          if (output is HttpResponse) {
-            await output.flush();
+        if (boundedEnd > boundedStart) {
+          AppLogger.i(
+            '[PIPELINE_DISK_HIT] Serving chunk $chunkIndex for ${record.fileId} '
+            'slice=$boundedStart..$boundedEnd (${boundedEnd - boundedStart} bytes) from disk cache',
+            tag: 'VideoStreamPipeliner',
+          );
+          final stream = cachedChunk.openRead(boundedStart, boundedEnd);
+          await for (final chunk in stream) {
+            output.add(chunk);
+            if (output is HttpResponse) {
+              await output.flush();
+            }
           }
+          return boundedEnd - boundedStart;
         }
-        return boundedEnd - boundedStart;
+        return 0;
       }
-      return 0;
     }
 
     // 2. Network streaming path: Resolve stream source
@@ -103,19 +120,57 @@ class VideoStreamPipeliner {
         });
       }
 
+      InFlightChunkTask? inFlightTask = InFlightChunkRegistry.instance.get(record.fileId, chunkIndex);
+      if (inFlightTask != null && !inFlightTask.isFinished) {
+        AppLogger.i(
+          '[PIPELINE_DEDUP_WAIT] Awaiting active in-flight chunk download for ${record.fileId} chunk $chunkIndex',
+          tag: 'VideoStreamPipeliner',
+        );
+        File? completedFile;
+        try {
+          completedFile = await inFlightTask.completionFuture;
+        } catch (_) {}
+
+        final cached = completedFile ?? await VideoChunkCacheManager.instance.getCachedChunk(record.fileId, chunkIndex);
+        if (cached != null && cached.existsSync()) {
+          final fileSize = cached.lengthSync();
+          final boundedStart = sliceStart.clamp(0, fileSize);
+          final boundedEnd = sliceEnd.clamp(boundedStart, fileSize);
+          if (boundedEnd > boundedStart) {
+            final stream = cached.openRead(boundedStart, boundedEnd);
+            await for (final chunk in stream) {
+              output.add(chunk);
+              if (output is HttpResponse) await output.flush();
+            }
+            return boundedEnd - boundedStart;
+          }
+          return 0;
+        }
+      }
+
       final Stream<List<int>> networkStream;
+      final bool isTaskOwner;
       if (_streamFetcherForTesting != null) {
         networkStream = _streamFetcherForTesting!(record.fileId, chunkIndex);
+        inFlightTask = InFlightChunkRegistry.instance.register(record.fileId, chunkIndex, cancelToken: token);
+        isTaskOwner = true;
       } else {
         final remoteFileId = _resolveChunkFileId(record, chunkIndex, chunkMap);
         if (remoteFileId == null || remoteFileId.isEmpty) {
           throw StateError('Cannot resolve Telegram fileId for ${record.fileId} chunk $chunkIndex');
         }
+        AppLogger.i(
+          '[PIPELINE_NET_START] Streaming chunk $chunkIndex for ${record.fileId} '
+          'slice=$sliceStart..$sliceEnd from Telegram (priority: $priority)',
+          tag: 'VideoStreamPipeliner',
+        );
         networkStream = await ServiceLocator.instance.telegram.streamByFileId(
           remoteFileId,
           priority: priority,
           cancelToken: token,
         );
+        inFlightTask = InFlightChunkRegistry.instance.register(record.fileId, chunkIndex, cancelToken: token);
+        isTaskOwner = true;
       }
 
       // 3. Setup temporary disk cache sink for concurrent caching
@@ -132,6 +187,7 @@ class VideoStreamPipeliner {
       }
 
       var currentByteOffset = 0;
+      var isStreamComplete = false;
 
       final completer = Completer<int>();
       late StreamSubscription<List<int>> subscription;
@@ -142,6 +198,10 @@ class VideoStreamPipeliner {
             subscription.cancel();
             if (!completer.isCompleted) completer.complete(totalWritten);
             return;
+          }
+
+          if (isTaskOwner) {
+            inFlightTask?.addPacket(packet);
           }
 
           // Concurrently append full packet to disk cache
@@ -163,8 +223,18 @@ class VideoStreamPipeliner {
               overlapEnd - packetStart,
             );
             try {
+              if (totalWritten == 0 && slice.isNotEmpty) {
+                AppLogger.i(
+                  '[PIPELINE_FIRST_PACKET] Received first packet for chunk $chunkIndex '
+                  'of ${record.fileId} (${slice.length} bytes)',
+                  tag: 'VideoStreamPipeliner',
+                );
+              }
               output.add(slice);
               totalWritten += slice.length;
+              if (totalWritten >= (sliceEnd - sliceStart)) {
+                if (!completer.isCompleted) completer.complete(totalWritten);
+              }
             } catch (_) {
               token.cancel('Output socket write error');
               subscription.cancel();
@@ -176,6 +246,9 @@ class VideoStreamPipeliner {
           currentByteOffset += packet.length;
         },
         onError: (err, st) {
+          if (isTaskOwner) {
+            inFlightTask?.fail(err, st);
+          }
           if (!completer.isCompleted) {
             if (token.isCancelled || (err is DioException && err.type == DioExceptionType.cancel)) {
               completer.complete(totalWritten);
@@ -185,6 +258,7 @@ class VideoStreamPipeliner {
           }
         },
         onDone: () {
+          isStreamComplete = true;
           if (!completer.isCompleted) completer.complete(totalWritten);
         },
         cancelOnError: true,
@@ -197,8 +271,13 @@ class VideoStreamPipeliner {
 
       try {
         await completer.future;
+        if (!isStreamComplete && !token.isCancelled) {
+          await Future.delayed(Duration.zero);
+        }
       } finally {
-        await subscription.cancel();
+        if (token.isCancelled || isStreamComplete) {
+          await subscription.cancel();
+        }
       }
 
         // Close and commit disk cache file if fully received and not cancelled
@@ -208,7 +287,11 @@ class VideoStreamPipeliner {
             await fileSink.close();
             fileSink = null;
 
-            if (token.isCancelled) {
+            final expectedSize = _resolveExpectedChunkSize(record, chunkIndex, chunkMap);
+            final isFullyCached = isStreamComplete ||
+                (tmpFile.existsSync() && tmpFile.lengthSync() >= expectedSize);
+
+            if (token.isCancelled || !isFullyCached) {
               if (tmpFile.existsSync()) {
                 try {
                   tmpFile.deleteSync();
@@ -224,6 +307,14 @@ class VideoStreamPipeliner {
                 try {
                   targetFile.setLastModifiedSync(DateTime.now());
                 } catch (_) {}
+                if (isTaskOwner) {
+                  inFlightTask.complete(targetFile);
+                }
+                AppLogger.i(
+                  '[PIPELINE_COMMIT] Chunk $chunkIndex for ${record.fileId} committed to disk '
+                  '(${targetFile.lengthSync()} bytes)',
+                  tag: 'VideoStreamPipeliner',
+                );
                 VideoChunkCacheManager.instance.chunkChangeNotifier.value++;
                 AppCacheManager.instance.notifyCacheChanged();
                 unawaited(VideoChunkCacheManager.instance.evictOldestIfNeeded(
@@ -268,17 +359,54 @@ class VideoStreamPipeliner {
     int chunkIndex,
     Map<int, ChunkInfo>? chunkMap,
   ) {
-    if (chunkMap != null) {
-      final target = chunkMap[chunkIndex + 1] ?? chunkMap[chunkIndex];
+    if (chunkMap != null && chunkMap.isNotEmpty) {
+      final isZeroBased = chunkMap.containsKey(0) && !chunkMap.containsKey(chunkMap.length);
+      final key = isZeroBased ? chunkIndex : (chunkIndex + 1);
+      final target = chunkMap[key];
       if (target != null && target.fileId != null && target.fileId!.isNotEmpty) {
         return target.fileId;
       }
     }
 
-    if (record.chunkCount == 1 && chunkIndex == 0 && record.fileId.isNotEmpty) {
+    if (record.chunkCount == 1 && chunkIndex == 0 && record.fileId.isNotEmpty && !record.fileId.contains('-')) {
       return record.fileId;
     }
 
     return null;
   }
+
+  /// Resolves the expected total byte length of a chunk to verify integrity before caching.
+  int _resolveExpectedChunkSize(
+    FileRecord record,
+    int chunkIndex,
+    Map<int, ChunkInfo>? chunkMap,
+  ) {
+    if (chunkMap != null && chunkMap.isNotEmpty) {
+      final isZeroBased = chunkMap.containsKey(0) && !chunkMap.containsKey(chunkMap.length);
+      final key = isZeroBased ? chunkIndex : (chunkIndex + 1);
+      final target = chunkMap[key];
+      if (target != null && target.sizeMb > 0) {
+        return (target.sizeMb * 1024 * 1024).round();
+      }
+    }
+
+    final totalBytes = max(1, (record.sizeMb * 1024 * 1024).round());
+    if (record.chunkCount <= 1) {
+      return totalBytes;
+    }
+
+    const defaultPartSize = 19 * 1024 * 1024;
+    if (chunkIndex == record.chunkCount - 1) {
+      final remainder = totalBytes - (chunkIndex * defaultPartSize);
+      return remainder > 0 ? remainder : defaultPartSize;
+    }
+    return defaultPartSize;
+  }
+
+  /// Visible for unit testing chunk fileId resolution.
+  String? resolveChunkFileIdForTesting(
+    FileRecord record,
+    int chunkIndex,
+    Map<int, ChunkInfo>? chunkMap,
+  ) => _resolveChunkFileId(record, chunkIndex, chunkMap);
 }

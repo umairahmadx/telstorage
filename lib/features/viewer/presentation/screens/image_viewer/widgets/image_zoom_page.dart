@@ -51,6 +51,7 @@ class _ImageZoomPageState extends State<ImageZoomPage> {
   // Progressive image state
   File? _cachedFullFile;
   bool _isDownloading = false;
+  bool _hasError = false;
 
   // Thumbnail fallback data
   Uint8List? _thumbBytes;
@@ -72,6 +73,12 @@ class _ImageZoomPageState extends State<ImageZoomPage> {
   void didUpdateWidget(covariant ImageZoomPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.file.fileId != widget.file.fileId) {
+      setState(() {
+        _cachedFullFile = null;
+        _hasError = false;
+        _thumbBytes = null;
+        _thumbPath = null;
+      });
       _initThumbnail();
       _loadFullResolutionImage();
     } else if (widget.isActive && !oldWidget.isActive) {
@@ -127,6 +134,7 @@ class _ImageZoomPageState extends State<ImageZoomPage> {
       setState(() {
         _cachedFullFile = existing;
         _isDownloading = false;
+        _hasError = false;
       });
       return;
     }
@@ -135,6 +143,7 @@ class _ImageZoomPageState extends State<ImageZoomPage> {
     if (mounted) {
       setState(() {
         _isDownloading = true;
+        _hasError = false;
       });
     }
 
@@ -144,10 +153,18 @@ class _ImageZoomPageState extends State<ImageZoomPage> {
     );
 
     if (mounted) {
-      setState(() {
-        _cachedFullFile = downloaded;
-        _isDownloading = false;
-      });
+      if (downloaded != null) {
+        setState(() {
+          _cachedFullFile = downloaded;
+          _isDownloading = false;
+          _hasError = false;
+        });
+      } else {
+        setState(() {
+          _isDownloading = false;
+          _hasError = true;
+        });
+      }
     }
   }
 
@@ -170,49 +187,71 @@ class _ImageZoomPageState extends State<ImageZoomPage> {
           fit: StackFit.expand,
           alignment: Alignment.center,
           children: [
-            // 1. Instant thumbnail placeholder beneath (never causes black dip for raster images)
-            // For SVGs, avoid rendering underneath once full vector is ready to prevent bleed-through
-            if (_cachedFullFile == null ||
-                !(widget.file.name.toLowerCase().endsWith('.svg') ||
-                    widget.file.mimeType.toLowerCase() == 'image/svg+xml'))
-              Center(child: _buildThumbnail(colors)),
-
-            // 2. Full resolution image on top fading in once decoded
-            if (_cachedFullFile != null)
-              Center(
-                child: (widget.file.name.toLowerCase().endsWith('.svg') ||
-                        widget.file.mimeType.toLowerCase() == 'image/svg+xml')
-                    ? SvgPicture.file(
-                        _cachedFullFile!,
-                        fit: BoxFit.contain,
-                        placeholderBuilder: (_) => _buildThumbnail(colors),
-                        errorBuilder: (context, error, stackTrace) {
-                          AppLogger.w('Failed to render full SVG: $error',
-                              tag: 'ImageZoomPage');
-                          return _buildThumbnail(colors);
-                        },
-                      )
-                    : Image.file(
-                        _cachedFullFile!,
-                        fit: BoxFit.contain,
-                        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-                          if (wasSynchronouslyLoaded) return child;
-                          return AnimatedOpacity(
-                            opacity: frame != null ? 1.0 : 0.0,
-                            duration: const Duration(milliseconds: 150),
-                            curve: Curves.easeOut,
-                            child: child,
-                          );
-                        },
-                        errorBuilder: (context, error, stackTrace) {
-                          AppLogger.w('Failed to render full image: $error',
-                              tag: 'ImageZoomPage');
-                          return const SizedBox.shrink();
-                        },
+            // 1. Progressive transition between thumbnail and full resolution image
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              switchInCurve: Curves.easeOut,
+              switchOutCurve: Curves.easeIn,
+              layoutBuilder: (currentChild, previousChildren) {
+                return Stack(
+                  fit: StackFit.expand,
+                  alignment: Alignment.center,
+                  children: [
+                    ...previousChildren,
+                    if (currentChild != null) currentChild,
+                  ],
+                );
+              },
+              child: _cachedFullFile == null
+                  ? KeyedSubtree(
+                      key: ValueKey('thumb_${widget.file.fileId}'),
+                      child: Center(child: _buildThumbnail(colors)),
+                    )
+                  : KeyedSubtree(
+                      key: ValueKey('full_${_cachedFullFile!.path}'),
+                      child: Center(
+                        child: (widget.file.name.toLowerCase().endsWith('.svg') ||
+                                widget.file.mimeType.toLowerCase() ==
+                                    'image/svg+xml')
+                            ? SvgPicture.file(
+                                _cachedFullFile!,
+                                fit: BoxFit.contain,
+                                placeholderBuilder: (_) =>
+                                    _buildThumbnail(colors),
+                                errorBuilder: (context, error, stackTrace) {
+                                  AppLogger.w(
+                                      'Failed to render full SVG: $error',
+                                      tag: 'ImageZoomPage');
+                                  return _buildThumbnail(colors);
+                                },
+                              )
+                            : Image.file(
+                                _cachedFullFile!,
+                                fit: BoxFit.contain,
+                                gaplessPlayback: true,
+                                frameBuilder: (context, child, frame,
+                                    wasSynchronouslyLoaded) {
+                                  if (wasSynchronouslyLoaded) return child;
+                                  return AnimatedOpacity(
+                                    opacity: frame != null ? 1.0 : 0.0,
+                                    duration:
+                                        const Duration(milliseconds: 150),
+                                    curve: Curves.easeOut,
+                                    child: child,
+                                  );
+                                },
+                                errorBuilder: (context, error, stackTrace) {
+                                  AppLogger.w(
+                                      'Failed to render full image: $error',
+                                      tag: 'ImageZoomPage');
+                                  return _buildThumbnail(colors);
+                                },
+                              ),
                       ),
-              ),
+                    ),
+            ),
 
-            // 3. Download spinner while fetching
+            // 2. Download spinner while fetching
             if (_isDownloading)
               Center(
                 child: Container(
@@ -230,6 +269,45 @@ class _ImageZoomPageState extends State<ImageZoomPage> {
                         strokeWidth: 2.5,
                         color: colors.accentPrimary,
                       ),
+                    ),
+                  ),
+                ),
+              ),
+
+            // 3. Retry prompt if download failed
+            if (_hasError && !_isDownloading && _cachedFullFile == null)
+              Positioned(
+                bottom: 96,
+                child: GestureDetector(
+                  onTap: _loadFullResolutionImage,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: colors.bgPrimary.withValues(alpha: 0.8),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: colors.borderSubtle,
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.refresh_rounded,
+                          size: 18,
+                          color: colors.textPrimary,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Tap to retry',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: colors.textPrimary,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),

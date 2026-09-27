@@ -39,13 +39,11 @@ class TelegramService {
 
   TelegramService({Dio? dio})
       : _dio = dio ??
-            Dio(
-              BaseOptions(
-                connectTimeout: const Duration(seconds: 60),
-                sendTimeout: const Duration(seconds: 180),
-                receiveTimeout: const Duration(seconds: 180),
-              ),
-            );
+            Dio(BaseOptions(
+              connectTimeout: const Duration(seconds: 60),
+              sendTimeout: const Duration(seconds: 180),
+              receiveTimeout: const Duration(seconds: 180),
+            ));
 
   String get _base => '${AppConstants.telegramApiBase}$_token';
   String get _fileBase => '${AppConstants.telegramFileBase}$_token';
@@ -327,11 +325,7 @@ class TelegramService {
   /// Bulk delete messages in batches of up to 100 IDs using POST /deleteMessages.
   Future<void> deleteMessages(List<int> messageIds) async {
     final validIds = messageIds.where((id) => id > 0).toSet().toList();
-    if (validIds.isEmpty) return;
-    if (!_isInitialized) {
-      AppLogger.w('deleteMessages skipped: uninitialized', tag: 'TelegramService');
-      return;
-    }
+    if (validIds.isEmpty || !_isInitialized) return;
     for (var i = 0; i < validIds.length; i += 100) {
       final end = (i + 100 < validIds.length) ? i + 100 : validIds.length;
       final batch = validIds.sublist(i, end);
@@ -341,13 +335,31 @@ class TelegramService {
           await _dio.post('$_base/deleteMessages', data: {'chat_id': _channelId, 'message_ids': batch});
         }, operationName: 'deleteMessages(${batch.length})');
       } catch (e) {
-        AppLogger.w('deleteMessages failed for batch of ${batch.length}: $e', tag: 'TelegramService', error: e);
+        final desc = (e is DioException) ? (e.response?.data?['description'] ?? e.response?.data?.toString() ?? e.message) : '$e';
+        AppLogger.w('deleteMessages batch failed ($desc). Falling back to deleteMessage per ID.', tag: 'TelegramService', error: e);
+        for (final id in batch) {
+          await deleteMessage(id);
+        }
       }
     }
   }
 
-  /// Delete a single message.
-  Future<void> deleteMessage(int messageId) => deleteMessages([messageId]);
+  /// Delete a single message using POST /deleteMessage.
+  Future<void> deleteMessage(int messageId) async {
+    if (messageId <= 0 || !_isInitialized) return;
+    try {
+      await _withRetry(() async {
+        await TelegramRateLimiter.instance.acquire();
+        await _dio.post('$_base/deleteMessage', data: {'chat_id': _channelId, 'message_id': messageId});
+      }, operationName: 'deleteMessage($messageId)');
+    } on DioException catch (e) {
+      final desc = e.response?.data?['description']?.toString() ?? e.message ?? '';
+      if (e.response?.statusCode == 400 && desc.contains('message to delete not found')) return;
+      AppLogger.w('deleteMessage($messageId) failed: $desc', tag: 'TelegramService', error: e);
+    } catch (e) {
+      AppLogger.w('deleteMessage($messageId) failed: $e', tag: 'TelegramService', error: e);
+    }
+  }
 
   /// Get the file_id of a known message_id by forwarding it to the same
   /// channel and reading back the document file_id, then deleting the copy.
@@ -424,23 +436,13 @@ class TelegramService {
         final desc = (e.response?.data is Map)
             ? (e.response?.data['description']?.toString() ?? '')
             : (e.message ?? '');
-        if (desc.contains('not enough rights') ||
-            desc.contains('CHAT_ADMIN_REQUIRED')) {
+        if (desc.contains('not enough rights') || desc.contains('CHAT_ADMIN_REQUIRED')) {
           throw TelegramPermissionException(
-              'Bot needs admin permission to pin messages. '
-              'Please make your bot an admin in the channel with "Pin Messages" permission.');
+              'Bot needs admin permission to pin messages. Please make your bot an admin in the channel with "Pin Messages" permission.');
         }
         rethrow;
       } catch (e) {
-        if (e is TelegramPermissionException || e is TelegramAuthException) {
-          rethrow;
-        }
-        if (e.toString().contains('not enough rights') ||
-            e.toString().contains('CHAT_ADMIN_REQUIRED')) {
-          throw TelegramPermissionException(
-              'Bot needs admin permission to pin messages. '
-              'Please make your bot an admin in the channel with "Pin Messages" permission.');
-        }
+        if (e is TelegramPermissionException || e is TelegramAuthException) rethrow;
         throw Exception('Failed to pin message: $e');
       }
     }, operationName: 'pinMessage($messageId)');

@@ -55,7 +55,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('vacation_video.mp4'), findsOneWidget);
-      expect(find.text('1 of 3 • ${testFile.formattedSize}'), findsOneWidget);
+      expect(find.textContaining(testFile.formattedSize), findsOneWidget);
 
       await tester.tap(find.byTooltip('Back'));
       expect(backPressed, isTrue);

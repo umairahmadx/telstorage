@@ -3,37 +3,35 @@
  * Description: Fullscreen in-app video player with gesture controls, local HTTP proxy streaming, and glassmorphic overlays.
  */
 
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:video_player/video_player.dart';
 import '../../../../../../core/models/file_record.dart';
+import '../../../../../../core/services/device_hardware_service.dart';
 import '../../../../../../core/services/service_locator.dart';
 import '../../../../../../core/theme/app_theme.dart';
 import '../../../../../../shared/widgets/dialogs/app_dialogs.dart';
 import '../../../../../../shared/widgets/thumbnail_widget.dart';
+import 'models/video_aspect_ratio_mode.dart';
 import 'viewmodel/video_player_view_model.dart';
+import 'widgets/video_audio_subtitle_sheet.dart';
+import 'widgets/video_bottom_action_bar.dart';
+import 'widgets/video_chunk_inspector_sheet.dart';
+import 'widgets/video_drag_hud.dart';
+import 'widgets/video_gesture_overlay.dart';
 import 'widgets/video_player_controls_overlay.dart';
 import 'widgets/video_player_top_bar.dart';
 import 'widgets/video_progress_bar.dart';
+import 'widgets/video_speed_dialog.dart';
 
 /// Fullscreen video player screen supporting on-demand streaming and fast seeking.
 class VideoPlayerScreen extends StatefulWidget {
-  /// List of viewable video files in current folder.
   final List<FileRecord> videos;
-
-  /// Index of initially selected video.
   final int initialIndex;
-
-  /// Optional prefix to namespace Hero transition tag.
   final String? heroPrefix;
-
-  /// Optional injected ViewModel for testing or pre-configured state.
   final VideoPlayerViewModel? viewModel;
 
-  /// Constructs VideoPlayerScreen.
   const VideoPlayerScreen({
     super.key,
     required this.videos,
@@ -42,7 +40,6 @@ class VideoPlayerScreen extends StatefulWidget {
     this.viewModel,
   });
 
-  /// Opens VideoPlayerScreen with a smooth translucent route transition.
   static void open(
     BuildContext context, {
     required List<FileRecord> videos,
@@ -67,7 +64,6 @@ class VideoPlayerScreen extends StatefulWidget {
     );
   }
 
-  /// Checks if a given FileRecord represents a playable video file.
   static bool isVideoRecord(FileRecord file) {
     final mime = file.mimeType.toLowerCase();
     if (mime.startsWith('video/')) return true;
@@ -88,23 +84,35 @@ class VideoPlayerScreen extends StatefulWidget {
 class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   late final VideoPlayerViewModel _viewModel;
   late int _currentIndex;
-  Timer? _orientationTimer;
+  bool _isLandscape = false;
+  VideoAspectRatioMode _aspectRatioMode = VideoAspectRatioMode.fit;
+  final _gestureOverlayKey = GlobalKey<VideoGestureOverlayState>();
+
+  void _toggleAspectRatio() {
+    const modes = VideoAspectRatioMode.values;
+    final nextIndex = (_aspectRatioMode.index + 1) % modes.length;
+    final newMode = modes[nextIndex];
+    setState(() => _aspectRatioMode = newMode);
+    _gestureOverlayKey.currentState?.showCenterToast(
+      message: newMode.label,
+      icon: Icons.aspect_ratio_rounded,
+    );
+  }
 
   @override
   void initState() {
     super.initState();
-    // Allow dynamic auto-rotation (portrait + landscape) while playing video
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    // Strictly manual orientation lock: initial portrait, no gyro auto-rotation
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
     ]);
     if (ServiceLocator.instance.isInitialized) {
       ServiceLocator.instance.thumbnailRepository.pauseDownloads();
     }
     _currentIndex = widget.initialIndex;
     _viewModel = widget.viewModel ?? VideoPlayerViewModel();
+    DeviceHardwareService.instance.init();
     if (widget.viewModel == null) {
       _loadCurrentVideo();
     }
@@ -117,14 +125,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
   @override
   void dispose() {
-    _orientationTimer?.cancel();
-    // Restore global portrait lock when leaving video player
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
     ]);
     if (ServiceLocator.instance.isInitialized) {
       ServiceLocator.instance.thumbnailRepository.resumeDownloads();
     }
+    DeviceHardwareService.instance.restoreDefaults();
     if (widget.viewModel == null) {
       _viewModel.dispose();
     }
@@ -142,9 +153,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   }
 
   void _toggleOrientation() {
-    _orientationTimer?.cancel();
-    final isPortrait = MediaQuery.orientationOf(context) == Orientation.portrait;
-    if (isPortrait) {
+    _isLandscape = !_isLandscape;
+    if (_isLandscape) {
       SystemChrome.setPreferredOrientations([
         DeviceOrientation.landscapeLeft,
         DeviceOrientation.landscapeRight,
@@ -154,18 +164,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         DeviceOrientation.portraitUp,
       ]);
     }
-    // Keep orientation locked for 3.5s grace period so user can physically
-    // turn the device before dynamic gyro auto-rotation is re-enabled.
-    _orientationTimer = Timer(const Duration(milliseconds: 3500), () {
-      if (mounted) {
-        SystemChrome.setPreferredOrientations([
-          DeviceOrientation.portraitUp,
-          DeviceOrientation.portraitDown,
-          DeviceOrientation.landscapeLeft,
-          DeviceOrientation.landscapeRight,
-        ]);
-      }
-    });
   }
 
   void _handleShare() {
@@ -186,11 +184,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       onDownload: _handleSave,
       onRename: () {},
       onDelete: () {
-        Navigator.of(context).pop(); // Close sheet
+        Navigator.of(context).pop();
         SystemChrome.setPreferredOrientations([
           DeviceOrientation.portraitUp,
         ]);
-        Navigator.of(context).pop(); // Close viewer
+        Navigator.of(context).pop();
       },
     );
   }
@@ -205,6 +203,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       onPopInvokedWithResult: (didPop, _) {
         SystemChrome.setPreferredOrientations([
           DeviceOrientation.portraitUp,
+          DeviceOrientation.portraitDown,
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
         ]);
       },
       child: Scaffold(
@@ -215,23 +216,25 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
             return Stack(
               fit: StackFit.expand,
               children: [
-                // Main Video Viewport & Tap Detectors
-                GestureDetector(
+                // Main Video Viewport with Gestures, Brightness Dimmer & Scrub HUD
+                VideoGestureOverlay(
+                  key: _gestureOverlayKey,
+                  viewModel: _viewModel,
                   onTap: _viewModel.toggleControls,
-                  onDoubleTapDown: (details) {
-                    final screenWidth = MediaQuery.sizeOf(context).width;
-                    if (details.localPosition.dx < screenWidth / 2) {
-                      _viewModel.skipBackward();
-                    } else {
-                      _viewModel.skipForward();
-                    }
-                  },
                   child: Container(
                     color: Colors.black,
                     child: Center(
                       child: _buildVideoContent(colors, currentFile),
                     ),
                   ),
+                ),
+
+                // Scrub HUD Overlay
+                VideoDragHud(
+                  isVisible: _viewModel.isDragging,
+                  dragDelta: _viewModel.dragDelta,
+                  targetPosition: _viewModel.dragTarget,
+                  totalDuration: _viewModel.duration,
                 ),
 
                 // Top Bar
@@ -243,11 +246,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                   onBack: () {
                     SystemChrome.setPreferredOrientations([
                       DeviceOrientation.portraitUp,
+                      DeviceOrientation.portraitDown,
+                      DeviceOrientation.landscapeLeft,
+                      DeviceOrientation.landscapeRight,
                     ]);
                     Navigator.of(context).pop();
                   },
                   onSave: _handleSave,
-                  onRotate: _toggleOrientation,
                   onShare: _handleShare,
                   onMore: _handleMoreOptions,
                 ),
@@ -256,8 +261,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                 if (_viewModel.errorMessage == null)
                   VideoPlayerControlsOverlay(
                     isPlaying: _viewModel.isPlaying,
-                    isBuffering:
-                        !_viewModel.isInitialized || _viewModel.isBuffering,
+                    isBuffering: !_viewModel.isInitialized || _viewModel.isBuffering,
                     isVisible: _viewModel.areControlsVisible,
                     onPlayPause: _viewModel.togglePlay,
                     onSkipForward: () => _viewModel.skipForward(),
@@ -320,79 +324,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       fit: StackFit.expand,
       alignment: Alignment.center,
       children: [
-        // 1. Poster thumbnail immediately visible
         poster,
-
-        // 2. Active video frame playback once initialized
-        if (_viewModel.isInitialized && _viewModel.controller != null)
+        if (_viewModel.videoController != null)
           Center(
-            child: AspectRatio(
-              aspectRatio: _viewModel.controller!.value.aspectRatio,
-              child: VideoPlayer(_viewModel.controller!),
+            child: Video(
+              controller: _viewModel.videoController!,
+              controls: NoVideoControls,
+              fit: _aspectRatioMode.boxFit,
+              aspectRatio: _aspectRatioMode == VideoAspectRatioMode.fit
+                  ? _viewModel.naturalAspectRatio
+                  : _aspectRatioMode.forcedAspectRatio,
             ),
           ),
       ],
     );
   }
 
-  Widget _buildStreamingBadge(AppColorsExtension colors) {
-    final cached = _viewModel.cachedChunks.length;
-    final total = _viewModel.totalChunks;
-    final cachedMb = _viewModel.cachedMb.toStringAsFixed(1);
-    final totalMb = _viewModel.totalMb.toStringAsFixed(1);
-    final isComplete = cached >= total && total > 0;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: colors.bgSurface.withValues(alpha: 0.70),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: (isComplete ? colors.accentPrimary : colors.borderSubtle)
-                    .withValues(alpha: 0.40),
-                width: 0.8,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  isComplete
-                      ? Icons.check_circle_outline
-                      : Icons.cloud_sync_outlined,
-                  size: 13,
-                  color: isComplete
-                      ? colors.accentPrimary
-                      : colors.textSecondary,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  isComplete
-                      ? 'All chunks cached ($totalMb MB)'
-                      : 'Streaming: $cached/$total chunks ($cachedMb / $totalMb MB)',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: isComplete
-                        ? colors.accentPrimary
-                        : colors.textSecondary,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildBottomBar(AppColorsExtension colors) {
+    final currentFile = widget.videos[_currentIndex];
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeInOut,
@@ -418,12 +367,44 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildStreamingBadge(colors),
             VideoProgressBar(
               position: _viewModel.position,
               duration: _viewModel.duration,
               buffered: _viewModel.mergedBuffered,
               onSeek: _viewModel.seekTo,
+              isLandscape: _isLandscape,
+              onRotate: _toggleOrientation,
+            ),
+            VideoBottomActionBar(
+              playbackSpeed: _viewModel.playbackSpeed,
+              aspectRatioMode: _aspectRatioMode,
+              onSpeed: () => VideoSpeedDialog.show(
+                context,
+                currentSpeed: _viewModel.playbackSpeed,
+                onSpeedSelected: _viewModel.setPlaybackSpeed,
+              ),
+              onAspectRatioToggle: _toggleAspectRatio,
+              onAudioSubtitles: () => VideoAudioSubtitleSheet.show(
+                context,
+                videoTitle: currentFile.name,
+                audioTracks: _viewModel.audioTracks,
+                selectedAudioTrack: _viewModel.selectedAudioTrack,
+                onAudioTrackSelected: _viewModel.setAudioTrack,
+                subtitleTracks: _viewModel.subtitleTracks,
+                selectedSubtitleTrack: _viewModel.selectedSubtitleTrack,
+                subtitleDelay: _viewModel.subtitleDelay,
+                onSubtitleTrackSelected: _viewModel.setSubtitleTrack,
+                onExternalSubtitleLoaded: _viewModel.loadExternalSubtitle,
+                onDelayAdjusted: _viewModel.adjustSubtitleDelay,
+              ),
+              cachedChunks: _viewModel.cachedChunks.length,
+              totalChunks: _viewModel.totalChunks,
+              cachedMb: _viewModel.cachedMb,
+              totalMb: _viewModel.totalMb,
+              onCacheInspector: () => VideoChunkInspectorSheet.show(
+                context,
+                viewModel: _viewModel,
+              ),
             ),
           ],
         ),

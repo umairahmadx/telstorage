@@ -77,62 +77,76 @@ class FileDetailSheet extends StatelessWidget {
       }
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.bgSurface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Handle
-          Container(
-            width: 40,
-            height: 4,
-            margin: const EdgeInsets.only(bottom: 24),
-            decoration: BoxDecoration(
-              color: colors.borderSubtle,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-
-          // File Header with Thumbnail
-          Row(
+    return SafeArea(
+      child: Container(
+        decoration: BoxDecoration(
+          color: colors.bgSurface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+        ),
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              SizedBox(
-                width: 56,
-                height: 56,
-                child: ThumbnailWidget(file: file, width: 56, height: 56),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      file.name,
-                      style: Theme.of(context).textTheme.headlineSmall,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${file.formattedSize} • $dateStr',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
+              // Handle
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: colors.borderSubtle,
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-            ],
-          ),
 
-          const SizedBox(height: 28),
+              // File Header with Thumbnail
+              Row(
+                children: [
+                  SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: ThumbnailWidget(file: file, width: 44, height: 44),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          file.name,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: colors.textPrimary,
+                                fontSize: 14,
+                              ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${file.formattedSize} • $dateStr',
+                          style: TextStyle(
+                            color: colors.textSecondary,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
 
-          // Actions Row
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
+              const SizedBox(height: 14),
+
+              // Actions Row
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _ActionButton(
@@ -228,9 +242,9 @@ class FileDetailSheet extends StatelessWidget {
             ),
           ),
 
-          const SizedBox(height: 28),
+          const SizedBox(height: 14),
           const Divider(height: 1),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
 
           // Detailed Metadata List
           _DetailRow(label: 'Type', value: file.mimeType),
@@ -241,8 +255,10 @@ class FileDetailSheet extends StatelessWidget {
           if (file.sha256Hash.isNotEmpty)
             _DetailRow(label: 'SHA-256', value: file.sha256Hash),
 
-          const SizedBox(height: 16),
-        ],
+          const SizedBox(height: 10),
+            ],
+          ),
+        ),
       ),
     );
   }

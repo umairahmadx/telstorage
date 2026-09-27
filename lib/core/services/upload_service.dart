@@ -5,6 +5,8 @@
 
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:convert/convert.dart';
+import 'package:crypto/crypto.dart';
 import '../utils/app_mime_helper.dart';
 import 'package:uuid/uuid.dart';
 import 'package:hive/hive.dart';
@@ -32,6 +34,7 @@ import 'transfer_queue_service.dart';
 import '../models/transfer_task.dart';
 import '../errors/result.dart';
 import '../events/domain_event_bus.dart';
+import 'video_stream_server.dart';
 import 'upload_service_contract.dart';
 
 /// Handles chunked and streaming uploads to Telegram with non-blocking hashing and STORE ZIP packaging.
@@ -79,7 +82,7 @@ class UploadService implements UploadServiceContract {
 
     return await TransferConcurrencyCoordinator.instance.runGuarded(() async {
       String? transferId;
-      String? fileHash;
+      String? fileHash, activeResumeKey;
       try {
         AppLogger.d('Starting upload for: $name', tag: 'UploadService');
 
@@ -132,30 +135,27 @@ class UploadService implements UploadServiceContract {
         AppLogger.d('Size: ${sizeMb.toStringAsFixed(2)} MB',
             tag: 'UploadService');
 
-        // ── Step 1: SHA-256 (precomputed or chunked) ───────────────────────────
-        final String hash;
+        // ── Step 1: SHA-256 (precomputed, fast-small, or inline streaming) ─────
+        String hash;
         if (precomputedHash != null && precomputedHash.isNotEmpty) {
           hash = precomputedHash;
+        } else if (totalBytes <= _partSize) {
+          final payload = bytes ?? await readFileBytes(filePath!);
+          hash = RawStreamChunker.hashBytesSync(payload).sha256;
         } else {
-          internalOnProgress(0.0, 'Verifying file… 0%');
-          void onP(double pct) =>
-              internalOnProgress(0.0, 'Verifying… ${(pct * 100).toInt()}%');
-          final hashInfo = filePath != null
-              ? await RawStreamChunker.hashFile(filePath, onProgress: onP)
-              : await RawStreamChunker.hashBytes(bytes!,
-                  onProgress: onP);
-          hash = hashInfo.sha256;
+          hash = '';
         }
         fileHash = hash;
 
         // ── Step 1.2: Check for SHA-256 Deduplication ──────────────────────────
-        final existingFile = _hive.allFiles.firstWhere(
-          (f) =>
-              f.sha256Hash == hash &&
-              (f.sizeMb - sizeMb).abs() < 0.01 &&
-              f.metadataFileId != null,
-          orElse: () => FileRecord.empty(),
-        );
+        if (hash.isNotEmpty) {
+          final existingFile = _hive.allFiles.firstWhere(
+            (f) =>
+                f.sha256Hash == hash &&
+                (f.sizeMb - sizeMb).abs() < 0.01 &&
+                f.metadataFileId != null,
+            orElse: () => FileRecord.empty(),
+          );
 
         if (existingFile.fileId.isNotEmpty &&
             existingFile.metadataFileId != null) {
@@ -191,26 +191,27 @@ class UploadService implements UploadServiceContract {
           }
 
           internalOnProgress(1.0, 'Upload complete (Instant Deduplication)!');
-          TransferQueueService.instance
-              .updateTask(fileId, status: TransferStatus.completed);
+          TransferQueueService.instance.updateTask(fileId, status: TransferStatus.completed);
 
           await NotificationService.instance.showCompletionNotification(
             title: 'Instant Upload Complete',
             body: '$name linked instantly via deduplication.',
             payload: 'transfer_upload',
             actions: const [
-              AndroidNotificationAction('view_uploads', 'View Uploads',
-                  showsUserInterface: true),
+              AndroidNotificationAction('view_uploads', 'View Uploads', showsUserInterface: true),
             ],
           );
 
           return Success(fileMeta);
         }
+      }
 
         // ── Step 1.5: Generate and Upload Thumbnail ────────────────────────────
+        final resumeKey = hash.isNotEmpty ? hash : 'up_${fileId}_$totalBytes';
+        activeResumeKey = resumeKey;
         final resume = ChunkResumeService.instance;
-        String? thumbnailFileId = resume.getCachedThumbnailFileId(hash);
-        int? thumbnailMessageId = resume.getCachedThumbnailMessageId(hash);
+        String? thumbnailFileId = resume.getCachedThumbnailFileId(resumeKey);
+        int? thumbnailMessageId = resume.getCachedThumbnailMessageId(resumeKey);
 
         if (thumbnailFileId == null) {
           try {
@@ -248,8 +249,8 @@ class UploadService implements UploadServiceContract {
               );
               thumbnailFileId = thumbUpload['file_id'] as String?;
               thumbnailMessageId = thumbUpload['message_id'] as int?;
-              if (thumbnailFileId != null) await resume.saveThumbnailFileId(hash, thumbnailFileId);
-              if (thumbnailMessageId != null) await resume.saveThumbnailMessageId(hash, thumbnailMessageId);
+              if (thumbnailFileId != null) await resume.saveThumbnailFileId(resumeKey, thumbnailFileId);
+              if (thumbnailMessageId != null) await resume.saveThumbnailMessageId(resumeKey, thumbnailMessageId);
             }
           } catch (e) {
             AppLogger.e('Thumbnail upload step failed for $name: $e',
@@ -290,7 +291,7 @@ class UploadService implements UploadServiceContract {
           AppLogger.d('Large file — streaming in raw partition parts',
               tag: 'UploadService');
 
-          final chunker = RawStreamChunker(
+          final chunker = await RawStreamChunker.create(
             filename: name,
             fileSize: totalBytes,
             bytes: bytes,
@@ -305,8 +306,10 @@ class UploadService implements UploadServiceContract {
               tag: 'UploadService');
 
           final existingChunks =
-              ChunkResumeService.instance.getUploadedChunks(hash);
+              ChunkResumeService.instance.getUploadedChunks(resumeKey);
           var uploadedBytesBefore = 0;
+          final shaSink = AccumulatorSink<Digest>();
+          final shaInput = hash.isEmpty ? sha256.startChunkedConversion(shaSink) : null;
 
           for (var i = 0; i < totalParts; i++) {
             final chunkIndex = i + 1;
@@ -328,6 +331,10 @@ class UploadService implements UploadServiceContract {
                   tag: 'UploadService');
               chunkInfos.add(cachedChunk);
               uploadedBytesBefore += (cachedChunk.sizeMb * 1048576).round();
+              if (shaInput != null) {
+                final partBytes = await chunker.readPart(chunkIndex);
+                shaInput.add(partBytes);
+              }
               final p =
                   (uploadedBytesBefore / totalUploadBytes).clamp(0.0, 1.0) *
                       0.90;
@@ -336,6 +343,9 @@ class UploadService implements UploadServiceContract {
             }
 
             final partBytes = await chunker.readPart(chunkIndex);
+            if (shaInput != null) {
+              shaInput.add(partBytes);
+            }
             final currentOffset = uploadedBytesBefore;
             AppLogger.d(
                 'Part $chunkIndex/$totalParts: "$partName" (${(partBytes.length / 1048576).toStringAsFixed(2)} MB)',
@@ -364,7 +374,13 @@ class UploadService implements UploadServiceContract {
             );
             chunkInfos.add(chunkInfo);
             await ChunkResumeService.instance
-                .saveUploadedChunk(hash, chunkIndex, chunkInfo);
+                .saveUploadedChunk(resumeKey, chunkIndex, chunkInfo);
+          }
+
+          if (shaInput != null) {
+            shaInput.close();
+            hash = shaSink.events.single.toString();
+            fileHash = hash;
           }
         }
 
@@ -397,17 +413,23 @@ class UploadService implements UploadServiceContract {
         final savedFile = FileRecord.fromMap(fileMeta);
         await _hive.saveFile(savedFile);
         DomainEventBus.instance.fire(FileUploadedEvent(savedFile));
+        if (savedFile.isVideo) {
+          final cMap = {for (final c in chunkInfos) c.index: c};
+          try { VideoStreamServer.instance.seedMetadata(fileId, cMap); } catch (_) {}
+        }
 
         // Clean up cached chunk and thumbnail references upon successful commit
-        await ChunkResumeService.instance.clearFileCache(hash);
+        await ChunkResumeService.instance.clearFileCache(resumeKey);
+        if (hash.isNotEmpty && hash != resumeKey) {
+          await ChunkResumeService.instance.clearFileCache(hash);
+        }
 
         if (!skipGlobalMetadataUpdate) {
           try {
             final appMeta = await _metadata.fetch();
             await _metadata.addFile(appMeta, fileMeta);
           } catch (e) {
-            AppLogger.w(
-                'Direct metadata update failed ($e), enqueuing background sync',
+            AppLogger.w('Direct metadata update failed ($e), enqueuing background sync',
                 tag: 'UploadService');
             final pending = PendingAction(
               id: const Uuid().v4(),
@@ -416,48 +438,40 @@ class UploadService implements UploadServiceContract {
               timestamp: DateTime.now(),
             );
             if (Hive.isBoxOpen(AppConstants.pendingActionsBox)) {
-              await Hive.box<PendingAction>(AppConstants.pendingActionsBox)
-                  .put(pending.id, pending);
+              await Hive.box<PendingAction>(AppConstants.pendingActionsBox).put(pending.id, pending);
               ServiceLocator.instance.syncQueue.processQueue();
             }
           }
         }
 
         internalOnProgress(1.0, 'Upload complete!');
-        TransferQueueService.instance.updateTask(
-          fileId,
-          progress: 1.0,
-          currentStage: 'Upload complete!',
-          status: TransferStatus.completed,
-        );
+        TransferQueueService.instance.updateTask(fileId,
+            progress: 1.0, currentStage: 'Upload complete!', status: TransferStatus.completed);
         AppLogger.i('Upload complete: $name', tag: 'UploadService');
 
         await NotificationService.instance.showCompletionNotification(
           title: 'Upload Complete',
           body: '$name has been successfully uploaded.',
           payload: 'transfer_upload',
-          actions: const [
-            AndroidNotificationAction('view_uploads', 'View Uploads',
-                showsUserInterface: true),
-          ],
+          actions: const [AndroidNotificationAction('view_uploads', 'View Uploads', showsUserInterface: true)],
         );
 
         return Success(fileMeta);
       } catch (e, st) {
         final wasCancelled = transferId != null &&
             TransferQueueService.instance.isCancelled(transferId);
-        if (wasCancelled && fileHash != null && fileHash.isNotEmpty) {
+        if (wasCancelled) {
           try {
-            await ChunkResumeService.instance.clearFileCache(fileHash);
+            if (activeResumeKey != null) await ChunkResumeService.instance.clearFileCache(activeResumeKey);
+            if (fileHash != null && fileHash.isNotEmpty && fileHash != activeResumeKey) {
+              await ChunkResumeService.instance.clearFileCache(fileHash);
+            }
           } catch (_) {}
         }
         if (transferId != null) {
-          TransferQueueService.instance.updateTask(
-            transferId,
-            status:
-                wasCancelled ? TransferStatus.cancelled : TransferStatus.failed,
-            error: wasCancelled ? null : e.toString(),
-          );
+          TransferQueueService.instance.updateTask(transferId,
+              status: wasCancelled ? TransferStatus.cancelled : TransferStatus.failed,
+              error: wasCancelled ? null : e.toString());
         }
         AppLogger.e('Upload failed: $e',
             tag: 'UploadService', error: e, stackTrace: st);
@@ -474,14 +488,11 @@ class UploadService implements UploadServiceContract {
   static List<Uint8List> splitBytesZeroCopy(Uint8List bytes, int partSize) {
     return [
       for (var i = 0; i < bytes.length; i += partSize)
-        Uint8List.sublistView(
-            bytes, i, (i + partSize < bytes.length) ? i + partSize : bytes.length)
+        Uint8List.sublistView(bytes, i, (i + partSize < bytes.length) ? i + partSize : bytes.length)
     ];
   }
 
   /// Batch update global metadata in 1 single API call for multi-file uploads.
-  Future<void> commitUploadBatch(
-      List<Map<String, dynamic>> filesDataList) async {
-    await _metadata.addBatchFiles(filesDataList);
-  }
+  Future<void> commitUploadBatch(List<Map<String, dynamic>> filesDataList) async =>
+      await _metadata.addBatchFiles(filesDataList);
 }

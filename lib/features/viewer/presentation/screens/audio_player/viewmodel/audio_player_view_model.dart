@@ -5,7 +5,7 @@
 
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:video_player/video_player.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../../../../../core/models/file_record.dart';
 import '../../../../../../core/services/video_chunk_cache_manager.dart';
@@ -14,22 +14,17 @@ import '../../../../../../core/utils/app_logger.dart';
 
 /// Repeat modes for audio playlist playback.
 enum AudioRepeatMode {
-  /// Playback stops after the last track in the playlist.
   off,
-
-  /// Entire playlist repeats continuously from the beginning.
   all,
-
-  /// Current track loops indefinitely.
   one,
 }
 
 /// Manages audio playback lifecycle, playlist navigation, loopback proxy stream resolution,
-/// chunk buffer merging, and playback speeds.
+/// chunk buffer merging, and playback speeds using media_kit Player.
 class AudioPlayerViewModel extends ChangeNotifier {
   List<FileRecord> _playlist = const [];
   int _currentIndex = 0;
-  VideoPlayerController? _controller;
+  Player? _player;
 
   bool _isInitialized = false;
   bool _isPlaying = false;
@@ -46,56 +41,26 @@ class AudioPlayerViewModel extends ChangeNotifier {
 
   StreamRegistration? _registration;
   int _initGeneration = 0;
+  final List<StreamSubscription> _subscriptions = [];
 
-  /// Ordered playlist of viewable audio files.
   List<FileRecord> get playlist => _playlist;
-
-  /// Index of currently selected track.
   int get currentIndex => _currentIndex;
-
-  /// Currently loaded FileRecord.
   FileRecord? get currentTrack =>
       (_currentIndex >= 0 && _currentIndex < _playlist.length)
           ? _playlist[_currentIndex]
           : null;
-
-  /// Underlying VideoPlayerController used for audio stream rendering.
-  VideoPlayerController? get controller => _controller;
-
-  /// Whether the audio player is initialized and ready to play.
+  Player? get player => _player;
   bool get isInitialized => _isInitialized;
-
-  /// Whether audio is currently playing.
   bool get isPlaying => _isPlaying;
-
-  /// Whether audio is currently buffering chunks.
   bool get isBuffering => _isBuffering;
-
-  /// Current playback timestamp.
   Duration get position => _position;
-
-  /// Total duration of the track.
   Duration get duration => _duration;
-
-  /// Loaded/buffered duration segments directly from the player.
   List<DurationRange> get buffered => _buffered;
-
-  /// Downloaded 19 MB chunk indices on disk.
   Set<int> get cachedChunks => _cachedChunks;
-
-  /// Combined buffered duration ranges merging disk chunks with player buffer.
   List<DurationRange> get mergedBuffered => _mergedBuffered;
-
-  /// Current audio volume between 0.0 and 1.0.
   double get volume => _volume;
-
-  /// Current playback speed multiplier.
   double get playbackSpeed => _playbackSpeed;
-
-  /// Active repeat mode.
   AudioRepeatMode get repeatMode => _repeatMode;
-
-  /// Error message, if initialization or playback failed.
   String? get errorMessage => _errorMessage;
 
   /// Initializes the player with a [playlist] and begins streaming [initialIndex].
@@ -142,32 +107,26 @@ class AudioPlayerViewModel extends ChangeNotifier {
       final streamUrl = VideoStreamServer.instance.getStreamUrl(track.fileId, track.name);
       AppLogger.i('Initializing audio stream: $streamUrl', tag: 'AudioPlayerViewModel');
 
-      final ctrl = VideoPlayerController.networkUrl(Uri.parse(streamUrl));
-      if (gen != _initGeneration) {
-        ctrl.dispose();
-        return;
-      }
+      _cleanupPlayer();
 
-      final oldCtrl = _controller;
-      _controller = ctrl;
-      oldCtrl?.removeListener(_onControllerStateChanged);
-      oldCtrl?.dispose();
+      final p = Player(
+        configuration: const PlayerConfiguration(
+          osc: false,
+          logLevel: MPVLogLevel.warn,
+        ),
+      );
+      _player = p;
 
-      await ctrl.initialize();
+      _attachPlayerListeners();
+
+      await p.setRate(_playbackSpeed);
+      await p.open(Media(streamUrl), play: true);
       if (gen != _initGeneration) {
-        ctrl.removeListener(_onControllerStateChanged);
-        ctrl.dispose();
+        _cleanupPlayer();
         return;
       }
 
       _isInitialized = true;
-      _duration = ctrl.value.duration;
-      _volume = ctrl.value.volume;
-      await ctrl.setPlaybackSpeed(_playbackSpeed);
-
-      ctrl.addListener(_onControllerStateChanged);
-      _computeMergedBuffered();
-      await ctrl.play();
       _isPlaying = true;
       unawaited(WakelockPlus.enable().catchError((_) {}));
       notifyListeners();
@@ -181,34 +140,47 @@ class AudioPlayerViewModel extends ChangeNotifier {
     }
   }
 
-  void _onControllerStateChanged() {
-    if (_controller == null) return;
-    final val = _controller!.value;
+  void _attachPlayerListeners() {
+    final p = _player;
+    if (p == null) return;
 
-    final hasChanges = _isPlaying != val.isPlaying ||
-        _isBuffering != val.isBuffering ||
-        _position != val.position ||
-        _duration != val.duration ||
-        _buffered != val.buffered;
+    _subscriptions.add(p.stream.position.listen((pos) {
+      _position = pos;
+      notifyListeners();
+    }));
 
-    if (hasChanges) {
-      _isPlaying = val.isPlaying;
-      _isBuffering = val.isBuffering;
-      _position = val.position;
-      _duration = val.duration;
-      _buffered = val.buffered;
+    _subscriptions.add(p.stream.duration.listen((dur) {
+      _duration = dur;
       _computeMergedBuffered();
+      notifyListeners();
+    }));
 
-      // Check for track completion
-      if (_duration > Duration.zero &&
-          _position >= _duration &&
-          !val.isPlaying &&
-          !_isBuffering) {
+    _subscriptions.add(p.stream.playing.listen((playing) {
+      _isPlaying = playing;
+      if (playing) {
+        unawaited(WakelockPlus.enable().catchError((_) {}));
+      } else {
+        unawaited(WakelockPlus.disable().catchError((_) {}));
+      }
+      notifyListeners();
+    }));
+
+    _subscriptions.add(p.stream.buffering.listen((buffering) {
+      _isBuffering = buffering;
+      notifyListeners();
+    }));
+
+    _subscriptions.add(p.stream.buffer.listen((b) {
+      _buffered = [DurationRange(Duration.zero, b)];
+      _computeMergedBuffered();
+      notifyListeners();
+    }));
+
+    _subscriptions.add(p.stream.completed.listen((completed) {
+      if (completed) {
         _handleTrackEnded();
       }
-
-      notifyListeners();
-    }
+    }));
   }
 
   void _handleTrackEnded() {
@@ -231,17 +203,17 @@ class AudioPlayerViewModel extends ChangeNotifier {
     }
   }
 
-  /// Begins audio playback and enables wakelock.
+  /// Begins audio playback.
   void play() {
-    _controller?.play();
+    _player?.play();
     _isPlaying = true;
     unawaited(WakelockPlus.enable().catchError((_) {}));
     notifyListeners();
   }
 
-  /// Pauses audio playback and disengages screen wakelock.
+  /// Pauses audio playback.
   void pause() {
-    _controller?.pause();
+    _player?.pause();
     _isPlaying = false;
     unawaited(WakelockPlus.disable().catchError((_) {}));
     notifyListeners();
@@ -263,19 +235,15 @@ class AudioPlayerViewModel extends ChangeNotifier {
     if (_duration > Duration.zero && clamped > _duration) clamped = _duration;
 
     _position = clamped;
-    _controller?.seekTo(clamped);
+    _player?.seek(clamped);
     notifyListeners();
   }
 
   /// Fast-forwards playback position by [delta] (defaults to 10 seconds).
-  void skipForward([Duration delta = const Duration(seconds: 10)]) {
-    seekTo(_position + delta);
-  }
+  void skipForward([Duration delta = const Duration(seconds: 10)]) => seekTo(_position + delta);
 
   /// Rewinds playback position by [delta] (defaults to 10 seconds).
-  void skipBackward([Duration delta = const Duration(seconds: 10)]) {
-    seekTo(_position - delta);
-  }
+  void skipBackward([Duration delta = const Duration(seconds: 10)]) => seekTo(_position - delta);
 
   /// Skips to the next track in the playlist.
   Future<void> nextTrack() async {
@@ -313,14 +281,14 @@ class AudioPlayerViewModel extends ChangeNotifier {
   /// Adjusts volume between 0.0 and 1.0.
   void setVolume(double value) {
     _volume = value.clamp(0.0, 1.0);
-    _controller?.setVolume(_volume);
+    _player?.setVolume(_volume * 100.0);
     notifyListeners();
   }
 
   /// Sets the playback speed multiplier.
   Future<void> setSpeed(double speed) async {
     _playbackSpeed = speed;
-    await _controller?.setPlaybackSpeed(speed);
+    await _player?.setRate(speed);
     notifyListeners();
   }
 
@@ -390,34 +358,38 @@ class AudioPlayerViewModel extends ChangeNotifier {
     _mergedBuffered = merged;
   }
 
+  void _cleanupPlayer() {
+    for (final s in _subscriptions) {
+      s.cancel();
+    }
+    _subscriptions.clear();
+    _player?.dispose();
+    _player = null;
+  }
+
   @override
   void dispose() {
     _registration?.dispose();
     _registration = null;
-    _controller?.removeListener(_onControllerStateChanged);
-    _controller?.dispose();
-    _controller = null;
+    _cleanupPlayer();
     unawaited(WakelockPlus.disable().catchError((_) {}));
     super.dispose();
   }
 
   // -- Test Helpers -----------------------------------------------------------
 
-  /// Sets mock position for unit testing boundary conditions.
   @visibleForTesting
   void setMockPositionForTesting(Duration pos) {
     _position = pos;
     notifyListeners();
   }
 
-  /// Sets mock duration for unit testing boundary conditions.
   @visibleForTesting
   void setMockDurationForTesting(Duration dur) {
     _duration = dur;
     notifyListeners();
   }
 
-  /// Sets mock playlist for testing.
   @visibleForTesting
   void setMockPlaylistForTesting(List<FileRecord> list, [int initialIndex = 0]) {
     _playlist = List.unmodifiable(list);

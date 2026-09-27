@@ -106,4 +106,6 @@ abstract final class AppIcons {
   static const IconData cancel = Icons.cancel_outlined;
   static const IconData linkOff = Icons.link_off_rounded;
   static const IconData copy = Icons.copy_rounded;
+  static const IconData subtitles = Icons.subtitles_rounded;
 }
+

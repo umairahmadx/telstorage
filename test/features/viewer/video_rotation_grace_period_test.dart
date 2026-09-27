@@ -1,6 +1,6 @@
 /*
  * File: video_rotation_grace_period_test.dart
- * Description: Rule 10 Automated Reproduction Test for video player rotation timed sensor revert and grace period.
+ * Description: Unit tests verifying strictly manual button-driven orientation lock without gyroscope auto-reversion.
  */
 
 import 'package:flutter/material.dart';
@@ -32,9 +32,9 @@ void main() {
     );
   }
 
-  group('Video Player Rotation Grace Period Tests', () {
+  group('Video Player Manual Rotation Tests', () {
     testWidgets(
-        'Tapping Rotate button keeps Landscape locked for 3.5s grace period before dynamic sensor revert',
+        'Tapping Rotate button locks to Landscape and does not auto-revert to sensor rotation',
         (tester) async {
       tester.view.physicalSize = const Size(1080, 2400);
       tester.view.devicePixelRatio = 2.0;
@@ -88,33 +88,21 @@ void main() {
       );
       expect(orientationCalls.last, isNot(contains('DeviceOrientation.portraitUp')));
 
-      // Advance by 1 second (t = 1000ms)
-      await tester.pump(const Duration(milliseconds: 1000));
-
-      // In buggy code with 600ms timer: already reverted to all 4 orientations at t=600ms!
-      // This assertion fails RED against buggy code because last call has portraitUp
+      // Advance by 5 seconds: must STAY locked to landscape without gyro reversion
+      await tester.pump(const Duration(seconds: 5));
       expect(
         orientationCalls.last,
         isNot(contains('DeviceOrientation.portraitUp')),
-        reason: 'At t = 1000ms, player should STILL be locked to landscape (not reverted at 600ms)',
+        reason: 'Player must remain locked to landscape without gyro auto-revert',
       );
 
-      // Advance by another 1 second (t = 2000ms)
-      await tester.pump(const Duration(milliseconds: 1000));
-      expect(
-        orientationCalls.last,
-        isNot(contains('DeviceOrientation.portraitUp')),
-        reason: 'At t = 2000ms, player should STILL be locked to landscape',
-      );
+      // Tap rotate button again to return to portrait
+      await tester.tap(rotateFinder);
+      await tester.pump();
 
-      // Advance past the 3.5s grace period (t = 3600ms)
-      await tester.pump(const Duration(milliseconds: 1600));
-
-      // After 3.5s, sensor orientations are re-enabled
       expect(
         orientationCalls.last,
         contains('DeviceOrientation.portraitUp'),
-        reason: 'After 3.5s grace period, dynamic sensor orientations should be restored',
       );
     });
   });

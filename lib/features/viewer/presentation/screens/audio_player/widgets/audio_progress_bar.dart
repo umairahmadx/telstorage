@@ -4,7 +4,7 @@
  */
 
 import 'package:flutter/material.dart';
-import 'package:video_player/video_player.dart';
+import '../../../../../../core/models/video_stream_models.dart';
 import '../../../../../../core/theme/app_theme.dart';
 
 /// Interactive scrubber bar for audio playback displaying buffered chunk segments and elapsed/remaining timestamps.

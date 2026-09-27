@@ -5,6 +5,7 @@
 
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 import 'package:telstorage/core/models/file_record.dart';
@@ -104,6 +105,7 @@ class _ImageViewerScreenState extends State<ImageViewerScreen>
   @override
   void initState() {
     super.initState();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     if (ServiceLocator.instance.isInitialized) {
       ServiceLocator.instance.thumbnailRepository.pauseDownloads();
     }
@@ -129,6 +131,7 @@ class _ImageViewerScreenState extends State<ImageViewerScreen>
 
   @override
   void dispose() {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _adjacentPrefetchTimer?.cancel();
     if (ServiceLocator.instance.isInitialized) {
       ServiceLocator.instance.thumbnailRepository.resumeDownloads();

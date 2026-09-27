@@ -9,6 +9,7 @@ import 'package:convert/convert.dart';
 import 'package:crypto/crypto.dart';
 
 import '../constants/app_constants.dart';
+import 'mp4_faststart_projector.dart';
 import 'raw_stream_native.dart'
     if (dart.library.js_interop) 'raw_stream_web.dart';
 
@@ -38,6 +39,12 @@ class RawStreamChunker {
   /// Total number of raw partition parts.
   final int partCount;
 
+  /// Optional FastStart projector for MP4 files with moov at end.
+  Mp4FastStartProjector? _projector;
+
+  /// Whether this chunker is serving virtual FastStart-projected bytes.
+  bool get isFastStartProjected => _projector != null;
+
   /// Constructs a RawStreamChunker for disk or memory payloads.
   RawStreamChunker({
     required this.filename,
@@ -50,6 +57,35 @@ class RawStreamChunker {
         partCount = fileSize <= 0
             ? 1
             : (fileSize + chunkSize - 1) ~/ chunkSize;
+
+  /// Async factory that creates a chunker and auto-detects FastStart needs for MP4 files.
+  ///
+  /// If the file is an MP4/MOV with moov at the end, a virtual projection is created
+  /// so that all subsequent [readPart] calls return the FastStart-reordered bytes.
+  static Future<RawStreamChunker> create({
+    required String filename,
+    required int fileSize,
+    Uint8List? bytes,
+    String? filePath,
+    int chunkSize = defaultPartSize,
+  }) async {
+    final chunker = RawStreamChunker(
+      filename: filename,
+      fileSize: fileSize,
+      bytes: bytes,
+      filePath: filePath,
+      chunkSize: chunkSize,
+    );
+
+    if (filePath != null) {
+      chunker._projector = await Mp4FastStartProjector.create(
+        filePath: filePath,
+        fileSize: fileSize,
+      );
+    }
+
+    return chunker;
+  }
 
   /// Formats the standard part name for a given 1-indexed part number (e.g., "video.mp4.001").
   String getPartName(int partIndex) {
@@ -120,6 +156,11 @@ class RawStreamChunker {
 
     if (lengthToRead <= 0) {
       return Uint8List(0);
+    }
+
+    // When FastStart projection is active, serve virtual bytes.
+    if (_projector != null) {
+      return await _projector!.readSlice(startOffset, startOffset + lengthToRead);
     }
 
     if (bytes != null) {

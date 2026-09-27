@@ -359,13 +359,13 @@ class VideoAudioSubtitleSheet extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.all(12),
         constraints: BoxConstraints(maxHeight: size.height * 0.85),
-        decoration: BoxDecoration(
+        child: Material(
           color: colors.bgSurface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: colors.borderSubtle),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: colors.borderSubtle),
+          ),
+          clipBehavior: Clip.antiAlias,
           child: isLandscape
               // Landscape: 2-column split
               ? IntrinsicHeight(

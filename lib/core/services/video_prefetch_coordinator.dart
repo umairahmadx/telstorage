@@ -177,18 +177,16 @@ class VideoPrefetchCoordinator {
     while (!session.isCancelled) {
       final cur = session.currentPlaybackChunk;
 
-      // Sequential prefetch discipline: wait until current playback chunk is fully cached
-      // before downloading the next chunk to dedicate 100% bandwidth to active playback.
+      // Sequential prefetch discipline: wait if the current playback chunk is actively
+      // downloading to dedicate 100% bandwidth to active playback.
       if (_downloaderForTesting == null) {
         final curCached = await VideoChunkCacheManager.instance.getCachedChunk(fileId, cur);
         if (curCached == null || !curCached.existsSync()) {
           final inFlight = InFlightChunkRegistry.instance.get(fileId, cur);
           if (inFlight != null && !inFlight.isFinished) {
-            try { await inFlight.completionFuture; } catch (_) {}
-          } else {
-            await Future.delayed(const Duration(milliseconds: 100));
-            if (session.isCancelled) break;
-            continue;
+            try {
+              await inFlight.completionFuture;
+            } catch (_) {}
           }
         }
       }

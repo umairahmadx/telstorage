@@ -25,6 +25,12 @@ class CachePartitionStats {
   /// Count of cached full-resolution image files.
   final int imageCacheCount;
 
+  /// Cached PDF and document viewer files in bytes.
+  final int documentCacheBytes;
+
+  /// Count of cached PDF and document files.
+  final int documentCacheCount;
+
   /// Local database & partition metadata size in bytes.
   final int databaseBytes;
 
@@ -40,6 +46,8 @@ class CachePartitionStats {
     required this.thumbnailCount,
     this.imageCacheBytes = 0,
     this.imageCacheCount = 0,
+    this.documentCacheBytes = 0,
+    this.documentCacheCount = 0,
     required this.databaseBytes,
     required this.tempBytes,
     required this.limitMb,
@@ -47,7 +55,11 @@ class CachePartitionStats {
 
   /// Total combined cache size in bytes.
   int get totalBytes =>
-      thumbnailBytes + imageCacheBytes + databaseBytes + tempBytes;
+      thumbnailBytes +
+      imageCacheBytes +
+      documentCacheBytes +
+      databaseBytes +
+      tempBytes;
 
   /// Total combined cache size in megabytes.
   double get totalMb => totalBytes / (1024 * 1024);
@@ -60,6 +72,9 @@ class CachePartitionStats {
 
   /// Formatted image cache string.
   String get formattedImageCache => _formatBytes(imageCacheBytes);
+
+  /// Formatted document cache string.
+  String get formattedDocumentCache => _formatBytes(documentCacheBytes);
 
   /// Formatted database cache string.
   String get formattedDatabase => _formatBytes(databaseBytes);
@@ -180,7 +195,20 @@ class AppCacheManager {
         }
       }
 
-      // 3. Database & Folder Partition Cache
+      // 3. Document / PDF Cache Partition
+      int docBytes = 0;
+      int docCount = 0;
+      final docDir = Directory('${tempDir.path}/document_cache');
+      if (docDir.existsSync()) {
+        for (final file in docDir.listSync(followLinks: false)) {
+          if (file is File) {
+            docBytes += file.lengthSync();
+            docCount++;
+          }
+        }
+      }
+
+      // 4. Database & Folder Partition Cache
       int dbBytes = 0;
       if (appDocDir.existsSync()) {
         for (final file in appDocDir.listSync(followLinks: false)) {
@@ -193,14 +221,15 @@ class AppCacheManager {
         }
       }
 
-      // 4. Temporary / Transfer Chunk Cache
+      // 5. Temporary / Transfer Chunk Cache
       int tempBytes = 0;
       if (tempDir.existsSync()) {
         for (final entity in tempDir.listSync(followLinks: false)) {
           if (entity is File &&
               !entity.path.contains('thumbnails') &&
               !entity.path.contains('video_thumbs') &&
-              !entity.path.contains('image_cache')) {
+              !entity.path.contains('image_cache') &&
+              !entity.path.contains('document_cache')) {
             tempBytes += entity.lengthSync();
           }
         }
@@ -212,6 +241,8 @@ class AppCacheManager {
         thumbnailCount: thumbCount,
         imageCacheBytes: imgBytes,
         imageCacheCount: imgCount,
+        documentCacheBytes: docBytes,
+        documentCacheCount: docCount,
         databaseBytes: dbBytes,
         tempBytes: tempBytes,
         limitMb: limitMb,
@@ -291,10 +322,25 @@ class AppCacheManager {
         tag: 'AppCacheManager');
   }
 
+  /// Clears only the cached PDF and document files.
+  Future<void> clearDocumentCache() async {
+    if (kIsWeb) return;
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final docDir = Directory('${tempDir.path}/document_cache');
+      if (docDir.existsSync()) docDir.deleteSync(recursive: true);
+      notifyCacheChanged();
+      AppLogger.i('Document cache partition cleared', tag: 'AppCacheManager');
+    } catch (e) {
+      AppLogger.e('Error clearing document cache: $e', tag: 'AppCacheManager');
+    }
+  }
+
   /// Clears all segregated local caches.
   Future<void> clearAllCache() async {
     await clearThumbnailCache();
     await clearImageCache();
+    await clearDocumentCache();
     await clearTempCache();
     await clearFolderPartitionCache();
     notifyCacheChanged();
@@ -320,11 +366,19 @@ class AppCacheManager {
       final tempDir = await getTemporaryDirectory();
       final thumbDir = Directory('${tempDir.path}/thumbnails');
       final imageCacheDir = Directory('${tempDir.path}/image_cache');
+      final docDir = Directory('${tempDir.path}/document_cache');
 
       final List<File> imageFiles = [];
       if (imageCacheDir.existsSync()) {
         imageFiles.addAll(imageCacheDir.listSync().whereType<File>());
         imageFiles.sort(
+            (a, b) => a.lastModifiedSync().compareTo(b.lastModifiedSync()));
+      }
+
+      final List<File> docFiles = [];
+      if (docDir.existsSync()) {
+        docFiles.addAll(docDir.listSync().whereType<File>());
+        docFiles.sort(
             (a, b) => a.lastModifiedSync().compareTo(b.lastModifiedSync()));
       }
 
@@ -335,8 +389,8 @@ class AppCacheManager {
             (a, b) => a.lastModifiedSync().compareTo(b.lastModifiedSync()));
       }
 
-      // Evict large full-resolution image files first, then thumbnails
-      final List<File> files = [...imageFiles, ...thumbFiles];
+      // Evict large full-resolution image files and document files first, then thumbnails
+      final List<File> files = [...imageFiles, ...docFiles, ...thumbFiles];
 
       if (files.isNotEmpty) {
         int freedBytes = 0;

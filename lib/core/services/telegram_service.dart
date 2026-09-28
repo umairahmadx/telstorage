@@ -58,8 +58,8 @@ class TelegramService {
 
   /// Initializes bot token and destination channel ID.
   Future<void> init(String token, String channelId) async {
-    _token = token;
-    _channelId = channelId;
+    _token = token.trim();
+    _channelId = channelId.trim();
     _isInitialized = true;
   }
 
@@ -81,10 +81,7 @@ class TelegramService {
       } on DioException catch (e) {
         if (e.type == DioExceptionType.cancel) rethrow;
         if (e.response?.statusCode == 401) {
-          AppLogger.e(
-            'Telegram bot token invalid/revoked (HTTP 401). Failing fast.',
-            tag: 'TelegramService',
-          );
+          AppLogger.e('Telegram bot token invalid/revoked (HTTP 401). Failing fast.', tag: 'TelegramService');
           DomainEventBus.instance.fire(AuthTokenRevokedEvent());
           throw TelegramAuthException();
         }
@@ -118,6 +115,14 @@ class TelegramService {
           );
           await Future.delayed(Duration(milliseconds: delayMs));
           continue;
+        }
+
+        if (e.response != null) {
+          final resData = e.response?.data;
+          final desc = (resData is Map) ? resData['description'] : null;
+          if (desc != null) {
+            AppLogger.e('Telegram API HTTP ${e.response?.statusCode} on $operationName: $desc', tag: 'TelegramService');
+          }
         }
         rethrow;
       } catch (e) {

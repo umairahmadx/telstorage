@@ -199,14 +199,14 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       builder: (ctx) => ShareLinkSheet(
         file: file,
         shareUrl: existing?.shareUrl,
-        onCopyLink: (pwd, expiryDays, vanitySlug) async {
+        onGenerateLink: (pwd, expiryDays, vanitySlug, maxDownloads) {
           context.read<TransferCubit>().enqueueShare(
                 file,
                 password: pwd,
                 expiryDays: expiryDays,
                 vanitySlug: vanitySlug,
+                maxDownloads: maxDownloads,
               );
-          if (ctx.mounted) Navigator.pop(ctx);
         },
       ),
     );

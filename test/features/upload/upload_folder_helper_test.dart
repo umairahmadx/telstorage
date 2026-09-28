@@ -69,7 +69,7 @@ class FakeStorageRepository implements StorageRepositoryContract {
       const Success(null);
   @override
   Future<Result<void>> enqueueWebShare(FileRecord file,
-          {String? password, int? expiryDays, String? vanitySlug}) async =>
+          {String? password, int? expiryDays, int? maxDownloads, String? vanitySlug}) async =>
       const Success(null);
   @override
   Future<void> moveFile(String fileId, String? newFolderId) async {}

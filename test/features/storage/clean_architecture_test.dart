@@ -98,6 +98,7 @@ class MockStorageRepository implements StorageRepositoryContract {
     FileRecord file, {
     String? password,
     int? expiryDays,
+    int? maxDownloads,
     String? vanitySlug,
   }) async {
     if (shouldFail) return const Failure(UnknownFailure('Share failed test'));
@@ -128,6 +129,7 @@ class WebShareOnlyFake implements WebShareEnqueuer {
     FileRecord file, {
     String? password,
     int? expiryDays,
+    int? maxDownloads,
     String? vanitySlug,
   }) async {
     called = true;

@@ -46,18 +46,21 @@ void main() {
         thumbnailCount: 120,
         imageCacheBytes: 8 * 1024 * 1024, // 8 MB
         imageCacheCount: 10,
+        documentCacheBytes: 3 * 1024 * 1024, // 3 MB
+        documentCacheCount: 2,
         databaseBytes: 5 * 1024 * 1024, // 5 MB
         tempBytes: 2 * 1024 * 1024, // 2 MB
         limitMb: 250,
       );
 
-      expect(stats.totalBytes, 30 * 1024 * 1024);
-      expect(stats.totalMb, 30.0);
+      expect(stats.totalBytes, 33 * 1024 * 1024);
+      expect(stats.totalMb, 33.0);
       expect(stats.formattedThumbnails, '15.0 MB');
       expect(stats.formattedImageCache, '8.0 MB');
+      expect(stats.formattedDocumentCache, '3.0 MB');
       expect(stats.formattedDatabase, '5.0 MB');
       expect(stats.formattedTemp, '2.0 MB');
-      expect(stats.formattedTotal, '30.0 MB');
+      expect(stats.formattedTotal, '33.0 MB');
     });
 
     test('Supported limits contains expected steps', () {

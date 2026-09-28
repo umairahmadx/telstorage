@@ -1,18 +1,21 @@
 /*
  * File: downloads_shared_section.dart
- * Description: Section rendering active public web share links with clipboard copying, sharing, and revocation.
+ * Description: Section rendering active public web share links with clipboard copying, sharing, QR inspection, and revocation.
  */
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../../../core/models/file_record.dart';
 import '../../../../../../core/models/web_share_job.dart';
+import '../../../../../../core/theme/app_icons.dart';
 import '../../../../../../core/theme/app_theme.dart';
 import '../../../../../../shared/widgets/app_surface_card.dart';
+import '../../../../../../shared/widgets/share_link_sheet.dart';
 import '../../../../../../shared/widgets/thumbnail_widget.dart';
 import '../../../../../../shared/widgets/typography/app_section_label.dart';
 import '../viewmodel/downloads_view_model.dart';
 
-/// Renders shared web link items with URL copy, external share sheet, and revocation actions.
+/// Renders shared web link items with URL copy, external share sheet, QR details, and revocation actions.
 class DownloadsSharedSection extends StatelessWidget {
   final List<WebShareJob> sharedLinks;
   final void Function(String url) onCopyUrl;
@@ -26,6 +29,40 @@ class DownloadsSharedSection extends StatelessWidget {
     required this.onShareUrl,
     required this.onDeleteShareLink,
   });
+
+  void _openShareDetails(
+      BuildContext context, WebShareJob job, FileRecord? file) {
+    final syntheticFile = file ??
+        FileRecord(
+          fileId: job.fileId,
+          metadataMessageId: 0,
+          name: job.name,
+          sizeMb: job.sizeMb,
+          mimeType: job.mimeType,
+          uploadedAt: job.addedAt,
+          chunkCount: 1,
+          sha256Hash: '',
+        );
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => ShareLinkSheet(
+        file: syntheticFile,
+        shareUrl: job.shareUrl,
+        onGenerateLink: (pwd, expiry, vanitySlug, maxDownloads) {
+          context.read<TransferCubit>().enqueueShare(
+                syntheticFile,
+                password: pwd,
+                expiryDays: expiry,
+                vanitySlug: vanitySlug,
+                maxDownloads: maxDownloads,
+              );
+        },
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -74,6 +111,9 @@ class DownloadsSharedSection extends StatelessWidget {
           return Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: AppSurfaceCard(
+              onTap: job.isComplete
+                  ? () => _openShareDetails(context, job, file)
+                  : null,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               borderRadius: BorderRadius.circular(12),
               borderColor: colors.borderSubtle,
@@ -119,6 +159,13 @@ class DownloadsSharedSection extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
+                          icon: Icon(AppIcons.qrCode,
+                              color: colors.textPrimary, size: 20),
+                          tooltip: 'Show QR Code',
+                          onPressed: () =>
+                              _openShareDetails(context, job, file),
+                        ),
+                        IconButton(
                           icon: Icon(Icons.copy_rounded,
                               color: colors.accentPrimary, size: 20),
                           tooltip: 'Copy Link',
@@ -134,7 +181,8 @@ class DownloadsSharedSection extends StatelessWidget {
                           icon: Icon(Icons.link_off_rounded,
                               color: colors.error, size: 20),
                           tooltip: 'Delete Link',
-                          onPressed: () => onDeleteShareLink(job.fileId, name),
+                          onPressed: () =>
+                              onDeleteShareLink(job.fileId, name),
                         ),
                       ],
                     )
@@ -146,7 +194,8 @@ class DownloadsSharedSection extends StatelessWidget {
                           icon: Icon(Icons.cancel_outlined,
                               color: colors.error, size: 20),
                           tooltip: 'Cancel Share',
-                          onPressed: () => onDeleteShareLink(job.fileId, name),
+                          onPressed: () =>
+                              onDeleteShareLink(job.fileId, name),
                         ),
                       ],
                     ),

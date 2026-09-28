@@ -4,10 +4,12 @@
  */
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/services/document_viewer_cache_service.dart';
 import 'package:telstorage/core/theme/app_colors.dart';
 import 'package:telstorage/core/theme/app_colors_extension.dart';
+import 'package:telstorage/shared/widgets/thumbnail_widget.dart';
 import 'viewmodel/document_viewer_viewmodel.dart';
 import 'widgets/document_top_bar.dart';
 import 'widgets/office_fallback_card.dart';
@@ -59,6 +61,7 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
   @override
   void initState() {
     super.initState();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _viewModel = widget.viewModel ?? DocumentViewerViewModel(file: widget.file);
     _viewModel.addListener(_onStateChanged);
     if (widget.viewModel == null) {
@@ -72,6 +75,7 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
 
   @override
   void dispose() {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _viewModel.removeListener(_onStateChanged);
     if (widget.viewModel == null) {
       _viewModel.dispose();
@@ -115,25 +119,181 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
     );
   }
 
+  Widget _buildLoadingState(AppColorsExtension? colors) {
+    final file = widget.file;
+    final progress = _viewModel.progress;
+    final hasProgress = progress > 0;
+    final percentText = (progress * 100).clamp(0, 100).toInt();
+
+    final totalMb = file.sizeMb;
+    final downloadedMb = totalMb * progress;
+    final progressDetail = totalMb > 0
+        ? '${downloadedMb.toStringAsFixed(1)} MB / ${totalMb.toStringAsFixed(1)} MB'
+        : null;
+
+    final displayStatus = _viewModel.statusMessage == 'Reading file index…'
+        ? 'Preparing document…'
+        : _viewModel.statusMessage;
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Spacer(),
+            // Thumbnail Card Preview
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.black.withValues(alpha: 0.28),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: ThumbnailWidget(
+                  file: file,
+                  width: 140,
+                  height: 190,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            // File Name
+            Text(
+              file.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: colors?.textPrimary ?? AppColors.white,
+              ),
+            ),
+            const SizedBox(height: 6),
+            // File Size Badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              decoration: BoxDecoration(
+                color: colors?.bgSurfaceInset ?? AppColors.grey800,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                file.formattedSize,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: colors?.textSecondary ?? AppColors.grey600,
+                ),
+              ),
+            ),
+            const Spacer(),
+            // Bottom Progress Card
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: colors?.bgSurface ?? AppColors.grey900,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: colors?.borderSubtle ?? AppColors.grey800,
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.black.withValues(alpha: 0.15),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          value: hasProgress ? progress : null,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            colors?.accentPrimary ?? AppColors.primary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          displayStatus,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: colors?.textPrimary ?? AppColors.white,
+                          ),
+                        ),
+                      ),
+                      if (hasProgress)
+                        Text(
+                          '$percentText%',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: colors?.accentPrimary ?? AppColors.primary,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: hasProgress ? progress : null,
+                      minHeight: 6,
+                      backgroundColor: colors?.bgSurfaceInset ?? AppColors.grey800,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        colors?.accentPrimary ?? AppColors.primary,
+                      ),
+                    ),
+                  ),
+                  if (progressDetail != null) ...[
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        progressDetail,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: colors?.textSecondary ?? AppColors.grey600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildContent() {
     final colors = Theme.of(context).extension<AppColorsExtension>();
 
     if (_viewModel.isLoading && _viewModel.localFile == null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            Text(
-              _viewModel.statusMessage,
-              style: TextStyle(
-                color: colors?.textSecondary ?? AppColors.grey600,
-              ),
-            ),
-          ],
-        ),
-      );
+      return _buildLoadingState(colors);
     }
 
     if (_viewModel.errorMessage != null && _viewModel.localFile == null) {
@@ -193,20 +353,42 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
       },
       child: Scaffold(
         backgroundColor: colors?.bgPrimary ?? AppColors.black,
-        appBar: _viewModel.isChromeVisible
-            ? DocumentTopBar(
-                viewModel: _viewModel,
-                onBack: () async {
-                  if (await _handleWillPop() && context.mounted) {
-                    Navigator.of(context).pop();
-                  }
-                },
-                onToggleSearch: () =>
-                    setState(() => _isSearchOpen = !_isSearchOpen),
-                onOpenThemeSheet: _showReadingThemeSheet,
-              )
-            : null,
-        body: _buildContent(),
+        body: Stack(
+          children: [
+            Positioned.fill(child: _buildContent()),
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: IgnorePointer(
+                ignoring: !_viewModel.isChromeVisible,
+                child: AnimatedSlide(
+                  offset: _viewModel.isChromeVisible
+                      ? Offset.zero
+                      : const Offset(0, -1),
+                  duration: const Duration(milliseconds: 240),
+                  curve: Curves.easeOutCubic,
+                  child: AnimatedOpacity(
+                    opacity: _viewModel.isChromeVisible ? 1 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOut,
+                    child: DocumentTopBar(
+                      viewModel: _viewModel,
+                      onBack: () async {
+                        if (await _handleWillPop() && context.mounted) {
+                          Navigator.of(context).pop();
+                        }
+                      },
+                      onToggleSearch: () =>
+                          setState(() => _isSearchOpen = !_isSearchOpen),
+                      onOpenThemeSheet: _showReadingThemeSheet,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

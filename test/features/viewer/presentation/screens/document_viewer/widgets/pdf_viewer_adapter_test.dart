@@ -6,6 +6,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pdfrx/pdfrx.dart';
 import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
 import 'package:telstorage/features/viewer/presentation/screens/document_viewer/viewmodel/document_viewer_viewmodel.dart';
@@ -38,5 +39,12 @@ void main() {
     );
 
     expect(find.byType(PdfViewerAdapter), findsOneWidget);
+
+    final viewer = tester.widget<PdfViewer>(find.byType(PdfViewer));
+    expect(viewer.params.backgroundColor, AppColors.black);
+    expect(viewer.params.pageDropShadow, isNull);
+    expect(viewer.params.scrollPhysics, isA<ClampingScrollPhysics>());
+    expect(viewer.params.panAxis, PanAxis.free);
+    expect(viewer.params.pageAnchor, PdfPageAnchor.center);
   });
 }

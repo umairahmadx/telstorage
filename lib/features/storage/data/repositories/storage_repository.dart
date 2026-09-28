@@ -87,13 +87,17 @@ class StorageRepository implements StorageRepositoryContract {
 
   @override
   Future<Result<void>> enqueueWebShare(FileRecord file,
-      {String? password, int? expiryDays, String? vanitySlug}) async {
+      {String? password,
+      int? expiryDays,
+      String? vanitySlug,
+      int? maxDownloads}) async {
     try {
       await ServiceLocator.instance.webShareQueue.enqueueShare(
         file,
         password: password,
         expiryDays: expiryDays,
         vanitySlug: vanitySlug,
+        maxDownloads: maxDownloads,
       );
       return const Success(null);
     } catch (e) {

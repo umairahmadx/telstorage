@@ -136,19 +136,14 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (ctx) => ShareLinkSheet(
         file: file,
         shareUrl: existing?.shareUrl,
-        onCopyLink: (pwd, expiry, vanitySlug) async {
-          final cubit = context.read<HomeCubit>();
-          await cubit.shareFile(file,
-              password: pwd, expiryDays: expiry, vanitySlug: vanitySlug);
-
-          if (!mounted || !ctx.mounted) return;
-          Navigator.pop(ctx);
-
-          final job = cubit.getShareJob(file.fileId);
-          if (job != null && job.isComplete && job.shareUrl != null) {
-            await Clipboard.setData(ClipboardData(text: job.shareUrl!));
-            if (!mounted) return;
-          }
+        onGenerateLink: (pwd, expiry, vanitySlug, maxDownloads) {
+          context.read<HomeCubit>().shareFile(
+                file,
+                password: pwd,
+                expiryDays: expiry,
+                vanitySlug: vanitySlug,
+                maxDownloads: maxDownloads,
+              );
         },
       ),
     );

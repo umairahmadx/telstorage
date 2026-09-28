@@ -365,10 +365,16 @@ class HomeCubit extends Cubit<HomeState> {
 
   /// Enqueues a web share link generation task.
   Future<void> shareFile(FileRecord file,
-      {String? password, int? expiryDays, String? vanitySlug}) async {
+      {String? password,
+      int? expiryDays,
+      String? vanitySlug,
+      int? maxDownloads}) async {
     try {
       await _repository.enqueueWebShare(file,
-          password: password, expiryDays: expiryDays, vanitySlug: vanitySlug);
+          password: password,
+          expiryDays: expiryDays,
+          vanitySlug: vanitySlug,
+          maxDownloads: maxDownloads);
     } catch (e) {
       emit(state.copyWith(errorMessage: 'Failed to start sharing: $e'));
     }

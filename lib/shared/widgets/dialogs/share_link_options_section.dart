@@ -1,6 +1,6 @@
 /*
  * File: share_link_options_section.dart
- * Description: Modular form section configuring expiration duration, optional password protection, and custom vanity slug for public web shares.
+ * Description: Modular form section configuring expiration duration, optional password protection, max download quota, and custom vanity slug for public web shares.
  */
 
 import 'package:flutter/material.dart';
@@ -9,10 +9,12 @@ import 'package:intl/intl.dart';
 import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/app_theme.dart';
 
-/// Form inputs for configuring link expiry, password lock, and vanity URL aliases.
+/// Form inputs for configuring link expiry, password lock, max download limit, and vanity URL aliases.
 class ShareLinkOptionsSection extends StatelessWidget {
   final int expiryDays;
   final ValueChanged<int> onExpiryDaysChanged;
+  final int? maxDownloads;
+  final ValueChanged<int?> onMaxDownloadsChanged;
   final bool setPassword;
   final ValueChanged<bool> onSetPasswordChanged;
   final TextEditingController passwordController;
@@ -22,11 +24,19 @@ class ShareLinkOptionsSection extends StatelessWidget {
     super.key,
     required this.expiryDays,
     required this.onExpiryDaysChanged,
+    required this.maxDownloads,
+    required this.onMaxDownloadsChanged,
     required this.setPassword,
     required this.onSetPasswordChanged,
     required this.passwordController,
     required this.slugController,
   });
+
+  String _formatDownloadsLabel(int? limit) {
+    if (limit == null) return 'Unlimited downloads';
+    if (limit == 1) return '1 download (Burn after read)';
+    return '$limit downloads';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,6 +67,7 @@ class ShareLinkOptionsSection extends StatelessWidget {
             decoration: BoxDecoration(
               color: colors.bgSurface,
               borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: colors.borderSubtle),
             ),
             child: Row(
               children: [
@@ -90,6 +101,51 @@ class ShareLinkOptionsSection extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         Text(
+          'Download Limit',
+          style: TextStyle(color: colors.textSecondary, fontSize: 14),
+        ),
+        const SizedBox(height: 12),
+        PopupMenuButton<int?>(
+          onSelected: (limit) {
+            HapticFeedback.selectionClick();
+            onMaxDownloadsChanged(limit);
+          },
+          itemBuilder: (ctx) => const [
+            PopupMenuItem(value: null, child: Text('Unlimited downloads')),
+            PopupMenuItem(
+                value: 1, child: Text('1 download (Burn after read)')),
+            PopupMenuItem(value: 5, child: Text('5 downloads')),
+            PopupMenuItem(value: 10, child: Text('10 downloads')),
+            PopupMenuItem(value: 25, child: Text('25 downloads')),
+          ],
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              color: colors.bgSurface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: colors.borderSubtle),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.download_for_offline_outlined,
+                    size: 20, color: colors.textTertiary),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    _formatDownloadsLabel(maxDownloads),
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Icon(AppIcons.dropdownArrow, color: colors.textTertiary),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        Text(
           'Password (Optional)',
           style: TextStyle(color: colors.textSecondary, fontSize: 14),
         ),
@@ -99,6 +155,7 @@ class ShareLinkOptionsSection extends StatelessWidget {
           decoration: BoxDecoration(
             color: colors.bgSurface,
             borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: colors.borderSubtle),
           ),
           child: Row(
             children: [
@@ -138,7 +195,11 @@ class ShareLinkOptionsSection extends StatelessWidget {
               fillColor: colors.bgSurface,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
+                borderSide: BorderSide(color: colors.borderSubtle),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: colors.borderSubtle),
               ),
             ),
           ),
@@ -152,6 +213,9 @@ class ShareLinkOptionsSection extends StatelessWidget {
         TextField(
           controller: slugController,
           style: TextStyle(color: colors.textPrimary),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9-_]')),
+          ],
           decoration: InputDecoration(
             prefixText: 'storage.to/v/',
             prefixStyle: TextStyle(
@@ -160,11 +224,17 @@ class ShareLinkOptionsSection extends StatelessWidget {
             ),
             hintText: 'my-custom-alias',
             hintStyle: TextStyle(color: colors.textTertiary),
+            helperText: 'Letters, numbers, hyphens, and underscores only',
+            helperStyle: TextStyle(color: colors.textTertiary, fontSize: 11),
             filled: true,
             fillColor: colors.bgSurface,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide.none,
+              borderSide: BorderSide(color: colors.borderSubtle),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: colors.borderSubtle),
             ),
           ),
         ),

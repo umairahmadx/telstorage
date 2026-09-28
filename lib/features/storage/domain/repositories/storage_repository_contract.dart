@@ -48,6 +48,7 @@ abstract interface class WebShareEnqueuer {
     String? password,
     int? expiryDays,
     String? vanitySlug,
+    int? maxDownloads,
   });
 }
 

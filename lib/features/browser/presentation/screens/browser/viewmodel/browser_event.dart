@@ -139,8 +139,12 @@ class EnqueueShare extends BrowserEvent {
   /// Custom vanity slug.
   final String? vanitySlug;
 
+  /// Max download quota limit.
+  final int? maxDownloads;
+
   /// Constructs EnqueueShare event.
-  EnqueueShare(this.file, {this.password, this.expiryDays, this.vanitySlug});
+  EnqueueShare(this.file,
+      {this.password, this.expiryDays, this.vanitySlug, this.maxDownloads});
 }
 
 /// Navigates up to parent directory.

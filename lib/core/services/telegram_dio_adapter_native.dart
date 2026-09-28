@@ -21,8 +21,26 @@ void configureTelegramDioAdapter(Dio dio) {
         if (targetHost.contains('telegram.org')) {
           final resolved = await TelegramDnsResolver.instance.resolve(targetHost);
           if (resolved != null) {
+            if (uri.scheme == 'https') {
+              return SecureSocket.startConnect(
+                resolved,
+                targetPort,
+                onBadCertificate: (cert) =>
+                    cert.subject.contains('telegram.org') ||
+                    cert.subject.contains('api.telegram.org'),
+              );
+            }
             return Socket.startConnect(resolved, targetPort);
           }
+        }
+        if (uri.scheme == 'https') {
+          return SecureSocket.startConnect(
+            targetHost,
+            targetPort,
+            onBadCertificate: (cert) =>
+                cert.subject.contains('telegram.org') ||
+                cert.subject.contains('api.telegram.org'),
+          );
         }
         return Socket.startConnect(targetHost, targetPort);
       };

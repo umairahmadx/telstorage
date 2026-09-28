@@ -93,14 +93,14 @@ abstract final class BrowserDialogs {
       builder: (ctx) => ShareLinkSheet(
         file: file,
         shareUrl: existing?.shareUrl,
-        onCopyLink: (pwd, expiryDays, vanitySlug) async {
+        onGenerateLink: (pwd, expiryDays, vanitySlug, maxDownloads) {
           context.read<BrowserBloc>().add(EnqueueShare(
                 file,
                 password: pwd,
                 expiryDays: expiryDays,
                 vanitySlug: vanitySlug,
+                maxDownloads: maxDownloads,
               ));
-          if (ctx.mounted) Navigator.pop(ctx);
         },
       ),
     );
@@ -294,14 +294,14 @@ abstract final class BrowserDialogs {
       builder: (ctx) => ShareLinkSheet(
         file: syntheticFile,
         shareUrl: existing?.shareUrl,
-        onCopyLink: (pwd, expiryDays, vanitySlug) async {
+        onGenerateLink: (pwd, expiryDays, vanitySlug, maxDownloads) {
           context.read<BrowserBloc>().add(EnqueueShare(
                 syntheticFile,
                 password: pwd,
                 expiryDays: expiryDays,
                 vanitySlug: vanitySlug,
+                maxDownloads: maxDownloads,
               ));
-          if (ctx.mounted) Navigator.pop(ctx);
         },
       ),
     );

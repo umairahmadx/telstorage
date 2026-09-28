@@ -278,6 +278,20 @@ class _CacheSettingsScreenState extends State<CacheSettingsScreen> {
                 ),
                 const SizedBox(height: 12),
                 CachePartitionCard(
+                  icon: Icons.picture_as_pdf_outlined,
+                  iconColor: colors.filePdf,
+                  title: 'PDF & Document Cache',
+                  subtitle:
+                      '${_stats?.documentCacheCount ?? 0} cached PDF and document files',
+                  sizeText: _stats?.formattedDocumentCache ?? '0 B',
+                  onClear: () => _clearPartition(
+                    title: 'PDF & Document Cache',
+                    onClear: ServiceLocator
+                        .instance.cacheManager.clearDocumentCache,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                CachePartitionCard(
                   icon: Icons.folder_copy_outlined,
                   iconColor: colors.fileZip,
                   title: 'Database & Folder Partitions',

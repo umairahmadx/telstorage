@@ -174,13 +174,17 @@ class TransferCubit extends Cubit<TransferState> {
 
   /// Enqueues web share link creation.
   Future<void> enqueueShare(FileRecord file,
-      {String? password, int? expiryDays, String? vanitySlug}) async {
+      {String? password,
+      int? expiryDays,
+      String? vanitySlug,
+      int? maxDownloads}) async {
     final result = await ServiceLocator.instance.generateWebShareUseCase(
       GenerateWebShareParams(
         file: file,
         password: password,
         expiryDays: expiryDays,
         vanitySlug: vanitySlug,
+        maxDownloads: maxDownloads,
       ),
     );
     result.fold(

@@ -120,6 +120,7 @@ class _FakeStorageRepo implements StorageRepository {
     FileRecord file, {
     String? password,
     int? expiryDays,
+    int? maxDownloads,
     String? vanitySlug,
   }) async =>
       const Success(null);

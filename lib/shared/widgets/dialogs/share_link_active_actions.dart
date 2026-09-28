@@ -1,27 +1,50 @@
 /*
  * File: share_link_active_actions.dart
- * Description: Action button row and revocation trigger for active public web share links.
+ * Description: Active public web share command center with embedded QR card, copy/share actions, live stats, and revocation controls.
  */
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../../../core/theme/app_icons.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../qr_dialog.dart';
+import 'share_qr_card.dart';
 
-/// Action controls for copying, sharing via system sheet, showing QR code, and revoking active web links.
+/// Action controls for active web links: embedded QR card, copy, native share, live metadata, and revocation.
 class ShareLinkActiveActions extends StatelessWidget {
+  /// The active shareable URL.
   final String shareUrl;
+
+  /// Display name of the file or folder.
+  final String title;
+
+  /// Optional expiration duration in days.
+  final int? expiryDays;
+
+  /// Optional maximum downloads quota limit.
+  final int? maxDownloads;
+
+  /// Callback when user copies link.
   final VoidCallback onCopy;
+
+  /// Callback when user shares link natively.
   final VoidCallback onShare;
+
+  /// Callback when user revokes/deletes link.
   final VoidCallback onDelete;
 
+  /// Optional callback to open live settings edit sheet.
+  final VoidCallback? onEditSettings;
+
+  /// Constructs ShareLinkActiveActions.
   const ShareLinkActiveActions({
     super.key,
     required this.shareUrl,
+    required this.title,
+    this.expiryDays,
+    this.maxDownloads,
     required this.onCopy,
     required this.onShare,
     required this.onDelete,
+    this.onEditSettings,
   });
 
   @override
@@ -31,9 +54,15 @@ class ShareLinkActiveActions extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        ShareQrCard(
+          shareUrl: shareUrl,
+          title: title,
+        ),
+        const SizedBox(height: 20),
         Row(
           children: [
             Expanded(
+              flex: 3,
               child: ElevatedButton.icon(
                 onPressed: onCopy,
                 style: ElevatedButton.styleFrom(
@@ -51,8 +80,9 @@ class ShareLinkActiveActions extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Expanded(
+              flex: 2,
               child: OutlinedButton.icon(
                 onPressed: onShare,
                 style: OutlinedButton.styleFrom(
@@ -70,39 +100,67 @@ class ShareLinkActiveActions extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 8),
-            Material(
-              color: colors.bgSurface,
-              borderRadius: BorderRadius.circular(16),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  showDialog(
-                    context: context,
-                    builder: (_) => QrDialog(
-                      data: shareUrl,
-                      title: 'Share File QR',
-                    ),
-                  );
-                },
-                borderRadius: BorderRadius.circular(16),
-                child: SizedBox(
-                  width: 50,
-                  height: 50,
-                  child: Center(
-                    child: Icon(
-                      AppIcons.qrCode,
-                      color: colors.textPrimary,
-                      size: 22,
-                    ),
-                  ),
-                ),
-              ),
-            ),
           ],
         ),
-        const SizedBox(height: 12),
+        if (expiryDays != null || maxDownloads != null) ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: colors.bgSurface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: colors.borderSubtle),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                if (expiryDays != null) ...[
+                  Row(
+                    children: [
+                      Icon(AppIcons.calendar,
+                          size: 16, color: colors.textSecondary),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Active for $expiryDays days',
+                        style: TextStyle(
+                          color: colors.textSecondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                if (expiryDays != null && maxDownloads != null)
+                  Container(
+                    width: 1,
+                    height: 16,
+                    color: colors.borderSubtle,
+                  ),
+                if (maxDownloads != null) ...[
+                  Row(
+                    children: [
+                      Icon(Icons.download_for_offline_outlined,
+                          size: 16, color: colors.textSecondary),
+                      const SizedBox(width: 8),
+                      Text(
+                        maxDownloads == 1
+                            ? 'Single-use link'
+                            : 'Max: $maxDownloads downloads',
+                        style: TextStyle(
+                          color: colors.textSecondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
         SizedBox(
           width: double.infinity,
           child: TextButton.icon(

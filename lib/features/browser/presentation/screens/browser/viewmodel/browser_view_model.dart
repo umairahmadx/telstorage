@@ -284,10 +284,13 @@ class BrowserBloc extends Bloc<BrowserEvent, BrowserState> {
   Future<void> _onEnqueueShare(
       EnqueueShare event, Emitter<BrowserState> emit) async {
     try {
-      await _repository.enqueueWebShare(event.file,
-          password: event.password,
-          expiryDays: event.expiryDays,
-          vanitySlug: event.vanitySlug);
+      await _repository.enqueueWebShare(
+        event.file,
+        password: event.password,
+        expiryDays: event.expiryDays,
+        vanitySlug: event.vanitySlug,
+        maxDownloads: event.maxDownloads,
+      );
     } catch (e) {
       emit(state.copyWith(errorMessage: 'Sharing failed to start: $e'));
     }

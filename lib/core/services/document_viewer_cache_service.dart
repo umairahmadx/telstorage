@@ -148,7 +148,8 @@ class DocumentViewerCacheService {
           targetFile.setLastModifiedSync(DateTime.now());
         } catch (_) {}
 
-        AppCacheManager.instance.enforceCacheLimit();
+        await AppCacheManager.instance.enforceCacheLimit();
+        AppCacheManager.instance.notifyCacheChanged();
         AppLogger.i(
             'Cached document ${file.name} (${targetFile.lengthSync()} bytes)',
             tag: 'DocumentViewerCacheService');
@@ -217,6 +218,8 @@ class DocumentViewerCacheService {
       if (newRecord != null) {
         final newCacheFile = await getCacheTargetFile(newRecord);
         await newCacheFile.writeAsBytes(encodedBytes, flush: true);
+        await AppCacheManager.instance.enforceCacheLimit();
+        AppCacheManager.instance.notifyCacheChanged();
         return Success(newRecord);
       }
 

@@ -12,12 +12,14 @@ class GenerateWebShareParams {
   final String? password;
   final int? expiryDays;
   final String? vanitySlug;
+  final int? maxDownloads;
 
   const GenerateWebShareParams({
     required this.file,
     this.password,
     this.expiryDays,
     this.vanitySlug,
+    this.maxDownloads,
   });
 }
 
@@ -32,6 +34,7 @@ class GenerateWebShareUseCase {
         password: params.password,
         expiryDays: params.expiryDays,
         vanitySlug: params.vanitySlug,
+        maxDownloads: params.maxDownloads,
       );
       return const Success(null);
     } catch (e) {

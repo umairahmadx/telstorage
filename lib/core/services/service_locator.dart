@@ -130,6 +130,11 @@ class ServiceLocator {
     _initialized = val;
   }
 
+  /// Injects sync service instance for test isolation.
+  void setSyncServiceForTesting(SyncService service) {
+    _syncService = service;
+  }
+
   /// Injects hive service instance for test isolation.
   void setHiveForTesting(HiveService hive) {
     _hive = hive;

@@ -60,6 +60,21 @@ class ThumbnailRepository {
   /// Constructs ThumbnailRepository.
   ThumbnailRepository(this._telegram);
 
+  /// When network/DNS failure occurs, cooldown timestamp until which remote downloads are skipped.
+  DateTime? _offlineCooldownUntil;
+
+  /// Whether thumbnail downloading is currently in offline cooldown.
+  bool get isOfflineCooldown =>
+      _offlineCooldownUntil != null && DateTime.now().isBefore(_offlineCooldownUntil!);
+
+  /// Cooldown duration when a network/host lookup failure occurs (30 seconds).
+  static const Duration offlineCooldownDuration = Duration(seconds: 30);
+
+  /// Resets cooldown state (useful for testing or manual retry).
+  void resetCooldown() {
+    _offlineCooldownUntil = null;
+  }
+
   /// Whether thumbnail downloading is currently paused.
   bool get isPaused => _isPaused;
 
@@ -244,6 +259,13 @@ class ThumbnailRepository {
         }
       }
 
+      if (isOfflineCooldown) {
+        if (!request.completer.isCompleted) {
+          request.completer.complete(null);
+        }
+        return;
+      }
+
       if (request.isCancelled) return;
 
       final bytes = await _telegram.downloadByFileId(
@@ -265,8 +287,22 @@ class ThumbnailRepository {
         request.completer.complete(bytes);
       }
     } catch (e) {
-      AppLogger.e('Failed to load thumbnail for ${file.fileId}: $e',
-          tag: 'ThumbnailRepository');
+      final errStr = e.toString().toLowerCase();
+      final isNetworkErr = errStr.contains('socketexception') ||
+          errStr.contains('failed host lookup') ||
+          errStr.contains('connection error') ||
+          errStr.contains('network is unreachable');
+
+      if (isNetworkErr) {
+        _offlineCooldownUntil = DateTime.now().add(offlineCooldownDuration);
+        AppLogger.w(
+          'Network connection unavailable for thumbnail loading. Pausing downloads for 30s ($e)',
+          tag: 'ThumbnailRepository',
+        );
+      } else {
+        AppLogger.e('Failed to load thumbnail for ${file.fileId}: $e',
+            tag: 'ThumbnailRepository');
+      }
       if (!request.completer.isCompleted) {
         request.completer.complete(null);
       }

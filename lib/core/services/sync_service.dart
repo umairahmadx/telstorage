@@ -227,7 +227,18 @@ class SyncService {
 
       return SyncResult(added: added, removed: removed);
     } catch (e) {
-      AppLogger.e('Sync failed: $e', tag: 'SyncService', error: e);
+      final errStr = e.toString().toLowerCase();
+      final isConnErr = errStr.contains('socketexception') ||
+          errStr.contains('failed host lookup') ||
+          errStr.contains('connection error') ||
+          errStr.contains('offlineexception') ||
+          errStr.contains('network is unreachable');
+
+      if (isConnErr) {
+        AppLogger.w('Sync aborted due to connectivity/DNS failure: $e', tag: 'SyncService');
+      } else {
+        AppLogger.e('Sync failed: $e', tag: 'SyncService', error: e);
+      }
       rethrow;
     }
   }

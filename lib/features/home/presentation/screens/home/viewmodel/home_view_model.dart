@@ -13,6 +13,7 @@ import '../../../../../../core/models/file_record.dart';
 import '../../../../../../core/models/web_share_job.dart';
 import '../../../../../../core/services/service_locator.dart';
 import '../../../../../../core/utils/app_logger.dart';
+import '../../../../../../core/utils/connectivity.dart';
 import '../../../../../storage/data/repositories/storage_repository.dart';
 
 // ── States ────────────────────────────────────────────────────────────────────
@@ -293,6 +294,19 @@ class HomeCubit extends Cubit<HomeState> {
   Future<void> sync({bool userInitiated = false}) async {
     if (state.isSyncing) return;
 
+    if (!await Connectivity.hasConnection()) {
+      AppLogger.i('HomeCubit: Device is offline, skipping cloud sync',
+          tag: 'HomeCubit');
+      await refreshLocalData();
+      if (!isClosed) {
+        emit(state.copyWith(
+          isSyncing: false,
+          syncStatus: 'Offline — Changes Queued',
+        ));
+      }
+      return;
+    }
+
     emit(state.copyWith(
         isSyncing: true, syncProgress: 0.0, syncStatus: 'Connecting...'));
 
@@ -309,9 +323,30 @@ class HomeCubit extends Cubit<HomeState> {
       unawaited(enrichRemoteData(force: userInitiated));
       emit(state.copyWith(isSyncing: false, syncStatus: 'Sync complete'));
     } catch (e, stack) {
-      AppLogger.e('HomeCubit: sync failed',
-          tag: 'HomeCubit', error: e, stackTrace: stack);
-      emit(state.copyWith(isSyncing: false, errorMessage: 'Sync failed: $e'));
+      final errStr = e.toString().toLowerCase();
+      final isConnErr = errStr.contains('socketexception') ||
+          errStr.contains('failed host lookup') ||
+          errStr.contains('connection error') ||
+          errStr.contains('offlineexception') ||
+          errStr.contains('network is unreachable');
+
+      if (isConnErr) {
+        AppLogger.w(
+          'HomeCubit: Telegram unreachable (offline or DNS error). Falling back to local cache.',
+          tag: 'HomeCubit',
+        );
+        await refreshLocalData();
+        if (!isClosed) {
+          emit(state.copyWith(
+            isSyncing: false,
+            syncStatus: 'Offline — Changes Queued',
+          ));
+        }
+      } else {
+        AppLogger.e('HomeCubit: sync failed',
+            tag: 'HomeCubit', error: e, stackTrace: stack);
+        emit(state.copyWith(isSyncing: false, errorMessage: 'Sync failed: $e'));
+      }
     }
   }
 

@@ -10,6 +10,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../constants/app_constants.dart';
 import '../events/domain_event_bus.dart';
 import '../utils/app_logger.dart';
+import 'telegram_dio_adapter_helper.dart';
 import 'telegram_rate_limiter.dart';
 
 /// Exception thrown when Telegram returns HTTP 401 Unauthorized (token revoked/invalid).
@@ -43,7 +44,9 @@ class TelegramService {
               connectTimeout: const Duration(seconds: 60),
               sendTimeout: const Duration(seconds: 180),
               receiveTimeout: const Duration(seconds: 180),
-            ));
+            )) {
+    configureTelegramDioAdapter(_dio);
+  }
 
   String get _base => '${AppConstants.telegramApiBase}$_token';
   String get _fileBase => '${AppConstants.telegramFileBase}$_token';
@@ -477,17 +480,14 @@ class TelegramService {
     await TelegramRateLimiter.instance.acquire();
     try {
       final response = await _dio.post('$_base/unpinAllChatMessages', data: {'chat_id': _channelId});
-
       if (response.data['ok'] != true) {
         AppLogger.w('unpinAllMessages warning: ${response.data['description']}', tag: 'TelegramService');
       }
-    } on DioException catch (e) {
-      if (e.response?.statusCode == 429) {
+    } catch (e) {
+      if (e is DioException && e.response?.statusCode == 429) {
         final retryAfter = e.response?.data?['parameters']?['retry_after'] as int? ?? 5;
         TelegramRateLimiter.instance.report429(retryAfter);
       }
-      AppLogger.w('unpinAllMessages warning: $e', tag: 'TelegramService');
-    } catch (e) {
       AppLogger.w('unpinAllMessages warning: $e', tag: 'TelegramService');
     }
   }

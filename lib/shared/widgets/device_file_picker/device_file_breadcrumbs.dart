@@ -5,6 +5,7 @@
  */
 
 import 'package:flutter/material.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_colors_extension.dart';
 import '../../../../core/theme/app_icons.dart';
 
@@ -69,7 +70,7 @@ class DeviceFileBreadcrumbs extends StatelessWidget {
                         AppIcons.storage,
                         size: 14,
                         color: isCurrent
-                            ? (colors?.accentPrimary ?? Colors.blue)
+                            ? (colors?.brandPrimary ?? AppColors.primary)
                             : (colors?.textSecondary ?? Colors.white70),
                       ),
                       const SizedBox(width: 4),
@@ -78,7 +79,7 @@ class DeviceFileBreadcrumbs extends StatelessWidget {
                       segment.name,
                       style: TextStyle(
                         color: isCurrent
-                            ? (colors?.accentPrimary ?? Colors.blue)
+                            ? (colors?.brandPrimary ?? AppColors.primary)
                             : (colors?.textSecondary ?? Colors.white70),
                         fontSize: 12,
                         fontWeight:

@@ -8,11 +8,14 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_colors_extension.dart';
 import '../../../../core/theme/app_icons.dart';
+import '../../../../core/utils/file_opener_helper.dart';
 import '../../../../core/utils/storage_permission_helper.dart';
 import 'device_file_breadcrumbs.dart';
 import 'device_file_filter_tabs.dart';
+import 'device_file_thumbnail.dart';
 import 'device_picker_bottom_bar.dart';
 
 /// Modal bottom sheet for browsing local device storage and picking files directly
@@ -47,6 +50,7 @@ class DeviceFilePickerSheet extends StatefulWidget {
 }
 
 class _DeviceFilePickerSheetState extends State<DeviceFilePickerSheet> {
+  late final String _rootDirectory;
   late Directory _currentDir;
   final Set<String> _selectedFilePaths = {};
   List<FileSystemEntity> _entities = [];
@@ -62,8 +66,23 @@ class _DeviceFilePickerSheetState extends State<DeviceFilePickerSheet> {
   void initState() {
     super.initState();
     final initialPath = widget.initialDirectory ?? _resolveDefaultDirectory();
+    _rootDirectory = widget.initialDirectory ?? _resolveDefaultDirectory();
     _currentDir = Directory(initialPath);
     _loadDirectory(_currentDir);
+  }
+
+  bool get _canGoBack {
+    final cur = p.normalize(_currentDir.path);
+    final root = p.normalize(_rootDirectory);
+    return cur != root && _currentDir.parent.path != _currentDir.path;
+  }
+
+  void _handleBack() {
+    if (_canGoBack) {
+      _loadDirectory(_currentDir.parent);
+    } else {
+      Navigator.pop(context);
+    }
   }
 
   @override
@@ -93,14 +112,9 @@ class _DeviceFilePickerSheetState extends State<DeviceFilePickerSheet> {
       final rawList = await dir.list(followLinks: false).toList();
 
       rawList.sort((a, b) {
-        final aIsDir = a is Directory;
-        final bIsDir = b is Directory;
-        if (aIsDir && !bIsDir) return -1;
-        if (!aIsDir && bIsDir) return 1;
-        return p
-            .basename(a.path)
-            .toLowerCase()
-            .compareTo(p.basename(b.path).toLowerCase());
+        if (a is Directory && b is! Directory) return -1;
+        if (a is! Directory && b is Directory) return 1;
+        return p.basename(a.path).toLowerCase().compareTo(p.basename(b.path).toLowerCase());
       });
 
       if (mounted) {
@@ -164,49 +178,20 @@ class _DeviceFilePickerSheetState extends State<DeviceFilePickerSheet> {
 
   String _formatSize(int bytes) {
     if (bytes <= 0) return '0 B';
-    const suffixes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    var i = 0;
-    double d = bytes.toDouble();
-    while (d >= 1024 && i < suffixes.length - 1) {
-      d /= 1024;
-      i++;
-    }
-    return '${d.toStringAsFixed(1)} ${suffixes[i]}';
+    const s = ['B', 'KB', 'MB', 'GB', 'TB'];
+    var d = bytes.toDouble(), i = 0;
+    while (d >= 1024 && i < s.length - 1) { d /= 1024; i++; }
+    return '${d.toStringAsFixed(1)} ${s[i]}';
   }
 
   IconData _iconForFile(String filename) {
     final ext = p.extension(filename).toLowerCase();
-    switch (ext) {
-      case '.pdf':
-        return AppIcons.filePdf;
-      case '.mp4':
-      case '.mkv':
-      case '.mov':
-      case '.webm':
-      case '.avi':
-        return AppIcons.fileVideo;
-      case '.mp3':
-      case '.m4a':
-      case '.flac':
-      case '.wav':
-      case '.ogg':
-      case '.aac':
-        return AppIcons.fileAudio;
-      case '.jpg':
-      case '.jpeg':
-      case '.png':
-      case '.gif':
-      case '.webp':
-        return AppIcons.fileImage;
-      case '.zip':
-      case '.rar':
-      case '.7z':
-      case '.tar':
-      case '.gz':
-        return AppIcons.fileArchive;
-      default:
-        return AppIcons.fileGeneric;
-    }
+    if (ext == '.pdf') return AppIcons.filePdf;
+    if (const {'.mp4', '.mkv', '.mov', '.webm', '.avi'}.contains(ext)) return AppIcons.fileVideo;
+    if (const {'.mp3', '.m4a', '.flac', '.wav', '.ogg', '.aac'}.contains(ext)) return AppIcons.fileAudio;
+    if (const {'.jpg', '.jpeg', '.png', '.gif', '.webp'}.contains(ext)) return AppIcons.fileImage;
+    if (const {'.zip', '.rar', '.7z', '.tar', '.gz'}.contains(ext)) return AppIcons.fileArchive;
+    return AppIcons.fileGeneric;
   }
 
   @override
@@ -231,30 +216,53 @@ class _DeviceFilePickerSheetState extends State<DeviceFilePickerSheet> {
     final visibleFiles =
         visibleEntities.whereType<File>().toList();
 
-    return Container(
-      height: sheetHeight,
-      decoration: BoxDecoration(
-        color: colors?.bgPrimary ?? Colors.black,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        children: [
-          // Drag handle
-          Container(
-            margin: const EdgeInsets.only(top: 10, bottom: 4),
-            width: 36,
-            height: 4,
-            decoration: BoxDecoration(
-              color: colors?.borderSubtle ?? Colors.white24,
-              borderRadius: BorderRadius.circular(2),
+    return PopScope(
+      canPop: !_canGoBack,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _handleBack();
+      },
+      child: Container(
+        height: sheetHeight,
+        decoration: BoxDecoration(
+          color: colors?.bgPrimary ?? Colors.black,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            // Drag handle
+            Container(
+              margin: const EdgeInsets.only(top: 10, bottom: 4),
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: colors?.borderSubtle ?? Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
-          ),
-          // Header Bar
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: [
-                Expanded(
+            // Header Bar
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Material(
+                    color: Colors.transparent,
+                    shape: const CircleBorder(),
+                    clipBehavior: Clip.antiAlias,
+                    child: IconButton(
+                      icon: Icon(
+                        AppIcons.back,
+                        color: _canGoBack
+                            ? (colors?.textPrimary ?? Colors.white)
+                            : (colors?.textTertiary ?? Colors.white38),
+                        size: 20,
+                      ),
+                      tooltip: 'Previous',
+                      onPressed: _handleBack,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
                   child: Container(
                     height: 38,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -324,7 +332,7 @@ class _DeviceFilePickerSheetState extends State<DeviceFilePickerSheet> {
           // Breadcrumb Navigation
           DeviceFileBreadcrumbs(
             currentPath: _currentDir.path,
-            rootPath: _defaultRoot,
+            rootPath: _rootDirectory,
             onNavigate: (path) => _navigateTo(Directory(path)),
           ),
           const SizedBox(height: 6),
@@ -358,14 +366,15 @@ class _DeviceFilePickerSheetState extends State<DeviceFilePickerSheet> {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildEntityList(
       List<FileSystemEntity> entities, AppColorsExtension? colors) {
     if (_isLoading) {
       return Center(
-        child: CircularProgressIndicator(color: colors?.accentPrimary),
+        child: CircularProgressIndicator(color: colors?.brandPrimary),
       );
     }
 
@@ -430,18 +439,21 @@ class _DeviceFilePickerSheetState extends State<DeviceFilePickerSheet> {
         } catch (_) {}
 
         return ListTile(
-          leading: Icon(
-            _iconForFile(name),
-            color: isSelected
-                ? (colors?.accentPrimary ?? Colors.blue)
+          leading: DeviceFileThumbnail(
+            filePath: entity.path,
+            fileName: name,
+            icon: _iconForFile(name),
+            iconColor: isSelected
+                ? (colors?.brandPrimary ?? AppColors.primary)
                 : (colors?.textSecondary ?? Colors.white70),
-            size: 24,
+            onOpen: () =>
+                FileOpenerHelper.openFile(context, filePath: entity.path),
           ),
           title: Text(
             name,
             style: TextStyle(
               color: isSelected
-                  ? (colors?.accentPrimary ?? Colors.blue)
+                  ? (colors?.brandPrimary ?? AppColors.primary)
                   : (colors?.textPrimary ?? Colors.white),
               fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
             ),
@@ -455,12 +467,28 @@ class _DeviceFilePickerSheetState extends State<DeviceFilePickerSheet> {
               fontSize: 12,
             ),
           ),
-          trailing: Checkbox(
-            value: isSelected,
-            activeColor: colors?.accentPrimary,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-            onChanged: (_) => _toggleFileSelection(entity.path),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: Icon(
+                  Icons.open_in_new_rounded,
+                  size: 18,
+                  color: colors?.textTertiary ?? Colors.white38,
+                ),
+                tooltip: 'Open in system default app',
+                onPressed: () =>
+                    FileOpenerHelper.openFile(context, filePath: entity.path),
+              ),
+              Checkbox(
+                value: isSelected,
+                activeColor: colors?.brandPrimary ?? AppColors.primary,
+                checkColor: AppColors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4)),
+                onChanged: (_) => _toggleFileSelection(entity.path),
+              ),
+            ],
           ),
           onTap: () => _toggleFileSelection(entity.path),
         );

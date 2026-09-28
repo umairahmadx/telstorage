@@ -48,9 +48,19 @@ class DeviceMediaScanner {
   /// Loads all dynamic albums from the OS MediaStore.
   /// Returns albums sorted by media count descending, with "Recent" first.
   static Future<List<MediaAlbum>> loadAlbums() async {
+    final filterOption = FilterOptionGroup(
+      orders: [
+        const OrderOption(
+          type: OrderOptionType.createDate,
+          asc: false,
+        ),
+      ],
+    );
+
     final paths = await PhotoManager.getAssetPathList(
       type: RequestType.common,
       hasAll: true,
+      filterOption: filterOption,
     );
 
     final albums = <MediaAlbum>[];

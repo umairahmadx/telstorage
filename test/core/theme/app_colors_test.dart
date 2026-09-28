@@ -30,6 +30,7 @@ void main() {
       expect(colors!.bgPrimary, AppColors.black);
       expect(colors.bgSurface, AppColors.grey900);
       expect(colors.accentPrimary, AppColors.white);
+      expect(colors.brandPrimary, AppColors.primary);
       expect(colors.filePdf, AppColors.filePdf);
     });
 
@@ -41,6 +42,7 @@ void main() {
       expect(colors!.bgPrimary, AppColors.white);
       expect(colors.bgSurface, AppColors.grey100);
       expect(colors.accentPrimary, AppColors.black);
+      expect(colors.brandPrimary, AppColors.primary);
       expect(colors.filePdf, AppColors.filePdf);
     });
   });

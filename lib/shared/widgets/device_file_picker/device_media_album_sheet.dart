@@ -1,10 +1,15 @@
 /*
  * File: device_media_album_sheet.dart
- * Description: Bottom sheet modal for selecting media albums from the OS MediaStore.
+ * Description: Bottom sheet modal for selecting media albums from the OS MediaStore,
+ * presenting the most recent asset thumbnail for each folder.
  */
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:photo_manager/photo_manager.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_colors_extension.dart';
+import '../../../../core/theme/app_icons.dart';
 import 'device_media_scanner.dart';
 
 /// Bottom sheet dialog listing all device media albums for user selection.
@@ -73,24 +78,35 @@ class DeviceMediaAlbumSheet extends StatelessWidget {
                     final album = albums[index];
                     final isSelected = album.id == currentAlbum?.id;
                     return ListTile(
+                      leading: _AlbumThumbnail(
+                        pathEntity: album.pathEntity,
+                        colors: colors,
+                      ),
                       title: Text(
                         album.name,
                         style: TextStyle(
                           color: isSelected
-                              ? (colors?.accentPrimary ?? Colors.blue)
+                              ? (colors?.brandPrimary ?? AppColors.primary)
                               : (colors?.textPrimary ?? Colors.white),
                           fontWeight: isSelected
                               ? FontWeight.w700
                               : FontWeight.w500,
                         ),
                       ),
-                      trailing: Text(
-                        '${album.mediaCount}',
+                      subtitle: Text(
+                        '${album.mediaCount} items',
                         style: TextStyle(
                           color: colors?.textSecondary ?? Colors.white54,
-                          fontSize: 13,
+                          fontSize: 12,
                         ),
                       ),
+                      trailing: isSelected
+                          ? Icon(
+                              AppIcons.check,
+                              color: colors?.brandPrimary ?? AppColors.primary,
+                              size: 20,
+                            )
+                          : null,
                       onTap: () {
                         Navigator.pop(sheetContext);
                         onAlbumSelected(album);
@@ -109,5 +125,70 @@ class DeviceMediaAlbumSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const SizedBox.shrink();
+  }
+}
+
+class _AlbumThumbnail extends StatefulWidget {
+  final AssetPathEntity? pathEntity;
+  final AppColorsExtension? colors;
+
+  const _AlbumThumbnail({
+    required this.pathEntity,
+    required this.colors,
+  });
+
+  @override
+  State<_AlbumThumbnail> createState() => _AlbumThumbnailState();
+}
+
+class _AlbumThumbnailState extends State<_AlbumThumbnail> {
+  Uint8List? _bytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+  }
+
+  Future<void> _fetch() async {
+    if (widget.pathEntity == null) return;
+    try {
+      final assets =
+          await widget.pathEntity!.getAssetListRange(start: 0, end: 1);
+      if (assets.isNotEmpty && mounted) {
+        final data = await assets.first
+            .thumbnailDataWithSize(const ThumbnailSize.square(120));
+        if (mounted) {
+          setState(() {
+            _bytes = data;
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        width: 44,
+        height: 44,
+        color: widget.colors?.bgSurfaceInset ?? Colors.white10,
+        child: _bytes != null
+            ? Image.memory(
+                _bytes!,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+              )
+            : Center(
+                child: Icon(
+                  AppIcons.photoLibrary,
+                  size: 20,
+                  color: widget.colors?.textTertiary ?? Colors.white38,
+                ),
+              ),
+      ),
+    );
   }
 }

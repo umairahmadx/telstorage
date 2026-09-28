@@ -5,6 +5,7 @@
  */
 
 import 'package:flutter/material.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_colors_extension.dart';
 
 /// Reusable bottom action bar for file and media picker sheets.
@@ -98,7 +99,7 @@ class DevicePickerBottomBar extends StatelessWidget {
                     child: Text(
                       isAllSelected ? 'Deselect All' : 'Select All',
                       style: TextStyle(
-                        color: colors?.accentPrimary ?? Colors.blue,
+                        color: colors?.brandPrimary ?? AppColors.primary,
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
                       ),
@@ -112,9 +113,10 @@ class DevicePickerBottomBar extends StatelessWidget {
           FilledButton(
             onPressed: hasSelection ? onSubmit : null,
             style: FilledButton.styleFrom(
-              backgroundColor: colors?.accentPrimary,
-              foregroundColor: Colors.white,
+              backgroundColor: colors?.brandPrimary ?? AppColors.primary,
+              foregroundColor: AppColors.white,
               disabledBackgroundColor: colors?.bgSurfaceInset,
+              disabledForegroundColor: colors?.textTertiary,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),

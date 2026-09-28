@@ -5,6 +5,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_colors_extension.dart';
 
 /// Horizontal category filter tab bar for narrowing device files by extension family.
@@ -94,7 +95,7 @@ class DeviceFileFilterTabs extends StatelessWidget {
 
           return Material(
             color: isSelected
-                ? (colors?.accentPrimary ?? Colors.blue)
+                ? (colors?.brandPrimary ?? AppColors.primary)
                 : (colors?.bgSurfaceInset ?? Colors.white10),
             borderRadius: BorderRadius.circular(18),
             clipBehavior: Clip.antiAlias,
@@ -109,7 +110,7 @@ class DeviceFileFilterTabs extends StatelessWidget {
                     cat,
                     style: TextStyle(
                       color: isSelected
-                          ? Colors.white
+                          ? AppColors.white
                           : (colors?.textSecondary ?? Colors.white70),
                       fontSize: 12,
                       fontWeight:

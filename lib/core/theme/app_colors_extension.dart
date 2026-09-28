@@ -4,6 +4,7 @@
  */
 
 import 'package:flutter/material.dart';
+import 'app_colors.dart';
 
 /// ThemeExtension that supplies design tokens dynamically per theme mode.
 class AppColorsExtension extends ThemeExtension<AppColorsExtension> {
@@ -30,6 +31,9 @@ class AppColorsExtension extends ThemeExtension<AppColorsExtension> {
 
   /// Primary accent color.
   final Color accentPrimary;
+
+  /// Central interactive brand primary accent color.
+  final Color brandPrimary;
 
   /// PDF type indicator.
   final Color filePdf;
@@ -95,6 +99,7 @@ class AppColorsExtension extends ThemeExtension<AppColorsExtension> {
     required this.textSecondary,
     required this.textTertiary,
     required this.accentPrimary,
+    this.brandPrimary = AppColors.primary,
     required this.filePdf,
     required this.fileVideo,
     required this.fileZip,
@@ -125,6 +130,7 @@ class AppColorsExtension extends ThemeExtension<AppColorsExtension> {
     Color? textSecondary,
     Color? textTertiary,
     Color? accentPrimary,
+    Color? brandPrimary,
     Color? filePdf,
     Color? fileVideo,
     Color? fileZip,
@@ -153,6 +159,7 @@ class AppColorsExtension extends ThemeExtension<AppColorsExtension> {
       textSecondary: textSecondary ?? this.textSecondary,
       textTertiary: textTertiary ?? this.textTertiary,
       accentPrimary: accentPrimary ?? this.accentPrimary,
+      brandPrimary: brandPrimary ?? this.brandPrimary,
       filePdf: filePdf ?? this.filePdf,
       fileVideo: fileVideo ?? this.fileVideo,
       fileZip: fileZip ?? this.fileZip,
@@ -187,6 +194,7 @@ class AppColorsExtension extends ThemeExtension<AppColorsExtension> {
       textSecondary: Color.lerp(textSecondary, other.textSecondary, t)!,
       textTertiary: Color.lerp(textTertiary, other.textTertiary, t)!,
       accentPrimary: Color.lerp(accentPrimary, other.accentPrimary, t)!,
+      brandPrimary: Color.lerp(brandPrimary, other.brandPrimary, t)!,
       filePdf: Color.lerp(filePdf, other.filePdf, t)!,
       fileVideo: Color.lerp(fileVideo, other.fileVideo, t)!,
       fileZip: Color.lerp(fileZip, other.fileZip, t)!,

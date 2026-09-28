@@ -7,6 +7,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:photo_manager/photo_manager.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_colors_extension.dart';
 import '../../../../core/theme/app_icons.dart';
 import 'device_media_album_sheet.dart';
@@ -208,7 +209,7 @@ class _DeviceMediaPickerSheetState extends State<DeviceMediaPickerSheet> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(AppIcons.photoLibrary,
-                              color: colors?.accentPrimary, size: 18),
+                              color: colors?.brandPrimary, size: 18),
                           const SizedBox(width: 8),
                           Text(
                             _currentAlbum != null
@@ -262,7 +263,7 @@ class _DeviceMediaPickerSheetState extends State<DeviceMediaPickerSheet> {
   Widget _buildGridContent(AppColorsExtension? colors) {
     if (_isLoading) {
       return Center(
-        child: CircularProgressIndicator(color: colors?.accentPrimary),
+        child: CircularProgressIndicator(color: colors?.brandPrimary),
       );
     }
 
@@ -295,7 +296,7 @@ class _DeviceMediaPickerSheetState extends State<DeviceMediaPickerSheet> {
                 height: 20,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: colors?.accentPrimary,
+                  color: colors?.brandPrimary,
                 ),
               ),
             ),
@@ -411,12 +412,12 @@ class _MediaTile extends StatelessWidget {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: isSelected
-                      ? (colors?.accentPrimary ?? Colors.blue)
+                      ? (colors?.brandPrimary ?? AppColors.primary)
                       : Colors.black38,
                   border: Border.all(
                     color: isSelected
-                        ? Colors.white
-                        : Colors.white.withValues(alpha: 0.8),
+                        ? (colors?.brandPrimary ?? AppColors.primary)
+                        : AppColors.white.withValues(alpha: 0.8),
                     width: 1.5,
                   ),
                 ),
@@ -425,7 +426,7 @@ class _MediaTile extends StatelessWidget {
                       ? Text(
                           '$selectionNumber',
                           style: const TextStyle(
-                            color: Colors.white,
+                            color: AppColors.white,
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
                           ),

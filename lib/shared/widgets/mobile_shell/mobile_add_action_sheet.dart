@@ -7,6 +7,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_colors_extension.dart';
 import '../../../core/theme/app_icons.dart';
 
@@ -63,21 +64,21 @@ class MobileAddActionSheet extends StatelessWidget {
         icon: AppIcons.photoLibrary,
         title: 'Photos & Videos',
         subtitle: 'Select from gallery',
-        color: colors?.accentPrimary ?? Colors.blue,
+        color: colors?.brandPrimary ?? AppColors.primary,
         onTap: onMedia,
       ),
       _ActionTileData(
         icon: AppIcons.uploadFile,
         title: 'Upload Files',
         subtitle: 'Browse storage',
-        color: colors?.accentPrimary ?? Colors.blue,
+        color: colors?.brandPrimary ?? AppColors.primary,
         onTap: onFiles,
       ),
       _ActionTileData(
         icon: AppIcons.uploadFolder,
         title: 'Upload Folder',
         subtitle: 'Entire directory',
-        color: colors?.accentPrimary ?? Colors.blue,
+        color: colors?.brandPrimary ?? AppColors.primary,
         onTap: onFolder,
       ),
       if (onNewFolder != null)
@@ -138,7 +139,7 @@ class MobileAddActionSheet extends StatelessWidget {
               crossAxisCount: 2,
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
-              childAspectRatio: 1.7,
+              childAspectRatio: 1.35,
             ),
             itemCount: items.length,
             itemBuilder: (ctx, index) {
@@ -199,10 +200,11 @@ class _ActionCard extends StatelessWidget {
         borderRadius: borderRadius,
         onTap: onSelected,
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Container(
                 width: 36,
@@ -215,7 +217,7 @@ class _ActionCard extends StatelessWidget {
                   child: Icon(data.icon, color: data.color, size: 20),
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
               Text(
                 data.title,
                 style: TextStyle(

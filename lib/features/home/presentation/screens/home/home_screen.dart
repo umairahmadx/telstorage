@@ -15,7 +15,9 @@ import '../../../../../core/theme/app_theme.dart';
 import '../../../../../shared/widgets/dialogs/app_dialogs.dart';
 import '../../../../../shared/widgets/mobile_shell.dart';
 import '../../../../../shared/widgets/share_link_sheet.dart';
+import 'package:telstorage/core/services/document_viewer_cache_service.dart';
 import 'package:telstorage/features/viewer/presentation/screens/audio_player/audio_player_screen.dart';
+import 'package:telstorage/features/viewer/presentation/screens/document_viewer/document_viewer_screen.dart';
 import 'package:telstorage/features/viewer/presentation/screens/image_viewer/image_viewer_screen.dart';
 import 'package:telstorage/features/viewer/presentation/screens/video_player/video_player_screen.dart';
 import 'viewmodel/home_view_model.dart';
@@ -116,6 +118,8 @@ class _HomeScreenState extends State<HomeScreen> {
         initialIndex: initialIndex >= 0 ? initialIndex : 0,
         heroPrefix: 'recent',
       );
+    } else if (DocumentViewerCacheService.isDocumentRecord(file)) {
+      DocumentViewerScreen.open(context, file: file);
     } else {
       _showFileDetail(file);
     }

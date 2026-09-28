@@ -4,8 +4,10 @@
  */
 
 import 'package:flutter/material.dart';
+import 'package:telstorage/core/services/document_viewer_cache_service.dart';
 import 'package:telstorage/core/services/image_viewer_cache_service.dart';
 import 'package:telstorage/features/viewer/presentation/screens/audio_player/audio_player_screen.dart';
+import 'package:telstorage/features/viewer/presentation/screens/document_viewer/document_viewer_screen.dart';
 import 'package:telstorage/features/viewer/presentation/screens/image_viewer/image_viewer_screen.dart';
 import 'package:telstorage/features/viewer/presentation/screens/video_player/video_player_screen.dart';
 import 'package:telstorage/shared/widgets/tiles/app_file_grid_tile.dart';
@@ -164,6 +166,8 @@ class BrowserGridContent extends StatelessWidget {
                           initialIndex: initialIndex >= 0 ? initialIndex : 0,
                           heroPrefix: 'browser',
                         );
+                      } else if (DocumentViewerCacheService.isDocumentRecord(file)) {
+                        DocumentViewerScreen.open(context, file: file);
                       } else {
                         BrowserDialogs.showFileDetail(context, file);
                       }

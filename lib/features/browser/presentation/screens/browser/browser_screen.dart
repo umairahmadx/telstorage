@@ -7,10 +7,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:telstorage/core/constants/app_constants.dart';
+import 'package:telstorage/core/services/document_viewer_cache_service.dart';
 import 'package:telstorage/core/services/image_viewer_cache_service.dart';
 import 'package:telstorage/core/services/service_locator.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
 import 'package:telstorage/features/viewer/presentation/screens/audio_player/audio_player_screen.dart';
+import 'package:telstorage/features/viewer/presentation/screens/document_viewer/document_viewer_screen.dart';
 import 'package:telstorage/features/viewer/presentation/screens/image_viewer/image_viewer_screen.dart';
 import 'package:telstorage/features/viewer/presentation/screens/video_player/video_player_screen.dart';
 import 'package:telstorage/shared/widgets/app_search_field.dart';
@@ -421,6 +423,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
                     initialIndex: initialIndex >= 0 ? initialIndex : 0,
                     heroPrefix: 'browser',
                   );
+                } else if (DocumentViewerCacheService.isDocumentRecord(file)) {
+                  DocumentViewerScreen.open(context, file: file);
                 } else {
                   BrowserDialogs.showFileDetail(context, file);
                 }

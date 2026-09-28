@@ -157,4 +157,12 @@ abstract final class AppColors {
 
   /// Code text color for code preview cards.
   static const Color codeCanvasTextPrimary = Color(0xFFE8EAED);
+
+  // ── Document Viewer Reading Themes ────────────────────────────────────────
+
+  /// Sepia reading canvas background tone.
+  static const Color sepiaPaper = Color(0xFFF8F1E3);
+
+  /// Sepia reading text tone.
+  static const Color sepiaText = Color(0xFF4A3B2C);
 }

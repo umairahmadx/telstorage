@@ -25,6 +25,7 @@ import '../../features/upload/presentation/viewmodels/upload_view_model.dart';
 import 'app_drawer.dart';
 import 'mobile_shell/mobile_add_action_sheet.dart';
 import 'mobile_shell/mobile_bottom_nav.dart';
+import 'tab_visibility_scope.dart';
 
 /// Shell component providing unified navigation scaffold with drawer and bottom bar.
 class MobileShell extends StatefulWidget {
@@ -231,6 +232,20 @@ class MobileShellState extends State<MobileShell> {
     setState(() => _currentIndex = index);
   }
 
+  /// Maps an IndexedStack child index back to the shell body tab it reveals.
+  ShellTab _visibleTabFor(int activeIndex) {
+    switch (activeIndex) {
+      case 0:
+        return ShellTab.home;
+      case 1:
+        return ShellTab.files;
+      case 2:
+        return ShellTab.downloads;
+      default:
+        return ShellTab.settings;
+    }
+  }
+
   /// Getter for current tab index.
   int get currentIndex => _currentIndex;
 
@@ -351,14 +366,17 @@ class MobileShellState extends State<MobileShell> {
         currentIndex: _currentIndex,
         onTabSelected: switchTab,
       ),
-      body: IndexedStack(
-        index: activeIndex,
-        children: [
-          HeroMode(enabled: activeIndex == 0, child: const HomeScreen()),
-          HeroMode(enabled: activeIndex == 1, child: const BrowserScreen()),
-          HeroMode(enabled: activeIndex == 2, child: const DownloadsScreen()),
-          HeroMode(enabled: activeIndex == 3, child: const SettingsScreen()),
-        ],
+      body: TabVisibilityScope(
+        visibleTab: _visibleTabFor(activeIndex),
+        child: IndexedStack(
+          index: activeIndex,
+          children: [
+            HeroMode(enabled: activeIndex == 0, child: const HomeScreen()),
+            HeroMode(enabled: activeIndex == 1, child: const BrowserScreen()),
+            HeroMode(enabled: activeIndex == 2, child: const DownloadsScreen()),
+            HeroMode(enabled: activeIndex == 3, child: const SettingsScreen()),
+          ],
+        ),
       ),
       bottomNavigationBar: MobileNavBar(
         currentIndex: _currentIndex,

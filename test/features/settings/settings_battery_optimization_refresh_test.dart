@@ -1,93 +1,131 @@
 /*
  * File: settings_battery_optimization_refresh_test.dart
- * Description: Widget tests validating that the Settings screen re-checks battery
- *   optimization status when it becomes the visible bottom-tab again (regression
- *   test for the stale "not allowed" state that persisted after an upload
- *   request prompt was allowed from the upload flow).
+ * Description: Widget tests validating that the Settings battery tile re-checks
+ *   the optimization status when the Settings tab becomes the visible tab again
+ *   (regression test for the stale "Restricted" state that persisted after the
+ *   exemption was granted from the upload prompt).
  */
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
-import 'package:telstorage/features/settings/presentation/screens/settings/settings_screen.dart';
-import 'package:telstorage/shared/widgets/mobile_shell.dart';
+import 'package:telstorage/core/utils/battery_optimization_helper.dart';
+import 'package:telstorage/features/settings/presentation/screens/settings/widgets/settings_tools_card.dart';
+import 'package:telstorage/shared/widgets/tab_visibility_scope.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  // Simulates the Android battery-optimization permission state. When false the
-  // user has NOT granted "ignore battery optimizations"; when true they have.
-  // NOTE: On non-Android test hosts (e.g. Windows dev machines) the real
-  // permission_handler plugin ignores this state and always reports granted.
-  // The widget assertions below therefore remain meaningful because they are
-  // driven by the permission status the platform reports.
-  bool batteryPermissionGranted = false;
-  bool batteryStatusQueriedOnFirstTabVisit = false;
-  bool batteryStatusQueriedOnSecondTabVisit = false;
-  int batteryStatusQueryCount = 0;
+  const batteryTileTitle = 'Background Upload & Battery';
+  const unrestrictedSubtitle = 'Unrestricted (optimized for background)';
+  const restrictedSubtitle = 'Restricted — tap to enable for large transfers';
 
-  Widget createTestShell() {
+  // How many status checks the card asked the helper to perform. Counted by the
+  // injected check below, so the tests observe refreshes without depending on a
+  // real permission_handler platform channel.
+  late int statusCheckCount;
+
+  // State reported by the injected check. False means battery optimization is
+  // still active, i.e. the exemption has not been granted yet.
+  late bool isExempt;
+
+  setUp(() {
+    statusCheckCount = 0;
+    isExempt = false;
+    BatteryOptimizationHelper.statusCheckOverride = () async {
+      statusCheckCount++;
+      return isExempt;
+    };
+  });
+
+  tearDown(() {
+    BatteryOptimizationHelper.statusCheckOverride = null;
+  });
+
+  /// Mirrors how MobileShell hosts tabs: the card stays mounted inside an
+  /// IndexedStack while the scope reports which tab is presented, so switching
+  /// tabs never recreates the card state.
+  Widget createTestHost({required bool settingsTabVisible}) {
     return MaterialApp(
       theme: AppTheme.dark(),
-      home: const MobileShell(initialIndex: 0),
+      home: TabVisibilityScope(
+        visibleTab: settingsTabVisible ? ShellTab.settings : ShellTab.home,
+        child: Scaffold(
+          body: IndexedStack(
+            index: settingsTabVisible ? 1 : 0,
+            children: const [
+              SizedBox.shrink(), // Stands in for another tab, e.g. Home.
+              SettingsToolsCard(),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
-  /// Taps the Settings tab in the bottom navigation bar.
-  Future<void> tapSettingsTab(WidgetTester tester, int iteration) async {
-    final tapTarget = find.text('Settings');
-    await tester.tap(tapTarget, warnIfMissed: false);
-    // Let all pending async permission checks finish.
-    await tester.pumpAndSettle();
-  }
-
-  group('SettingsScreen battery-optimization refresh', () {
-    testWidgets(
-        're-queries battery status when the Settings tab is re-shown '
-        'after the user has granted the permission from an upload prompt',
+  group('SettingsToolsCard battery optimization status', () {
+    testWidgets('reports the restricted state while the exemption is missing',
         (tester) async {
-      await tester.pumpWidget(createTestShell());
+      await tester.pumpWidget(createTestHost(settingsTabVisible: true));
+      await tester.pumpAndSettle();
 
-      // Visit Settings for the first time (from Home).
-      await tapSettingsTab(tester, 1);
-      batteryStatusQueriedOnFirstTabVisit = batteryStatusQueryCount >= 1;
-
-      // User leaves Settings and an upload prompt is shown (simulated here by
-      // just toggling the permission state; the real dialog flow is exercised
-      // in the upload flow tests).
-      batteryPermissionGranted = true;
-
-      // Come back to Settings. The card MUST have re-checked the real
-      // permission status, so it now reflects "allowed".
-      await tapSettingsTab(tester, 2);
-      batteryStatusQueriedOnSecondTabVisit = batteryStatusQueryCount >= 2;
-
-      // The second visit must have triggered a fresh status query. If the
-      // widget only checks in initState (which persists in an IndexedStack),
-      // this assertion fails — proving the stale-state bug is fixed by a
-      // visibility-driven refresh.
-      expect(
-        batteryStatusQueriedOnSecondTabVisit,
-        isTrue,
-        reason: 'Settings card must re-check battery status on tab re-entry',
-      );
+      expect(find.text(batteryTileTitle), findsOneWidget);
+      expect(find.text(restrictedSubtitle), findsOneWidget);
+      expect(statusCheckCount, 1);
     });
 
-    testWidgets(
-        'battery tile reflects current permission state on initial render',
+    testWidgets('re-checks and clears the stale state on tab re-entry',
         (tester) async {
-      batteryPermissionGranted = true;
-      await tester.pumpWidget(createTestShell());
+      // The Settings tab is built but hidden, as on app start with Home shown.
+      await tester.pumpWidget(createTestHost(settingsTabVisible: false));
+      await tester.pumpAndSettle();
 
-      await tapSettingsTab(tester, 1);
+      expect(statusCheckCount, 1,
+          reason: 'The card checks the status once when first built');
 
-      // On Android the tile subtitle should now read as unrestricted; on
-      // non-Android test hosts the helper short-circuits to "exempt" anyway,
-      // so we assert on a state that is true on both.
-      final hasBatteryTile =
-          find.text('Background Upload & Battery').evaluate().isNotEmpty;
-      expect(hasBatteryTile, isTrue,
-          reason: 'Battery tile must be present on the settings screen');
+      // The user grants the exemption elsewhere, e.g. from the upload prompt.
+      isExempt = true;
+
+      // Returning to Settings must re-read the status the platform reports.
+      await tester.pumpWidget(createTestHost(settingsTabVisible: true));
+      await tester.pumpAndSettle();
+
+      expect(statusCheckCount, 2,
+          reason: 'Re-showing the Settings tab must trigger a fresh check');
+      expect(find.text(unrestrictedSubtitle), findsOneWidget,
+          reason: 'Stale restricted state must not survive tab re-entry');
+      expect(find.text(restrictedSubtitle), findsNothing);
+    });
+
+    testWidgets('does not re-check while the Settings tab stays hidden',
+        (tester) async {
+      await tester.pumpWidget(createTestHost(settingsTabVisible: false));
+      await tester.pumpAndSettle();
+      expect(statusCheckCount, 1);
+
+      isExempt = true;
+
+      // The visible tab is still not Settings, so nothing has to refresh yet.
+      await tester.pumpWidget(createTestHost(settingsTabVisible: false));
+      await tester.pumpAndSettle();
+
+      expect(statusCheckCount, 1,
+          reason: 'No fresh check while the tab is not presented');
+    });
+
+    testWidgets('checks once when hosted outside the shell', (tester) async {
+      // Screens pushed on their own have no TabVisibilityScope, and the card
+      // must still render and query the status exactly once.
+      await tester.pumpWidget(MaterialApp(
+        theme: AppTheme.dark(),
+        home: const Scaffold(
+          body: SingleChildScrollView(child: SettingsToolsCard()),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(statusCheckCount, 1);
+      expect(find.text(restrictedSubtitle), findsOneWidget);
     });
   });
 }

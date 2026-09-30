@@ -13,8 +13,20 @@ import 'app_logger.dart';
 class BatteryOptimizationHelper {
   BatteryOptimizationHelper._();
 
+  /// Optional replacement for the raw platform status check.
+  ///
+  /// Widget tests on non-Android hosts need to drive this state because
+  /// [isOptimizationDisabled] short-circuits to exempt there; production code
+  /// leaves this null.
+  @visibleForTesting
+  static Future<bool> Function()? statusCheckOverride;
+
   /// Checks if battery optimization is already disabled for the app.
   static Future<bool> isOptimizationDisabled() async {
+    final overrideCheck = statusCheckOverride;
+    if (overrideCheck != null) {
+      return overrideCheck();
+    }
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       return true;
     }

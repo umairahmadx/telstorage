@@ -12,6 +12,7 @@ import 'package:telstorage/features/settings/presentation/screens/error_logs/err
 import 'package:telstorage/features/sync/presentation/screens/sync/sync_screen.dart';
 import 'package:telstorage/shared/widgets/app_surface_card.dart';
 import 'package:telstorage/shared/widgets/mobile_shell.dart';
+import 'package:telstorage/shared/widgets/tab_visibility_scope.dart';
 
 /// Card component presenting operational tools, diagnostics, and battery management.
 class SettingsToolsCard extends StatefulWidget {
@@ -25,10 +26,27 @@ class SettingsToolsCard extends StatefulWidget {
 class _SettingsToolsCardState extends State<SettingsToolsCard> {
   bool _isBatteryExempt = true;
 
+  /// Whether the settings tab was visible at the last dependency resolution.
+  /// Stays null until the first build so the initState check is not repeated.
+  bool? _wasTabVisible;
+
   @override
   void initState() {
     super.initState();
     _checkBatteryStatus();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final isVisible = TabVisibilityScope.isVisible(context, ShellTab.settings);
+    // The tab has just been re-shown. Re-read the permission so the tile cannot
+    // keep advertising a stale "Restricted" state after the user granted the
+    // exemption somewhere else, such as the upload prompt.
+    if (_wasTabVisible == false && isVisible) {
+      _checkBatteryStatus();
+    }
+    _wasTabVisible = isVisible;
   }
 
   Future<void> _checkBatteryStatus() async {

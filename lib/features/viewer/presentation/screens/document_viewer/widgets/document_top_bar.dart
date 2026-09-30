@@ -24,6 +24,9 @@ class DocumentTopBar extends StatelessWidget implements PreferredSizeWidget {
   /// Callback when user opens theme picker sheet.
   final VoidCallback? onOpenThemeSheet;
 
+  /// Callback when user opens the outline/table-of-contents sheet.
+  final VoidCallback? onOpenOutline;
+
   /// Constructs DocumentTopBar.
   const DocumentTopBar({
     super.key,
@@ -31,6 +34,7 @@ class DocumentTopBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onBack,
     required this.onToggleSearch,
     this.onOpenThemeSheet,
+    this.onOpenOutline,
   });
 
   @override
@@ -110,6 +114,13 @@ class DocumentTopBar extends StatelessWidget implements PreferredSizeWidget {
                 tooltip: 'Search',
                 onPressed: onToggleSearch,
               ),
+              if (isPdf && onOpenOutline != null)
+                IconButton(
+                  icon: const Icon(Icons.list_alt),
+                  color: colors?.textPrimary ?? AppColors.white,
+                  tooltip: 'Contents',
+                  onPressed: onOpenOutline,
+                ),
               if (isPdf && onOpenThemeSheet != null)
                 IconButton(
                   icon: const Icon(Icons.palette_outlined),

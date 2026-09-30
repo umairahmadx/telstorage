@@ -1,6 +1,17 @@
 # TelStorage Agent & Engineering Rules Index
 
-Welcome to the TelStorage project rules repository. These rules govern code architecture, quality, theming, documentation, and resilience across the codebase.
+Welcome to the TelStorage project rules repository. These rules govern engineering workflow, code architecture, quality, theming, documentation, and resilience across the codebase.
+
+---
+
+## ⚙️ Master Workflow Gate (Read First)
+
+**Every task in this repository is gated by the [Global Two-Step Proposal & Approval Workflow Rule](file:///c:/Users/umair-dell/StudioProjects/telstorage/.agents/rules/global_proposal_approval_workflow_rules.md).**
+
+1. **Phase 1 - Propose**: deliver a comprehensive solution built on mechanism-level root-cause analysis, plus a step-by-step implementation plan with per-step verification. Then **stop**. Read-only inspection only; no file may be created, edited, or deleted.
+2. **Phase 2 - Implement**: only after **explicit user authorization** to that proposal, execute the approved plan exactly, verify it, and report evidence.
+
+Enterprise-grade quality and long-term stability always outrank fast completion, and every proposal must include the regression prevention and prevention-of-recurrence plan, not just the immediate fix. No other rule module authorizes skipping this gate.
 
 ---
 
@@ -56,3 +67,13 @@ Welcome to the TelStorage project rules repository. These rules govern code arch
     - Mandatory automated reproduction test (RED) before touching production code.
     - Raw terminal failure output shown before applying the fix.
     - Verified passing output (GREEN) after fix, followed by full regression test run.
+
+11. [**Global Two-Step Proposal & Approval Workflow Rule (Master Rule)**](file:///c:/Users/umair-dell/StudioProjects/telstorage/.agents/rules/global_proposal_approval_workflow_rules.md)
+    - Two-phase gate: propose a comprehensive, root-cause-driven solution first, then implement only after explicit user authorization.
+    - Definition of what counts (and does not count) as explicit approval, including approval expiry when the approved design changes.
+    - Enterprise-grade quality and long-term stability always take precedence over fast completion.
+    - Mechanism-level root-cause analysis bar: symptoms are never accepted as the problem, plus why it survived and how recurrence is blocked.
+    - Mandatory proposal sections A-I and a numbered, dependency-aware implementation plan with per-step verification.
+    - Canonical proposal template, forbidden workflow anti-patterns, precedence over all other rule modules, and a pre-response self-check.
+    - Guarded by `test/architecture/global_workflow_rules_test.dart`.
+

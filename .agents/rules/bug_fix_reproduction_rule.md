@@ -22,7 +22,9 @@ Whenever a bug, defect, or unexpected behavior is reported or given to solve, yo
 
 ## 3. Step 2: Show Solution Before Execution
 
-- As per user global rules, explain the root cause and show the proposed production code changes to the user before executing the fix.
+- The [Global Two-Step Proposal & Approval Workflow Rule](global_proposal_approval_workflow_rules.md) is the canonical definition of this gate: **Phase 1** delivers a root-cause-driven proposal plus a step-by-step implementation plan and stops; **Phase 2** begins only after explicit user authorization.
+- The reproduction test from Step 1 is **step 1 of the approved plan** (it is an implementation act, not a Phase 1 act). Production edits follow once approval is granted.
+- Root cause must be named at mechanism level - not the symptom - and the proposal must state how the fix prevents the same defect class from recurring.
 
 ---
 

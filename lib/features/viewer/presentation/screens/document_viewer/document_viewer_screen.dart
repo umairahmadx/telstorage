@@ -57,6 +57,8 @@ class DocumentViewerScreen extends StatefulWidget {
 class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
   late final DocumentViewerViewModel _viewModel;
   bool _isSearchOpen = false;
+  final GlobalKey<PdfViewerAdapterState> _pdfViewerKey =
+      GlobalKey<PdfViewerAdapterState>();
 
   @override
   void initState() {
@@ -321,6 +323,7 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
 
     if (DocumentViewerCacheService.isPdfRecord(_viewModel.currentFile)) {
       return PdfViewerAdapter(
+        key: _pdfViewerKey,
         viewModel: _viewModel,
         file: _viewModel.localFile!,
         isSearchOpen: _isSearchOpen,
@@ -353,40 +356,33 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
       },
       child: Scaffold(
         backgroundColor: colors?.bgPrimary ?? AppColors.black,
-        body: Stack(
+        body: Column(
           children: [
-            Positioned.fill(child: _buildContent()),
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: IgnorePointer(
-                ignoring: !_viewModel.isChromeVisible,
-                child: AnimatedSlide(
-                  offset: _viewModel.isChromeVisible
-                      ? Offset.zero
-                      : const Offset(0, -1),
-                  duration: const Duration(milliseconds: 240),
-                  curve: Curves.easeOutCubic,
-                  child: AnimatedOpacity(
-                    opacity: _viewModel.isChromeVisible ? 1 : 0,
-                    duration: const Duration(milliseconds: 180),
-                    curve: Curves.easeOut,
-                    child: DocumentTopBar(
-                      viewModel: _viewModel,
-                      onBack: () async {
-                        if (await _handleWillPop() && context.mounted) {
-                          Navigator.of(context).pop();
-                        }
-                      },
-                      onToggleSearch: () =>
-                          setState(() => _isSearchOpen = !_isSearchOpen),
-                      onOpenThemeSheet: _showReadingThemeSheet,
-                    ),
-                  ),
+            // Auto-hiding top bar: it occupies real layout space and collapses
+            // to zero height when chrome is hidden, so the document slides up to
+            // the screen edge instead of being overlaid by a floating bar.
+            ClipRect(
+              child: AnimatedAlign(
+                alignment: Alignment.topCenter,
+                heightFactor: _viewModel.isChromeVisible ? 1 : 0,
+                duration: const Duration(milliseconds: 240),
+                curve: Curves.easeOutCubic,
+                child: DocumentTopBar(
+                  viewModel: _viewModel,
+                  onBack: () async {
+                    if (await _handleWillPop() && context.mounted) {
+                      Navigator.of(context).pop();
+                    }
+                  },
+                  onToggleSearch: () =>
+                      setState(() => _isSearchOpen = !_isSearchOpen),
+                  onOpenThemeSheet: _showReadingThemeSheet,
+                  onOpenOutline: () =>
+                      _pdfViewerKey.currentState?.showOutline(),
                 ),
               ),
             ),
+            Expanded(child: _buildContent()),
           ],
         ),
       ),

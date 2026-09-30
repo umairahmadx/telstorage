@@ -75,6 +75,18 @@ class _TextEditorAdapterState extends State<TextEditorAdapter> {
     return map[ext] ?? 'plaintext';
   }
 
+  void _handleScrollNotification(ScrollNotification notification) {
+    // Hide chrome when scrolling down, reveal it when scrolling up — mirrors
+    // the PDF viewer's hide-on-interaction behavior for the text editor.
+    if (notification is! ScrollUpdateNotification) return;
+    final delta = notification.scrollDelta ?? 0;
+    if (delta > 1) {
+      widget.viewModel.setChromeVisible(false);
+    } else if (delta < -1) {
+      widget.viewModel.setChromeVisible(true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -84,31 +96,37 @@ class _TextEditorAdapterState extends State<TextEditorAdapter> {
 
     return Container(
       color: colors?.bgPrimary ?? AppColors.grey900,
-      child: CodeEditor(
-        controller: _controller,
-        focusNode: _focusNode,
-        readOnly: !widget.viewModel.isEditMode,
-        showCursorWhenReadOnly: false,
-        wordWrap: true,
-        style: CodeEditorStyle(
-          fontSize: 13,
-          fontFamily: GoogleFonts.jetBrainsMono().fontFamily,
-          codeTheme: CodeHighlightTheme(
-            languages: {lang: CodeHighlightThemeMode(mode: mode)},
-            theme: isDark ? atomOneDarkTheme : atomOneLightTheme,
-          ),
-        ),
-        indicatorBuilder: (context, editingCtrl, chunkCtrl, notifier) {
-          return Row(
-            children: [
-              DefaultCodeLineNumber(
-                controller: editingCtrl,
-                notifier: notifier,
-              ),
-              const SizedBox(width: 8),
-            ],
-          );
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (notification) {
+          _handleScrollNotification(notification);
+          return false;
         },
+        child: CodeEditor(
+          controller: _controller,
+          focusNode: _focusNode,
+          readOnly: !widget.viewModel.isEditMode,
+          showCursorWhenReadOnly: false,
+          wordWrap: true,
+          style: CodeEditorStyle(
+            fontSize: 13,
+            fontFamily: GoogleFonts.jetBrainsMono().fontFamily,
+            codeTheme: CodeHighlightTheme(
+              languages: {lang: CodeHighlightThemeMode(mode: mode)},
+              theme: isDark ? atomOneDarkTheme : atomOneLightTheme,
+            ),
+          ),
+          indicatorBuilder: (context, editingCtrl, chunkCtrl, notifier) {
+            return Row(
+              children: [
+                DefaultCodeLineNumber(
+                  controller: editingCtrl,
+                  notifier: notifier,
+                ),
+                const SizedBox(width: 8),
+              ],
+            );
+          },
+        ),
       ),
     );
   }

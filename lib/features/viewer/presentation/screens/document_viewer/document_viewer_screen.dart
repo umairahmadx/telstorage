@@ -14,7 +14,6 @@ import 'viewmodel/document_viewer_viewmodel.dart';
 import 'widgets/document_top_bar.dart';
 import 'widgets/office_fallback_card.dart';
 import 'widgets/pdf_viewer_adapter.dart';
-import 'widgets/reading_theme_sheet.dart';
 import 'widgets/text_editor_adapter.dart';
 
 /// Fullscreen document viewing and editing screen.
@@ -57,6 +56,7 @@ class DocumentViewerScreen extends StatefulWidget {
 class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
   late final DocumentViewerViewModel _viewModel;
   bool _isSearchOpen = false;
+  String? _lastShownError;
   final GlobalKey<PdfViewerAdapterState> _pdfViewerKey =
       GlobalKey<PdfViewerAdapterState>();
 
@@ -72,7 +72,29 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
   }
 
   void _onStateChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+    _showSaveErrorIfNeeded();
+  }
+
+  /// Surfaces save failures (which keep the document on screen) as a SnackBar.
+  /// Initial load errors still use the inline full-screen error state.
+  void _showSaveErrorIfNeeded() {
+    final error = _viewModel.errorMessage;
+    if (error == null) {
+      _lastShownError = null;
+      return;
+    }
+    if (_viewModel.localFile == null || error == _lastShownError) return;
+    _lastShownError = error;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(error),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
   }
 
   @override
@@ -86,6 +108,8 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
   }
 
   Future<bool> _handleWillPop() async {
+    // Never allow the screen to close while a save is committing.
+    if (_viewModel.isSaving) return false;
     if (_viewModel.isDirty) {
       final shouldDiscard = await showDialog<bool>(
         context: context,
@@ -109,16 +133,6 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
       return shouldDiscard ?? false;
     }
     return true;
-  }
-
-  void _showReadingThemeSheet() {
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => ReadingThemeSheet(
-        currentTheme: _viewModel.readingTheme,
-        onThemeChanged: (theme) => _viewModel.setReadingTheme(theme),
-      ),
-    );
   }
 
   Widget _buildLoadingState(AppColorsExtension? colors) {
@@ -341,12 +355,67 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
     );
   }
 
+  Widget _buildSavingOverlay(AppColorsExtension? colors) {
+    final progress = _viewModel.progress;
+    final hasProgress = progress > 0;
+    final percent = (progress * 100).clamp(0, 100).toInt();
+
+    return Positioned.fill(
+      child: AbsorbPointer(
+        child: ColoredBox(
+          color: AppColors.black.withValues(alpha: 0.55),
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: colors?.bgSurface ?? AppColors.grey900,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 36,
+                    height: 36,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 3,
+                      value: hasProgress ? progress : null,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    _viewModel.statusMessage,
+                    style: TextStyle(
+                      color: colors?.textPrimary ?? AppColors.white,
+                      fontSize: 13,
+                    ),
+                  ),
+                  if (hasProgress) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      '$percent%',
+                      style: TextStyle(
+                        color: colors?.textSecondary ?? AppColors.grey600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColorsExtension>();
 
     return PopScope(
-      canPop: !_viewModel.isDirty,
+      canPop: !_viewModel.isDirty && !_viewModel.isSaving,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
         final shouldPop = await _handleWillPop();
@@ -356,33 +425,37 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
       },
       child: Scaffold(
         backgroundColor: colors?.bgPrimary ?? AppColors.black,
-        body: Column(
+        body: Stack(
           children: [
-            // Auto-hiding top bar: it occupies real layout space and collapses
-            // to zero height when chrome is hidden, so the document slides up to
-            // the screen edge instead of being overlaid by a floating bar.
-            ClipRect(
-              child: AnimatedAlign(
-                alignment: Alignment.topCenter,
-                heightFactor: _viewModel.isChromeVisible ? 1 : 0,
-                duration: const Duration(milliseconds: 240),
-                curve: Curves.easeOutCubic,
-                child: DocumentTopBar(
-                  viewModel: _viewModel,
-                  onBack: () async {
-                    if (await _handleWillPop() && context.mounted) {
-                      Navigator.of(context).pop();
-                    }
-                  },
-                  onToggleSearch: () =>
-                      setState(() => _isSearchOpen = !_isSearchOpen),
-                  onOpenThemeSheet: _showReadingThemeSheet,
-                  onOpenOutline: () =>
-                      _pdfViewerKey.currentState?.showOutline(),
+            Column(
+              children: [
+                // Auto-hiding top bar: it occupies real layout space and collapses
+                // to zero height when chrome is hidden, so the document slides up to
+                // the screen edge instead of being overlaid by a floating bar.
+                ClipRect(
+                  child: AnimatedAlign(
+                    alignment: Alignment.topCenter,
+                    heightFactor: _viewModel.isChromeVisible ? 1 : 0,
+                    duration: const Duration(milliseconds: 240),
+                    curve: Curves.easeOutCubic,
+                    child: DocumentTopBar(
+                      viewModel: _viewModel,
+                      onBack: () async {
+                        if (await _handleWillPop() && context.mounted) {
+                          Navigator.of(context).pop();
+                        }
+                      },
+                      onToggleSearch: () =>
+                          setState(() => _isSearchOpen = !_isSearchOpen),
+                      onOpenOutline: () =>
+                          _pdfViewerKey.currentState?.showOutline(),
+                    ),
+                  ),
                 ),
-              ),
+                Expanded(child: _buildContent()),
+              ],
             ),
-            Expanded(child: _buildContent()),
+            if (_viewModel.isSaving) _buildSavingOverlay(colors),
           ],
         ),
       ),

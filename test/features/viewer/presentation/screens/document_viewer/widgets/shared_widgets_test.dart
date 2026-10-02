@@ -1,6 +1,6 @@
 /*
  * File: shared_widgets_test.dart
- * Description: Widget tests for DocumentTopBar, DocumentPageScrubber, and ReadingThemeSheet.
+ * Description: Widget tests for DocumentTopBar and DocumentPageScrubber.
  */
 
 import 'package:flutter/material.dart';
@@ -38,7 +38,6 @@ void main() {
             viewModel: viewModel,
             onBack: () {},
             onToggleSearch: () {},
-            onOpenThemeSheet: () {},
           ),
         ),
       ),

@@ -183,7 +183,11 @@ class DocumentViewerCacheService {
     }
   }
 
-  /// Saves edited text content back to Telegram by re-uploading and removing old record.
+  /// Saves edited text content back to Telegram by re-uploading and removing the old record.
+  ///
+  /// Ordering is safety-critical: the new file is uploaded and **verified to
+  /// exist in Hive** before the old record is deleted, so a failed save can
+  /// never leave the user with neither a new nor a previous copy.
   Future<Result<FileRecord>> saveEditedFile(
     FileRecord oldRecord,
     String newContent, {
@@ -206,7 +210,24 @@ class DocumentViewerCacheService {
       final newFileId = data['file_id'] as String? ?? '';
       final newRecord = ServiceLocator.instance.hive.getFile(newFileId);
 
-      // Clean up previous remote and local file entry
+      // The new upload must be durably indexed before the previous copy is
+      // removed. If it is missing, abort and keep the old record intact.
+      if (newRecord == null) {
+        AppLogger.w(
+            'Edited upload $newFileId was not indexed in Hive; keeping ${oldRecord.fileId}',
+            tag: 'DocumentViewerCacheService');
+        return const Failure<FileRecord>(
+            UnknownFailure('Uploaded file could not be indexed.'));
+      }
+
+      // 1. Write the edited bytes under the new file id.
+      final newCacheFile = await getCacheTargetFile(newRecord);
+      await newCacheFile.writeAsBytes(encodedBytes, flush: true);
+
+      // 2. Drop the stale cache entry belonging to the superseded record.
+      await _deleteStaleCacheFile(oldRecord, newFileId);
+
+      // 3. Only now is it safe to remove the superseded file (remote + local).
       try {
         await ServiceLocator.instance.fileManager.deleteFile(oldRecord.fileId);
       } catch (e) {
@@ -214,20 +235,29 @@ class DocumentViewerCacheService {
             tag: 'DocumentViewerCacheService');
       }
 
-      // Update local cache target
-      if (newRecord != null) {
-        final newCacheFile = await getCacheTargetFile(newRecord);
-        await newCacheFile.writeAsBytes(encodedBytes, flush: true);
-        await AppCacheManager.instance.enforceCacheLimit();
-        AppCacheManager.instance.notifyCacheChanged();
-        return Success(newRecord);
-      }
-
-      return Success(oldRecord);
+      await AppCacheManager.instance.enforceCacheLimit();
+      AppCacheManager.instance.notifyCacheChanged();
+      return Success(newRecord);
     } catch (e) {
       AppLogger.e('Save edited file failed: $e',
           tag: 'DocumentViewerCacheService');
       return Failure(UnknownFailure(e.toString()));
+    }
+  }
+
+  /// Deletes the cached copy of a superseded document, unless the new record
+  /// reuses the exact same cache path.
+  Future<void> _deleteStaleCacheFile(
+    FileRecord oldRecord,
+    String newFileId,
+  ) async {
+    if (kIsWeb || oldRecord.fileId == newFileId) return;
+    try {
+      final staleFile = await getCacheTargetFile(oldRecord);
+      if (staleFile.existsSync()) await staleFile.delete();
+    } catch (e) {
+      AppLogger.w('Could not delete stale document cache: $e',
+          tag: 'DocumentViewerCacheService');
     }
   }
 }

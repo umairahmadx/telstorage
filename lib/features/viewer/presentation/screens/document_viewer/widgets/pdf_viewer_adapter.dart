@@ -1,6 +1,6 @@
 /*
  * File: pdf_viewer_adapter.dart
- * Description: PDF rendering adapter using pdfrx with text search, reading themes, pinch-zoom, and floating page thumb.
+ * Description: PDF rendering adapter using pdfrx with text search, pinch-zoom, and floating page thumb.
  */
 
 import 'dart:async';

@@ -273,8 +273,10 @@ class ThumbnailRepository {
         reqPriority,
       );
 
-      if (request.isCancelled) return;
-
+      // Persist the bytes even if the request was cancelled while downloading
+      // (e.g. the tile scrolled off-screen or the screen was popped mid-fetch).
+      // The network round-trip is already paid for, so caching it here makes
+      // the next render an instant cache hit instead of a repeated download.
       addToMemoryCache(file.fileId, bytes);
 
       if (!kIsWeb) {

@@ -11,6 +11,7 @@ import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/services/telegram_rate_limiter.dart';
 import 'package:telstorage/core/services/telegram_service.dart';
 import 'package:telstorage/core/services/thumbnail_repository.dart';
+import 'package:telstorage/core/utils/thumbnail_helper_native.dart';
 
 class _MockTelegramService extends TelegramService {
   final List<String> downloadedFileIds = [];
@@ -163,6 +164,51 @@ void main() {
 
       expect(mockTelegram.downloadedFileIds.contains('thumb_file_pause_1'), isTrue,
           reason: 'Resumed queue must process pending requests');
+    });
+
+    test('TC-THUMB-04: Thumbnail fetched while cancelled is still cached and never re-downloaded',
+        () async {
+      mockTelegram.autoResolve = false;
+
+      final file = makeRecord('file_cache_cancel');
+      final req = repository.getThumbnailData(file);
+
+      // Widget scrolls off-screen / screen pops while the network fetch is
+      // still in flight.
+      await mockTelegram.waitForDownload('thumb_file_cache_cancel');
+      repository.cancelThumbnailRequest('file_cache_cancel');
+
+      // The bytes the network already returned arrive after cancellation.
+      final bytes = Uint8List.fromList([9, 8, 7, 6]);
+      mockTelegram.inFlightCompleters['thumb_file_cache_cancel']?.complete(bytes);
+      await req;
+
+      // Wait for the in-flight worker to persist the paid-for bytes to both the
+      // memory and the disk caches before the test (and its temp dir) tears down.
+      final start = DateTime.now();
+      while (repository.getMemoryCachedBytes('file_cache_cancel') == null ||
+          await ThumbnailHelper.cachedThumbnailPath('file_cache_cancel') ==
+              null) {
+        if (DateTime.now().difference(start).inMilliseconds > 2000) break;
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+
+      expect(
+        repository.getMemoryCachedBytes('file_cache_cancel'),
+        equals(bytes),
+        reason: 'Bytes already downloaded must survive cancellation in the cache',
+      );
+
+      // Navigating away and back must be served from cache, not re-downloaded.
+      final second = await repository.getThumbnailData(file);
+      expect(second, equals(bytes));
+      expect(
+        mockTelegram.downloadedFileIds
+            .where((id) => id == 'thumb_file_cache_cancel')
+            .length,
+        1,
+        reason: 'A cached thumbnail must not be re-downloaded on re-navigation',
+      );
     });
   });
 }

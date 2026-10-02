@@ -1,6 +1,6 @@
 /*
  * File: document_top_bar.dart
- * Description: Top navigation bar for the document viewer displaying file title, size, search, theme, edit toggle, and overflow actions.
+ * Description: Top navigation bar for the document viewer displaying file title, size, search, edit toggle, and overflow actions.
  */
 
 import 'package:flutter/material.dart';
@@ -21,9 +21,6 @@ class DocumentTopBar extends StatelessWidget implements PreferredSizeWidget {
   /// Callback when user taps search button.
   final VoidCallback onToggleSearch;
 
-  /// Callback when user opens theme picker sheet.
-  final VoidCallback? onOpenThemeSheet;
-
   /// Callback when user opens the outline/table-of-contents sheet.
   final VoidCallback? onOpenOutline;
 
@@ -33,7 +30,6 @@ class DocumentTopBar extends StatelessWidget implements PreferredSizeWidget {
     required this.viewModel,
     required this.onBack,
     required this.onToggleSearch,
-    this.onOpenThemeSheet,
     this.onOpenOutline,
   });
 
@@ -121,30 +117,36 @@ class DocumentTopBar extends StatelessWidget implements PreferredSizeWidget {
                   tooltip: 'Contents',
                   onPressed: onOpenOutline,
                 ),
-              if (isPdf && onOpenThemeSheet != null)
-                IconButton(
-                  icon: const Icon(Icons.palette_outlined),
-                  color: colors?.textPrimary ?? AppColors.white,
-                  tooltip: 'Reading theme',
-                  onPressed: onOpenThemeSheet,
-                ),
               if (isText)
-                IconButton(
-                  icon: Icon(
-                    viewModel.isEditMode ? Icons.check : Icons.edit_outlined,
+                if (viewModel.isSaving)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12),
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  )
+                else
+                  IconButton(
+                    icon: Icon(
+                      viewModel.isEditMode ? Icons.check : Icons.edit_outlined,
+                    ),
+                    color: viewModel.isEditMode
+                        ? AppColors.success
+                        : (colors?.textPrimary ?? AppColors.white),
+                    tooltip: viewModel.isEditMode ? 'Done editing' : 'Edit file',
+                    onPressed: () {
+                      if (viewModel.isEditMode && viewModel.isDirty) {
+                        viewModel.saveChanges();
+                      } else {
+                        viewModel.toggleEditMode();
+                      }
+                    },
                   ),
-                  color: viewModel.isEditMode
-                      ? AppColors.success
-                      : (colors?.textPrimary ?? AppColors.white),
-                  tooltip: viewModel.isEditMode ? 'Done editing' : 'Edit file',
-                  onPressed: () {
-                    if (viewModel.isEditMode && viewModel.isDirty) {
-                      viewModel.saveChanges();
-                    } else {
-                      viewModel.toggleEditMode();
-                    }
-                  },
-                ),
               IconButton(
                 icon: const Icon(Icons.share_outlined),
                 color: colors?.textPrimary ?? AppColors.white,

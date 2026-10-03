@@ -227,4 +227,18 @@ class DocumentViewerViewModel extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
   }
+
+  /// Sets the in-flight saving state directly for testing purposes so widget
+  /// tests can render the save progress overlay without a real upload.
+  @visibleForTesting
+  void setSavingForTest({
+    required bool isSaving,
+    String? statusMessage,
+    double? progress,
+  }) {
+    _isSaving = isSaving;
+    if (statusMessage != null) _statusMessage = statusMessage;
+    if (progress != null) _progress = progress;
+    notifyListeners();
+  }
 }

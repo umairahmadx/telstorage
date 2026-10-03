@@ -16,6 +16,13 @@ import 'widgets/office_fallback_card.dart';
 import 'widgets/pdf_viewer_adapter.dart';
 import 'widgets/text_editor_adapter.dart';
 
+/// Fixed size of the centered saving-progress overlay card (width x height).
+const double _kSavingProgressCardWidth = 260;
+const double _kSavingProgressCardHeight = 170;
+
+/// Fixed height of the full-width loading progress card (width = full width).
+const double _kLoadingProgressCardHeight = 100;
+
 /// Fullscreen document viewing and editing screen.
 class DocumentViewerScreen extends StatefulWidget {
   /// File to view.
@@ -210,9 +217,11 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
               ),
             ),
             const Spacer(),
-            // Bottom Progress Card
+            // Bottom Progress Card: fixed height, never grows with its text.
             Container(
+              key: const Key('loadingProgressCard'),
               width: double.infinity,
+              height: _kLoadingProgressCardHeight,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: colors?.bgSurface ?? AppColors.grey900,
@@ -230,7 +239,7 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
                 ],
               ),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
@@ -282,19 +291,23 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
                       ),
                     ),
                   ),
-                  if (progressDetail != null) ...[
-                    const SizedBox(height: 8),
-                    Align(
+                  const SizedBox(height: 8),
+                  // Slot is always reserved so the card height never changes.
+                  SizedBox(
+                    height: 16,
+                    child: Align(
                       alignment: Alignment.centerRight,
                       child: Text(
-                        progressDetail,
+                        progressDetail ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 11,
                           color: colors?.textSecondary ?? AppColors.grey600,
                         ),
                       ),
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),
@@ -366,13 +379,16 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
           color: AppColors.black.withValues(alpha: 0.55),
           child: Center(
             child: Container(
+              key: const Key('savingProgressCard'),
+              width: _kSavingProgressCardWidth,
+              height: _kSavingProgressCardHeight,
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 color: colors?.bgSurface ?? AppColors.grey900,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   SizedBox(
                     width: 36,
@@ -384,23 +400,39 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Text(
-                    _viewModel.statusMessage,
-                    style: TextStyle(
-                      color: colors?.textPrimary ?? AppColors.white,
-                      fontSize: 13,
-                    ),
-                  ),
-                  if (hasProgress) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      '$percent%',
-                      style: TextStyle(
-                        color: colors?.textSecondary ?? AppColors.grey600,
-                        fontSize: 12,
+                  // Fixed-height slots keep the card size independent of text.
+                  SizedBox(
+                    width: double.infinity,
+                    height: 44,
+                    child: Center(
+                      child: Text(
+                        _viewModel.statusMessage,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: colors?.textPrimary ?? AppColors.white,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
-                  ],
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 18,
+                    child: Center(
+                      child: Text(
+                        hasProgress ? '$percent%' : '',
+                        maxLines: 1,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: colors?.textSecondary ?? AppColors.grey600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),

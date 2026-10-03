@@ -48,7 +48,7 @@ class ImageViewerBottomBar extends StatelessWidget {
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeInOut,
-      bottom: isVisible ? 0 : -100,
+      bottom: isVisible ? 0 : -200,
       left: 0,
       right: 0,
       child: Container(
@@ -58,16 +58,7 @@ class ImageViewerBottomBar extends StatelessWidget {
           left: 20,
           right: 20,
         ),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.bottomCenter,
-            end: Alignment.topCenter,
-            colors: [
-              colors.bgPrimary.withValues(alpha: 0.85),
-              colors.bgPrimary.withValues(alpha: 0.0),
-            ],
-          ),
-        ),
+        decoration: BoxDecoration(color: colors.bgPrimary),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [

@@ -106,13 +106,11 @@ abstract final class BrowserDialogs {
     );
   }
 
-  /// Displays the file rename dialog.
+  /// Displays the file rename dialog (extension stays locked).
   static Future<void> renameFile(BuildContext context, FileRecord file) async {
-    final result = await AppDialogs.showInput(
+    final result = await AppDialogs.showRenameFile(
       context,
-      title: 'Rename File',
-      initialValue: file.name,
-      confirmText: 'Rename',
+      fileName: file.name,
     );
     if (!context.mounted) return;
     if (result != null && result.trim().isNotEmpty) {

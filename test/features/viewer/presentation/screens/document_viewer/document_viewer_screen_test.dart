@@ -107,5 +107,81 @@ void main() {
 
       if (tempFile.existsSync()) tempFile.deleteSync();
     });
+
+    testWidgets('loading progress card keeps a fixed height', (tester) async {
+      final record = FileRecord(
+        fileId: 'doc_fixed_load',
+        name: 'terms.pdf',
+        metadataMessageId: 5,
+        sizeMb: 1.0,
+        mimeType: 'application/pdf',
+        uploadedAt: DateTime.now(),
+        chunkCount: 1,
+        sha256Hash: 'h',
+      );
+
+      final vm = DocumentViewerViewModel(file: record);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark(),
+          home: DocumentViewerScreen(file: record, viewModel: vm),
+        ),
+      );
+
+      final card = find.byKey(const Key('loadingProgressCard'));
+      expect(card, findsOneWidget);
+      expect(tester.getSize(card).height, 100);
+    });
+
+    testWidgets('saving progress card keeps a fixed size as status text grows',
+        (tester) async {
+      final record = FileRecord(
+        fileId: 'txt_fixed_save',
+        name: 'fixed.txt',
+        metadataMessageId: 6,
+        sizeMb: 0.1,
+        mimeType: 'text/plain',
+        uploadedAt: DateTime.now(),
+        chunkCount: 1,
+        sha256Hash: 'h',
+      );
+
+      final vm = DocumentViewerViewModel(file: record);
+      final tempFile = File('${Directory.systemTemp.path}/test_fixed_size.txt')
+        ..writeAsStringSync('Hello');
+      vm.setLoadedForTest(tempFile, 'Hello');
+      vm.setSavingForTest(isSaving: true, statusMessage: 'Saving…');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark(),
+          home: DocumentViewerScreen(file: record, viewModel: vm),
+        ),
+      );
+
+      final card = find.byKey(const Key('savingProgressCard'));
+      expect(card, findsOneWidget);
+      final shortMessageSize = tester.getSize(card);
+
+      // A much longer status message plus a progress value must not resize
+      // the card in either dimension.
+      vm.setSavingForTest(
+        isSaving: true,
+        statusMessage:
+            'Saving changes to Telegram… this status message is intentionally '
+            'very long so the card would have grown taller and wider before '
+            'the fixed-size progress card was implemented',
+        progress: 0.42,
+      );
+      await tester.pump();
+
+      final longMessageSize = tester.getSize(card);
+      expect(longMessageSize, shortMessageSize);
+      expect(shortMessageSize.width, 260);
+      expect(shortMessageSize.height, 170);
+
+      if (tempFile.existsSync()) tempFile.deleteSync();
+    });
   });
 }

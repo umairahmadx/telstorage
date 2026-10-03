@@ -5,10 +5,12 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 import 'package:telstorage/core/models/download_conflict_policy.dart';
 import 'package:telstorage/core/models/file_record.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
 import 'package:telstorage/shared/widgets/dialogs/file_detail_sheet.dart';
+import 'package:telstorage/shared/widgets/dialogs/rename_file_dialog.dart';
 
 export 'package:telstorage/core/models/download_conflict_policy.dart';
 
@@ -332,6 +334,38 @@ abstract final class AppDialogs {
                 style: const TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Shows a file rename dialog where only the base name is editable and the
+  /// original extension is rendered as a fixed, non-editable suffix.
+  ///
+  /// Returns the complete new file name (trimmed base + original extension),
+  /// or `null` when the dialog is dismissed or the base name is empty.
+  static Future<String?> showRenameFile(
+    BuildContext context, {
+    required String fileName,
+    String confirmText = 'Rename',
+    String cancelText = 'Cancel',
+  }) {
+    HapticFeedback.lightImpact();
+    final colors = Theme.of(context).extension<AppColorsExtension>()!;
+    final ext = p.extension(fileName);
+    // A leading-dot file ('.gitignore') or a trailing dot ('photo.') has no
+    // separable extension, so the whole name stays editable in that case.
+    final hasExtension = ext.length > 1 && fileName.length > ext.length;
+
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => RenameFileDialog(
+        colors: colors,
+        baseName: hasExtension
+            ? fileName.substring(0, fileName.length - ext.length)
+            : fileName,
+        extensionLabel: hasExtension ? ext : '',
+        confirmText: confirmText,
+        cancelText: cancelText,
       ),
     );
   }

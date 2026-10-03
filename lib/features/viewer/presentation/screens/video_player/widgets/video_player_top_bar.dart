@@ -75,7 +75,7 @@ class VideoPlayerTopBar extends StatelessWidget {
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeInOut,
-      top: isVisible ? 0 : -100,
+      top: isVisible ? 0 : -200,
       left: 0,
       right: 0,
       child: Container(
@@ -85,16 +85,7 @@ class VideoPlayerTopBar extends StatelessWidget {
           left: 12,
           right: 12,
         ),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              colors.bgPrimary.withValues(alpha: 0.85),
-              colors.bgPrimary.withValues(alpha: 0.0),
-            ],
-          ),
-        ),
+        decoration: BoxDecoration(color: colors.bgPrimary),
         child: Row(
           children: [
             Material(

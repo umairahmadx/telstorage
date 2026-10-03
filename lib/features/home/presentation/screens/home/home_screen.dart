@@ -57,11 +57,9 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       onRename: () async {
         Navigator.pop(context);
-        final newName = await AppDialogs.showInput(
+        final newName = await AppDialogs.showRenameFile(
           context,
-          title: 'Rename File',
-          initialValue: file.name,
-          confirmText: 'Rename',
+          fileName: file.name,
         );
         if (newName != null && newName.trim().isNotEmpty && mounted) {
           context.read<HomeCubit>().renameFile(file.fileId, newName.trim());

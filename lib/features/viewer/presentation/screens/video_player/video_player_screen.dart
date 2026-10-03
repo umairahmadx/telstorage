@@ -345,7 +345,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeInOut,
-      bottom: _viewModel.areControlsVisible ? 0 : -100,
+      bottom: _viewModel.areControlsVisible ? 0 : -200,
       left: 0,
       right: 0,
       child: Container(
@@ -353,16 +353,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
           bottom: MediaQuery.paddingOf(context).bottom + 8,
           top: 12,
         ),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.bottomCenter,
-            end: Alignment.topCenter,
-            colors: [
-              colors.bgPrimary.withValues(alpha: 0.85),
-              colors.bgPrimary.withValues(alpha: 0.0),
-            ],
-          ),
-        ),
+        decoration: BoxDecoration(color: colors.bgPrimary),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,

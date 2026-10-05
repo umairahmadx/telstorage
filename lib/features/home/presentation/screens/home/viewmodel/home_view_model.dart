@@ -18,7 +18,6 @@ import '../../../../../../core/services/device_hardware_service.dart';
 import '../../../../../../core/services/file_manager.dart';
 import '../../../../../../core/services/hive_service.dart';
 import '../../../../../../core/services/service_locator.dart';
-import '../../../../../../core/services/telegram_service.dart';
 import '../../../../../../core/utils/app_logger.dart';
 import '../../../../../../core/utils/connectivity.dart';
 import '../../../../../storage/data/repositories/storage_repository.dart';
@@ -123,7 +122,7 @@ class HomeState {
 // ── ViewModel (Cubit) ─────────────────────────────────────────────────────────
 
 /// ViewModel handling Home dashboard business logic and real-time updates.
-class HomeCubit extends Cubit<HomeState> {
+class HomeCubit extends Cubit<HomeState> with WidgetsBindingObserver {
   /// Internal reference to storage repository.
   final StorageRepository _repository =
       ServiceLocator.instance.storageRepository;
@@ -152,12 +151,8 @@ class HomeCubit extends Cubit<HomeState> {
   /// Timestamp of the last remote enrichment to prevent duplicate in-flight requests.
   DateTime? _lastEnrichTime;
 
-  /// Constructs HomeCubit and binds event bus listener.
-  HomeCubit() : super(HomeState()) {
-    _domainEventSubscription = DomainEventBus.instance.stream.listen((_) {
-      _scheduleDebouncedLocalRefresh();
-    });
-  }
+  AutoBackupScheduler? _autoBackupScheduler;
+  bool _isLifecycleObserver = false;
 
   /// Sets up reactive Hive database listeners with debouncing.
   void _initSubscriptions() {
@@ -221,7 +216,6 @@ class HomeCubit extends Cubit<HomeState> {
     _autoBackupScheduler = AutoBackupScheduler(
       backupService: AutoBackupService(
         hive: ServiceLocator.instance.hive,
-        telegram: ServiceLocator.instance.telegram,
         fileManager: ServiceLocator.instance.fileManager,
         deviceHardware: DeviceHardwareService.instance,
       ),

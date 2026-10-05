@@ -7,17 +7,16 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:workmanager/workmanager.dart';
 import '../constants/app_constants.dart';
-import '../models/backup_rule.dart';
 import '../services/auto_backup_engine.dart';
 import '../services/auto_backup_service.dart';
-import '../services/hive_service.dart'
-    if (dart.library.js_interop) '../services/hive_service.dart';
+import '../services/device_hardware_service.dart';
 import '../services/service_locator.dart';
 import '../utils/app_logger.dart';
 import '../utils/connectivity.dart';
-import '../utils/device_hardware_service.dart';
 import '../../features/upload/presentation/viewmodels/upload_task.dart';
 import '../../features/upload/presentation/viewmodels/upload_view_model.dart';
+import 'package:hive/hive.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 /// WorkManager task name for periodic auto-backup checks.
 const String _autoBackupTaskName = 'autoBackupPeriodicCheck';
@@ -189,11 +188,11 @@ class AutoBackupScheduler {
       body = parts.join(', ');
     }
 
-    await ServiceLocator.instance.notificationService.showCompletionNotification(
+    await NotificationService.instance.showCompletionNotification(
       title: 'Auto-Backup Complete',
       body: body,
       payload: 'auto_backup_summary',
-      actions: const [
+      actions: const <AndroidNotificationAction>[
         AndroidNotificationAction('view_uploads', 'View Uploads', showsUserInterface: true),
       ],
     );

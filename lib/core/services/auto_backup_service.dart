@@ -6,21 +6,23 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:hive/hive.dart';
 import 'package:photo_manager/photo_manager.dart';
 import '../constants/app_constants.dart';
 import '../models/backup_ledger_entry.dart';
 import '../models/backup_rule.dart';
 import '../models/file_record.dart';
+import '../models/folder_record.dart';
 import '../services/auto_backup_engine.dart';
+import '../services/device_hardware_service.dart';
 import '../services/file_manager.dart';
 import '../services/hive_service.dart';
 import '../services/service_locator.dart';
-import '../services/telegram_service.dart';
 import '../utils/app_logger.dart';
 import '../utils/connectivity.dart';
-import '../utils/device_hardware_service.dart';
 import '../../features/upload/presentation/viewmodels/upload_task.dart';
 import '../../features/upload/presentation/viewmodels/upload_view_model.dart';
+import '../../shared/widgets/device_file_picker/device_media_scanner.dart';
 
 /// Seam for testing: maps AssetEntity to BackupAsset without device I/O.
 typedef AssetMapper = Future<BackupAsset> Function(AssetEntity entity);
@@ -55,17 +57,14 @@ class _ScannedAsset {
 /// Orchestrates the auto-backup pipeline for a single rule.
 class AutoBackupService {
   final HiveService _hive;
-  final TelegramService _telegram;
   final FileManagerService _fileManager;
   final DeviceHardwareService _deviceHardware;
 
   AutoBackupService({
     required HiveService hive,
-    required TelegramService telegram,
     required FileManagerService fileManager,
     required DeviceHardwareService deviceHardware,
   })  : _hive = hive,
-        _telegram = telegram,
         _fileManager = fileManager,
         _deviceHardware = deviceHardware;
 
@@ -172,7 +171,7 @@ class AutoBackupService {
     }
 
     // Verify folders still exist (D2: re-resolve on missing)
-    if (!_hive.getFolder(backupFolderId).hasValue || !_hive.getFolder(albumFolderId).hasValue) {
+    if (_hive.getFolder(backupFolderId) == null || _hive.getFolder(albumFolderId) == null) {
       AppLogger.w('Cached backup folder missing, re-resolving', tag: 'AutoBackupService');
       return await ensureBackupPath(rule.copyWith(backupFolderId: null, albumFolderId: null));
     }
@@ -182,7 +181,7 @@ class AutoBackupService {
 
   /// Scans device media for the rule's album and maps to BackupAsset with local paths.
   /// Uses pagination (60 per page) to bound memory.
-  Future<List<_ScannedAsset>> scanAssets(
+  Future<List<_ScannedAsset>> _scanAssets(
     BackupRule rule, {
     AssetMapper? mapper,
     int pageSize = 60,
@@ -289,7 +288,7 @@ class AutoBackupService {
   }) async {
     final errors = <String>[];
     int uploadedCount = 0;
-    final effectiveEnqueuer = enqueuer ?? _enqueuer;
+    final effectiveEnqueuer = enqueuer;
 
     try {
       // 1. Bootstrap rule
@@ -333,7 +332,7 @@ class AutoBackupService {
       final cloudFilesByName = await loadCloudFilesByName(albumFolderId);
 
       // 5. Scan device assets
-      final scannedAssets = await scanAssets(rule, mapper: assetMapper);
+      final scannedAssets = await _scanAssets(rule, mapper: assetMapper);
       final assets = scannedAssets.map((s) => s.asset).toList();
 
       // 6. Plan the run

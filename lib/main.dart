@@ -21,7 +21,6 @@ import 'core/models/file_record.dart';
 import 'core/models/folder_record.dart';
 import 'core/models/pending_action.dart';
 import 'core/services/app_cache_manager.dart';
-import 'core/services/auto_backup_scheduler.dart';
 import 'core/services/error_log_service.dart';
 import 'core/services/hive_service.dart';
 import 'core/services/theme_service.dart';

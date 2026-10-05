@@ -4,24 +4,19 @@
  */
 
 import 'dart:async';
-import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import 'package:photo_manager/photo_manager.dart';
 import '../constants/app_constants.dart';
 import '../models/backup_ledger_entry.dart';
 import '../models/backup_rule.dart';
-import '../models/file_record.dart';
 import '../models/folder_record.dart';
 import '../services/auto_backup_engine.dart';
 import '../services/device_hardware_service.dart';
 import '../services/file_manager.dart';
 import '../services/hive_service.dart';
-import '../services/service_locator.dart';
 import '../utils/app_logger.dart';
 import '../utils/connectivity.dart';
 import '../../features/upload/presentation/viewmodels/upload_task.dart';
-import '../../features/upload/presentation/viewmodels/upload_view_model.dart';
 import '../../shared/widgets/device_file_picker/device_media_scanner.dart';
 
 /// Seam for testing: maps AssetEntity to BackupAsset without device I/O.
@@ -105,7 +100,13 @@ class AutoBackupService {
   }
 
   Map<String, BackupLedgerEntry> loadLedgerByPath() {
-    return {for (final e in _ledgerBox.values if (e.lastKnownPath != null)) e.lastKnownPath!: e};
+    final map = <String, BackupLedgerEntry>{};
+    for (final e in _ledgerBox.values) {
+      if (e.lastKnownPath != null) {
+        map[e.lastKnownPath!] = e;
+      }
+    }
+    return map;
   }
 
   /// Loads cloud files in the album folder for reconciliation (A7).

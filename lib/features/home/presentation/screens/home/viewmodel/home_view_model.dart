@@ -4,10 +4,8 @@
  */
 
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../../../core/events/domain_event_bus.dart';
 import '../../../../../../core/models/app_metadata.dart';
 import '../../../../../../core/models/download_conflict_policy.dart';
 import '../../../../../../core/models/file_record.dart';
@@ -15,13 +13,10 @@ import '../../../../../../core/models/web_share_job.dart';
 import '../../../../../../core/services/auto_backup_scheduler.dart';
 import '../../../../../../core/services/auto_backup_service.dart';
 import '../../../../../../core/services/device_hardware_service.dart';
-import '../../../../../../core/services/file_manager.dart';
-import '../../../../../../core/services/hive_service.dart';
 import '../../../../../../core/services/service_locator.dart';
 import '../../../../../../core/utils/app_logger.dart';
 import '../../../../../../core/utils/connectivity.dart';
 import '../../../../../storage/data/repositories/storage_repository.dart';
-import '../../../../../upload/presentation/viewmodels/upload_view_model.dart';
 
 // ── States ────────────────────────────────────────────────────────────────────
 
@@ -153,6 +148,13 @@ class HomeCubit extends Cubit<HomeState> with WidgetsBindingObserver {
 
   AutoBackupScheduler? _autoBackupScheduler;
   bool _isLifecycleObserver = false;
+
+  /// Constructs HomeCubit with initial empty state.
+  HomeCubit() : super(HomeState()) {
+    _domainEventSubscription = DomainEventBus.instance.stream.listen((_) {
+      _scheduleDebouncedLocalRefresh();
+    });
+  }
 
   /// Sets up reactive Hive database listeners with debouncing.
   void _initSubscriptions() {

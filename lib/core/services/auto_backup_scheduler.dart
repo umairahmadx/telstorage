@@ -15,7 +15,6 @@ import '../services/notification_service.dart';
 import '../services/service_locator.dart';
 import '../utils/app_logger.dart';
 import '../utils/connectivity.dart';
-import '../../features/upload/presentation/viewmodels/upload_task.dart';
 import '../../features/upload/presentation/viewmodels/upload_view_model.dart';
 import 'package:hive/hive.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';

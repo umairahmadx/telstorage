@@ -4,8 +4,10 @@
  */
 
 import 'dart:async';
+import 'package:collection/collection.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../../../core/events/domain_event_bus.dart';
 import '../../../../../../core/models/app_metadata.dart';
 import '../../../../../../core/models/download_conflict_policy.dart';
 import '../../../../../../core/models/file_record.dart';

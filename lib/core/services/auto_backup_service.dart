@@ -295,8 +295,8 @@ class AutoBackupService {
       // 1. Bootstrap rule
       final rule = await bootstrapCameraRule();
       if (!rule.enabled) {
-        return BackupRunResult(
-          plan: const BackupPlan(uploads: [], adoptions: []),
+        return const BackupRunResult(
+          plan: BackupPlan(uploads: [], adoptions: []),
           uploadedCount: 0,
           errors: ['Rule disabled'],
         );

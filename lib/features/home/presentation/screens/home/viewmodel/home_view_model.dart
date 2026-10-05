@@ -20,6 +20,8 @@ import '../../../../../../core/utils/app_logger.dart';
 import '../../../../../../core/utils/connectivity.dart';
 import '../../../../../storage/data/repositories/storage_repository.dart';
 
+final _mapEquality = DeepCollectionEquality.unordered();
+
 // ── States ────────────────────────────────────────────────────────────────────
 
 /// State class holding home dashboard data, metrics, and sync status.
@@ -297,7 +299,7 @@ class HomeCubit extends Cubit<HomeState> with WidgetsBindingObserver {
 
       // Content equality deduplication
       final isMetaUnchanged =
-          meta == null || mapEquals(meta.toJson(), state.metadata?.toJson());
+          meta == null || _mapEquality.equals(meta.toJson(), state.metadata?.toJson());
 
       if (isMetaUnchanged) return;
 

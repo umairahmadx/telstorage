@@ -58,6 +58,12 @@ class AppConstants {
   /// Hive box storing folder partition message IDs for ETag sync validation.
   static const String partitionSyncBox = 'partition_sync_state';
 
+  /// Hive box storing auto-backup rules.
+  static const String backupRulesBox = 'backup_rules';
+
+  /// Hive box storing auto-backup per-asset fingerprints.
+  static const String backupLedgerBox = 'backup_ledger';
+
 
 
 

@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
-    <!-- Storage permissions for saving files to Downloads -->
+    <!-- Network state permission for Wi-Fi-only (unmetered) auto-backup gating -->
+
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+
+<!-- Storage permissions for saving files to Downloads -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="29"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"

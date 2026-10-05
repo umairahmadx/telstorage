@@ -21,7 +21,7 @@ class FolderRecordAdapter extends TypeAdapter<FolderRecord> {
       name: fields[1] as String,
       parentId: fields[2] as String?,
       createdAt: fields[3] as DateTime,
-      itemCount: (fields[4] as int?) ?? 0,
+      itemCount: fields[4] == null ? 0 : fields[4] as int,
     );
   }
 

@@ -23,7 +23,7 @@ class FolderRecord extends HiveObject {
   @HiveField(3)
   DateTime createdAt;
 
-  @HiveField(4)
+  @HiveField(4, defaultValue: 0)
   int itemCount;
 
   FolderRecord({

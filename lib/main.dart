@@ -14,6 +14,8 @@ import 'package:workmanager/workmanager.dart';
 
 import 'app.dart';
 import 'core/constants/app_constants.dart';
+import 'core/models/backup_ledger_entry.dart';
+import 'core/models/backup_rule.dart';
 import 'core/models/download_job.dart';
 import 'core/models/file_record.dart';
 import 'core/models/folder_record.dart';
@@ -44,6 +46,12 @@ void callbackDispatcher() {
       }
       if (!Hive.isAdapterRegistered(3)) {
         Hive.registerAdapter(PendingActionAdapter());
+      }
+      if (!Hive.isAdapterRegistered(4)) {
+        Hive.registerAdapter(BackupRuleAdapter());
+      }
+      if (!Hive.isAdapterRegistered(5)) {
+        Hive.registerAdapter(BackupLedgerEntryAdapter());
       }
 
       final pendingBox =
@@ -102,6 +110,12 @@ Future<void> main() async {
   if (!Hive.isAdapterRegistered(3)) {
     Hive.registerAdapter(PendingActionAdapter());
   }
+  if (!Hive.isAdapterRegistered(4)) {
+    Hive.registerAdapter(BackupRuleAdapter());
+  }
+  if (!Hive.isAdapterRegistered(5)) {
+    Hive.registerAdapter(BackupLedgerEntryAdapter());
+  }
   await HiveService.openBoxDefensively<FileRecord>(AppConstants.filesBox);
   await HiveService.openBoxDefensively<FolderRecord>(AppConstants.foldersBox);
   await HiveService.openBoxDefensively<DownloadJob>(AppConstants.downloadsBox);
@@ -112,6 +126,12 @@ Future<void> main() async {
   await HiveService.openBoxDefensively(AppConstants.webSharesBox);
   await HiveService.openBoxDefensively(AppConstants.uploadChunksBox);
   await HiveService.openBoxDefensively<int>(AppConstants.partitionSyncBox);
+  await HiveService.openBoxDefensively<BackupRule>(
+    AppConstants.backupRulesBox,
+  );
+  await HiveService.openBoxDefensively<BackupLedgerEntry>(
+    AppConstants.backupLedgerBox,
+  );
 
 
   // Initialize ErrorLogService & Hive Box

@@ -13,11 +13,23 @@ class Connectivity {
   @visibleForTesting
   static bool? mockConnectionStatus;
 
+  /// Test override hook for deterministic unmetered-network simulation.
+  @visibleForTesting
+  static bool? mockUnmeteredStatus;
+
   static Future<bool> hasConnection() async {
     if (mockConnectionStatus != null) {
       return mockConnectionStatus!;
     }
     return web.window.navigator.onLine;
+  }
+
+  /// Web builds are conservative: metered state is unknown, so report metered.
+  static Future<bool> isUnmetered() async {
+    if (mockUnmeteredStatus != null) {
+      return mockUnmeteredStatus!;
+    }
+    return false;
   }
 }
 

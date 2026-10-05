@@ -12,6 +12,10 @@ class Connectivity {
   @visibleForTesting
   static bool? mockConnectionStatus;
 
+  /// Test override hook for deterministic unmetered-network simulation.
+  @visibleForTesting
+  static bool? mockUnmeteredStatus;
+
   static Future<bool> hasConnection() async {
     if (mockConnectionStatus != null) {
       return mockConnectionStatus!;
@@ -21,6 +25,36 @@ class Connectivity {
         const Duration(seconds: 3),
       );
       return result.isNotEmpty && result.first.rawAddress.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Whether the active network is unmetered (Wi-Fi/Ethernet).
+  ///
+  /// Uses interface names as a heuristic: `wlan*`/`eth*` count as unmetered,
+  /// cellular (`rmnet*`, `ccmni*`, `pdp*`) and VPN (`tun*`) do not. This is a
+  /// best-effort check — tethered hotspots and VPN-over-Wi-Fi may be
+  /// misclassified, so callers must treat a `true` result as advisory.
+  static Future<bool> isUnmetered() async {
+    if (mockUnmeteredStatus != null) {
+      return mockUnmeteredStatus!;
+    }
+    try {
+      final interfaces = await NetworkInterface.list(
+        includeLoopback: false,
+        type: InternetAddressType.any,
+      );
+      for (final interface in interfaces) {
+        final name = interface.name.toLowerCase();
+        final isWifi = name.startsWith('wlan') || name.startsWith('wl');
+        final isEthernet =
+            name.startsWith('eth') || name.startsWith('en');
+        if ((isWifi || isEthernet) && interface.addresses.isNotEmpty) {
+          return true;
+        }
+      }
+      return false;
     } catch (_) {
       return false;
     }

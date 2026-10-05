@@ -60,7 +60,7 @@ class HomeState {
   final String syncStatus;
 
   /// Constructs a HomeState instance.
-  HomeState({
+  const HomeState({
     this.isLoading = false,
     this.userName,
     this.userEmail,
@@ -145,7 +145,7 @@ class HomeCubit extends Cubit<HomeState> {
   DateTime? _lastEnrichTime;
 
   /// Constructs HomeCubit and binds event bus listener.
-  HomeCubit() : super(HomeState()) {
+  HomeCubit() : super(const HomeState()) {
     _domainEventSubscription = DomainEventBus.instance.stream.listen((_) {
       _scheduleDebouncedLocalRefresh();
     });
@@ -406,7 +406,7 @@ class HomeCubit extends Cubit<HomeState> {
   }
 
   /// Resets state to default.
-  void reset() => emit(HomeState());
+  void reset() => emit(const HomeState());
 
   @override
   Future<void> close() {

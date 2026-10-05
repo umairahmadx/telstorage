@@ -38,6 +38,7 @@ import '../../features/storage/domain/repositories/storage_repository_contract.d
 import '../../features/storage/domain/usecases/download_file_usecase.dart';
 import '../../features/storage/domain/usecases/generate_web_share_usecase.dart';
 import 'storage_reconciler.dart';
+import '../../features/upload/presentation/viewmodels/upload_view_model.dart';
 
 /// Single initialization point for all services.
 /// Call [ServiceLocator.instance.init()] after login.
@@ -71,6 +72,7 @@ class ServiceLocator {
   late GenerateWebShareUseCase _generateWebShareUseCase;
   late AccountResetService _accountResetService;
   late StorageReconciler _storageReconciler;
+  UploadViewModel? _uploadBloc;
 
   // These are always available as they don't depend on user credentials for creation
   final NavigationService _navigation = NavigationService.instance;
@@ -94,6 +96,9 @@ class ServiceLocator {
   FileManagerService get fileManager => _fileManager;
   SyncQueueService get syncQueue => _syncQueue;
   StorageRepository get storageRepository => _storageRepository;
+
+  UploadViewModel? get uploadBloc => _uploadBloc;
+  void setUploadBloc(UploadViewModel bloc) => _uploadBloc = bloc;
 
   /// Injects thumbnail repository instance for test isolation.
   void setThumbnailRepositoryForTesting(ThumbnailRepository repo) {

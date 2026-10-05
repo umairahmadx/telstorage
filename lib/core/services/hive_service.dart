@@ -8,6 +8,8 @@ import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../constants/app_constants.dart';
 import '../events/domain_event_bus.dart';
+import '../models/backup_ledger_entry.dart';
+import '../models/backup_rule.dart';
 import '../models/download_job.dart';
 import '../models/file_record.dart';
 import '../models/folder_record.dart';
@@ -344,6 +346,12 @@ class HiveService {
     await _folders.clear();
     if (Hive.isBoxOpen(AppConstants.partitionSyncBox)) {
       await _partitionSyncBox.clear();
+    }
+    if (Hive.isBoxOpen(AppConstants.backupRulesBox)) {
+      await Hive.box<BackupRule>(AppConstants.backupRulesBox).clear();
+    }
+    if (Hive.isBoxOpen(AppConstants.backupLedgerBox)) {
+      await Hive.box<BackupLedgerEntry>(AppConstants.backupLedgerBox).clear();
     }
   }
 }

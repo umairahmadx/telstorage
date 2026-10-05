@@ -6,6 +6,7 @@
 import 'package:flutter_volume_controller/flutter_volume_controller.dart';
 import 'package:logger/logger.dart';
 import 'package:screen_brightness/screen_brightness.dart';
+import 'package:battery_plus/battery_plus.dart';
 
 /// Centralized service handling native hardware brightness and system media volume.
 class DeviceHardwareService {
@@ -93,6 +94,19 @@ class DeviceHardwareService {
       );
     } catch (e) {
       _logger.d('Hardware system volume set error: $e');
+    }
+  }
+
+  /// Checks if the device is currently charging.
+  /// Uses battery_plus for accurate detection; returns true if unknown (optimistic).
+  Future<bool> isCharging() async {
+    try {
+      final battery = Battery();
+      final state = await battery.batteryState;
+      return state == BatteryState.charging || state == BatteryState.full;
+    } catch (e) {
+      _logger.d('Battery state check failed, assuming charging: $e');
+      return true; // Optimistic default for backup eligibility
     }
   }
 }

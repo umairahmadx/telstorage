@@ -70,6 +70,7 @@ dependencies:
   wakelock_plus: ^1.2.8
   screen_brightness: ^2.1.11
   flutter_volume_controller: ^2.0.2
+  battery_plus: ^5.0.0
 
   # Video thumbnail extraction
   get_thumbnail_video: ^0.7.3

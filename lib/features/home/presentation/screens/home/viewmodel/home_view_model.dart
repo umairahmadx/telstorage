@@ -5,16 +5,24 @@
 
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../../../core/events/domain_event_bus.dart';
 import '../../../../../../core/models/app_metadata.dart';
 import '../../../../../../core/models/download_conflict_policy.dart';
 import '../../../../../../core/models/file_record.dart';
 import '../../../../../../core/models/web_share_job.dart';
+import '../../../../../../core/services/auto_backup_scheduler.dart';
+import '../../../../../../core/services/auto_backup_service.dart';
+import '../../../../../../core/services/device_hardware_service.dart';
+import '../../../../../../core/services/file_manager.dart';
+import '../../../../../../core/services/hive_service.dart';
 import '../../../../../../core/services/service_locator.dart';
+import '../../../../../../core/services/telegram_service.dart';
 import '../../../../../../core/utils/app_logger.dart';
 import '../../../../../../core/utils/connectivity.dart';
 import '../../../../../storage/data/repositories/storage_repository.dart';
+import '../../../../../upload/presentation/viewmodels/upload_view_model.dart';
 
 // ── States ────────────────────────────────────────────────────────────────────
 
@@ -192,6 +200,9 @@ class HomeCubit extends Cubit<HomeState> {
       if (!ServiceLocator.instance.isInitialized) {
         await ServiceLocator.instance.init();
       }
+      // Initialize auto-backup scheduler
+      _initAutoBackupScheduler();
+      _registerLifecycleObserver();
       _initSubscriptions();
       await refreshLocalData();
       unawaited(enrichRemoteData());
@@ -203,6 +214,23 @@ class HomeCubit extends Cubit<HomeState> {
         emit(state.copyWith(isLoading: false, errorMessage: e.toString()));
       }
     }
+  }
+
+  void _initAutoBackupScheduler() {
+    if (_autoBackupScheduler != null) return;
+    _autoBackupScheduler = AutoBackupScheduler(
+      backupService: AutoBackupService(
+        hive: ServiceLocator.instance.hive,
+        telegram: ServiceLocator.instance.telegram,
+        fileManager: ServiceLocator.instance.fileManager,
+        deviceHardware: DeviceHardwareService.instance,
+      ),
+      deviceHardware: DeviceHardwareService.instance,
+      uploadBloc: ServiceLocator.instance.uploadBloc,
+    );
+    _autoBackupScheduler!.initialize();
+    // Trigger immediate check on app start
+    unawaited(_autoBackupScheduler!.triggerCheck());
   }
 
   /// Phase 1: Pure 0ms Local Hive Cache Read (no network calls).
@@ -405,6 +433,11 @@ class HomeCubit extends Cubit<HomeState> {
     }
   }
 
+  /// Triggers an immediate auto-backup run (manual "Back up now" button).
+  Future<void> triggerManualBackup() async {
+    await _autoBackupScheduler?.triggerCheck();
+  }
+
   /// Resets state to default.
   void reset() => emit(HomeState());
 
@@ -414,7 +447,25 @@ class HomeCubit extends Cubit<HomeState> {
     _filesSubscription?.cancel();
     _foldersSubscription?.cancel();
     _domainEventSubscription?.cancel();
+    _autoBackupScheduler?.dispose();
+    if (_isLifecycleObserver) {
+      WidgetsBinding.instance.removeObserver(this);
+    }
     return super.close();
+  }
+
+  void _registerLifecycleObserver() {
+    if (!_isLifecycleObserver) {
+      _isLifecycleObserver = true;
+      WidgetsBinding.instance.addObserver(this);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_autoBackupScheduler?.triggerCheck());
+    }
   }
 }
 

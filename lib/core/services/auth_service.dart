@@ -6,6 +6,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../constants/app_constants.dart';
+import '../services/hive_service.dart';
 import 'service_locator.dart';
 
 /// Handles authentication via Google Apps Script.
@@ -79,6 +80,8 @@ class AuthService {
 
   Future<void> logout() async {
     _cachedEmail = null;
+    // Clear backup boxes to prevent cross-account ledger leakage
+    await HiveService.instance.clearAll();
     ServiceLocator.instance.reset();
     await _storage.deleteAll();
   }

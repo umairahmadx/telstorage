@@ -269,7 +269,7 @@ class PdfViewerAdapterState extends State<PdfViewerAdapter> {
       targetZoom = fitScale;
     } else {
       targetZoom = (fitScale * 2)
-          .clamp(controller.minScale, controller.params.maxScale)
+          .clamp(controller.minScale, controller.params.maxScale ?? double.infinity)
           .toDouble();
     }
     controller.setZoom(details.documentPosition, targetZoom);

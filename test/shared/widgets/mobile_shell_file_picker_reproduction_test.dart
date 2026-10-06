@@ -89,7 +89,7 @@ class FakeUploadBloc extends Cubit<UploadState> implements UploadBloc {
 }
 
 class FakeHomeCubit extends Cubit<HomeState> implements HomeCubit {
-  FakeHomeCubit() : super(HomeState());
+  FakeHomeCubit() : super(const HomeState());
   @override
   Future<void> initialize() async {}
   @override

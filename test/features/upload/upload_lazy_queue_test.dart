@@ -245,7 +245,14 @@ void main() {
       while (!mockUploadService.uploadedFiles.contains('batch_a.jpg')) {
         await Future<void>.delayed(const Duration(milliseconds: 30));
       }
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      // Cleanup runs after the mock records the upload; poll for deletion
+      // instead of a fixed delay to avoid flakes under load.
+      final deleteDeadlineA =
+          DateTime.now().add(const Duration(seconds: 5));
+      while (await fileA.exists() &&
+          DateTime.now().isBefore(deleteDeadlineA)) {
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+      }
 
       // fileA should be deleted because its task completed with isTemporaryCacheFile = true
       expect(await fileA.exists(), isFalse);
@@ -258,7 +265,12 @@ void main() {
       while (!mockUploadService.uploadedFiles.contains('batch_b.jpg')) {
         await Future<void>.delayed(const Duration(milliseconds: 30));
       }
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final deleteDeadlineB =
+          DateTime.now().add(const Duration(seconds: 5));
+      while (await fileB.exists() &&
+          DateTime.now().isBefore(deleteDeadlineB)) {
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+      }
 
       // Now fileB should also be cleaned up after its own upload
       expect(await fileB.exists(), isFalse);

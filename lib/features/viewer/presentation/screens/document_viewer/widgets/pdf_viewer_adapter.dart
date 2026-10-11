@@ -269,7 +269,7 @@ class PdfViewerAdapterState extends State<PdfViewerAdapter> {
       targetZoom = fitScale;
     } else {
       targetZoom = (fitScale * 2)
-          .clamp(controller.minScale, controller.maxScale)
+          .clamp(controller.minScale, controller.params.maxScale)
           .toDouble();
     }
     controller.setZoom(details.documentPosition, targetZoom);
@@ -301,10 +301,9 @@ class PdfViewerAdapterState extends State<PdfViewerAdapter> {
                 _lastZoom = _controller.currentZoom;
                 _scheduleSavePosition();
               },
-              sizeDelegateProvider: PdfViewerSizeDelegateProviderLegacy(
-                calculateInitialZoom:
-                    (doc, controller, fitScale, coverScale) => fitScale,
-              ),
+              maxScale: 8.0,
+              calculateInitialZoom:
+                  (doc, controller, fitScale, coverScale) => fitScale,
               onGeneralTap: _onGeneralTap,
               textSelectionParams: PdfTextSelectionParams(
                 showContextMenuAutomatically: true,

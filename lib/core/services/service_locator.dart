@@ -30,6 +30,7 @@ import 'video_chunk_cache_manager.dart';
 import 'video_stream_server.dart';
 import 'lru_folder_cache_service.dart';
 import 'telegram_rate_limiter.dart';
+import 'auto_backup_scheduler.dart';
 import 'account_reset_service.dart';
 import '../../features/storage/data/repositories/storage_repository.dart';
 import 'upload_service_contract.dart';
@@ -162,6 +163,7 @@ class ServiceLocator {
   VideoStreamServer get videoStreamServer => VideoStreamServer.instance;
   VideoChunkCacheManager get videoChunkCache => VideoChunkCacheManager.instance;
   ErrorLogService get errorLogService => ErrorLogService.instance;
+  AutoBackupScheduler get autoBackupScheduler => AutoBackupScheduler.instance;
 
 
   Future<void>? _initFuture;
@@ -229,6 +231,12 @@ class ServiceLocator {
       // Process pending actions queue in the background
       _syncQueue.processQueue();
 
+      // Register the auto-backup periodic due-check and consume any flag
+      // armed while the app was dead (A12 / C2). Uploads run in the main
+      // isolate; the Workmanager task only arms the Hive due-flag.
+      unawaited(AutoBackupScheduler.instance.registerPeriodic());
+      unawaited(AutoBackupScheduler.instance.consumeDueFlag());
+
       _initialized = true;
       AppLogger.i('ServiceLocator initialized successfully',
           tag: 'ServiceLocator');
@@ -245,6 +253,9 @@ class ServiceLocator {
     TelegramRateLimiter.instance.reset();
     TransferConcurrencyCoordinator.instance.reset();
     TransferQueueService.instance.clear();
+    // A12: cancel the periodic auto-backup task and clear the due flag so a
+    // new account never inherits the previous account's Backup/ folder ids.
+    unawaited(AutoBackupScheduler.instance.teardown());
     unawaited(VideoStreamServer.instance.stop());
     if (_initialized) {
       _thumbnailRepository.clearMemoryCache();

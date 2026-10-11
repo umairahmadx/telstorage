@@ -12,6 +12,7 @@ import 'package:telstorage/features/home/presentation/screens/home/viewmodel/hom
 import 'package:telstorage/shared/widgets/app_surface_card.dart';
 import 'package:telstorage/shared/widgets/mobile_shell.dart';
 import 'widgets/settings_appearance_card.dart';
+import 'widgets/settings_backup_card.dart';
 import 'widgets/settings_cache_card.dart';
 import 'widgets/settings_profile_card.dart';
 import 'widgets/settings_storage_card.dart';
@@ -66,6 +67,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _sectionLabel(colors, 'CACHE & DATA'),
                     const SizedBox(height: 8),
                     const SettingsCacheCard(),
+                    const SizedBox(height: 24),
+
+                    // Auto Backup Card
+                    _sectionLabel(colors, 'AUTO BACKUP'),
+                    const SizedBox(height: 8),
+                    const SettingsBackupCard(),
                     const SizedBox(height: 24),
 
                     // Tools & Utilities Card

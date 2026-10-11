@@ -64,6 +64,13 @@ class AppConstants {
   /// Hive box storing auto-backup per-asset fingerprints.
   static const String backupLedgerBox = 'backup_ledger';
 
+  /// Hive box storing auto-backup scheduler runtime state (due flag).
+  static const String autoBackupStateBox = 'auto_backup_state';
+
+  /// Key in [autoBackupStateBox] marking that a due backup must be consumed
+  /// by the foreground scheduler (set by the Workmanager due-check).
+  static const String autoBackupDueKey = 'auto_backup_due';
+
 
 
 

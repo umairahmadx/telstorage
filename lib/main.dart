@@ -21,6 +21,7 @@ import 'core/models/file_record.dart';
 import 'core/models/folder_record.dart';
 import 'core/models/pending_action.dart';
 import 'core/services/app_cache_manager.dart';
+import 'core/services/auto_backup_scheduler.dart';
 import 'core/services/error_log_service.dart';
 import 'core/services/hive_service.dart';
 import 'core/services/theme_service.dart';
@@ -52,6 +53,24 @@ void callbackDispatcher() {
       }
       if (!Hive.isAdapterRegistered(5)) {
         Hive.registerAdapter(BackupLedgerEntryAdapter());
+      }
+
+      // Auto-backup due-check: Hive-only, isolate-safe. Never touches
+      // Telegram/photo_manager/UploadBloc — real uploads run on the main
+      // isolate via AutoBackupScheduler.consumeDueFlag (plan Task 4).
+      if (task == AutoBackupScheduler.periodicTaskName) {
+        final rulesBox =
+            await Hive.openBox<BackupRule>(AppConstants.backupRulesBox);
+        final stateBox =
+            await Hive.openBox<bool>(AppConstants.autoBackupStateBox);
+        final scheduler = AutoBackupScheduler(
+          rulesBox: rulesBox,
+          stateBox: stateBox,
+        );
+        final armed = await scheduler.checkDueInBackground();
+        debugPrint("WorkManager: autoBackupCheck due=$armed");
+        await Hive.close();
+        return armed;
       }
 
       final pendingBox =
@@ -131,6 +150,9 @@ Future<void> main() async {
   );
   await HiveService.openBoxDefensively<BackupLedgerEntry>(
     AppConstants.backupLedgerBox,
+  );
+  await HiveService.openBoxDefensively<bool>(
+    AppConstants.autoBackupStateBox,
   );
 
 

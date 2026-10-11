@@ -8,6 +8,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'core/routing/app_router.dart';
 import 'core/services/theme_service.dart';
 import 'core/theme/app_theme.dart';
+import 'core/services/auto_backup_scheduler.dart';
 import 'features/auth/presentation/viewmodels/auth_view_model.dart';
 import 'features/browser/presentation/screens/browser/viewmodel/browser_view_model.dart';
 import 'features/downloads/presentation/screens/downloads/viewmodel/downloads_view_model.dart';
@@ -27,7 +28,11 @@ class TelStorageApp extends StatelessWidget {
           create: (context) => AuthBloc()..add(AppStarted()),
         ),
         BlocProvider<UploadBloc>(
-          create: (context) => UploadBloc(),
+          create: (context) {
+            final bloc = UploadBloc();
+            AutoBackupScheduler.instance.attachUploadBloc(bloc);
+            return bloc;
+          },
         ),
         BlocProvider<HomeCubit>(
           create: (context) => HomeCubit(),

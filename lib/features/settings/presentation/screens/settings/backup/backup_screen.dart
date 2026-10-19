@@ -9,6 +9,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:telstorage/core/constants/app_constants.dart';
 import 'package:telstorage/core/models/backup_rule.dart';
 import 'package:telstorage/core/services/auto_backup_scheduler.dart';
+import 'package:telstorage/core/services/auto_backup_types.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
 import 'package:telstorage/shared/widgets/app_surface_card.dart';
 
@@ -44,14 +45,33 @@ class _BackupScreenState extends State<BackupScreen> {
   }
 
   Future<void> _backupNow() async {
-    await AutoBackupScheduler.instance.consumeDueFlag(manual: true);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Backup started — continues in the background.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+    final outcome =
+        await AutoBackupScheduler.instance.consumeDueFlag(manual: true);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(_outcomeMessage(outcome)),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: outcome.status == BackupRunStatus.ran
+            ? Theme.of(context).extension<AppColorsExtension>()!.brandPrimary
+            : null,
+      ),
+    );
+  }
+
+  String _outcomeMessage(BackupRunOutcome outcome) {
+    switch (outcome.status) {
+      case BackupRunStatus.ran:
+        return 'Backup started — continues in the background.';
+      case BackupRunStatus.notDue:
+        return 'Backup not due yet.';
+      case BackupRunStatus.noRule:
+        return 'No backup rule enabled. Turn on Camera album backup first.';
+      case BackupRunStatus.ineligible:
+        return 'Backup not eligible now (window, charging, or Wi‑Fi).';
+      // BackupRunStatus has noAssets covered by 'ran' (uploads may be empty).
+      case BackupRunStatus.failed:
+        return 'Backup failed: ${outcome.label}.';
     }
   }
 
@@ -299,7 +319,10 @@ class _BackupScreenState extends State<BackupScreen> {
           OutlinedButton(
             onPressed: rule.backfillDone
                 ? null
-                : () => _mutate((r) => r.backfillDone = true),
+                : () async {
+                    await _mutate((r) => r.backfillDone = true);
+                    await _backupNow();
+                  },
             child: const Text('Back up now (one time)'),
           ),
         ],

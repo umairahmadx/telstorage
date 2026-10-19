@@ -8,7 +8,8 @@ import 'package:photo_manager/photo_manager.dart';
 import 'package:telstorage/core/services/auto_backup_engine.dart';
 import 'package:telstorage/shared/widgets/device_file_picker/device_media_scanner.dart';
 
-/// Free-space probe in bytes; null means unknown (proceed, see E3).
+/// Free-space probe in bytes; null means unknown and FAILS CLOSED (see E3).
+/// A backup must never proceed when free space cannot be determined.
 typedef FreeSpaceProvider = Future<int?> Function();
 
 /// Permission prompt hook (F2). Defaults to DeviceMediaScanner.
@@ -26,6 +27,10 @@ typedef BackupLoadPage = Future<List<AssetEntity>> Function(
 
 /// Unmetered-network hook (C4). Defaults to Connectivity.isUnmetered.
 typedef UnmeteredProvider = Future<bool> Function();
+
+/// Charging-state hook (F1). Defaults to false — unknown → not charging
+/// (fail-closed). Backed by `battery_plus` or marked "coming soon" in UI.
+typedef PowerStateProvider = ChargingStateProvider;
 
 /// Resolves a BackupAsset to an upload path plus temp-cache flag (F3).
 /// Returns null when the device path cannot be resolved.

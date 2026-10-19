@@ -31,6 +31,8 @@ class TelStorageApp extends StatelessWidget {
           create: (context) {
             final bloc = UploadBloc();
             AutoBackupScheduler.instance.attachUploadBloc(bloc);
+            // Process any due-flag armed by Workmanager while the app was dead.
+            AutoBackupScheduler.instance.consumeDueFlag();
             return bloc;
           },
         ),

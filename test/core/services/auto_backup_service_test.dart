@@ -155,6 +155,7 @@ void main() {
         ledgerBox: ledgerBox,
         isUnmetered: () async => false,
         isCharging: () async => false,
+        requestPermission: () async => true,
       );
       final rule = cameraRule()
         ..windowStartMinutes = 120
@@ -352,7 +353,8 @@ void main() {
         freeSpaceBytes: () async => null,
       );
       final allowed = await unknown.ensureFreeSpaceFor([asset]);
-      expect(allowed.isSuccess, isTrue);
+      // Unknown free space fails closed (deterministic rule).
+      expect(allowed.isFailure, isTrue);
     });
   });
 }

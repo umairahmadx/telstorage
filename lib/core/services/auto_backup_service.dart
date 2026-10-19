@@ -13,6 +13,7 @@ import 'package:telstorage/core/errors/result.dart';
 import 'package:telstorage/core/models/backup_ledger_entry.dart';
 import 'package:telstorage/core/models/backup_rule.dart';
 import 'package:telstorage/core/services/auto_backup_engine.dart';
+import 'package:telstorage/core/services/auto_backup_ledger.dart';
 import 'package:telstorage/core/services/auto_backup_types.dart';
 import 'package:telstorage/core/services/file_manager.dart';
 import 'package:telstorage/core/services/folder_traversal_service.dart';
@@ -80,9 +81,11 @@ class AutoBackupService {
                   pageSize: pageSize,
                 )),
         _isUnmetered = isUnmetered ?? Connectivity.isUnmetered,
-        // F1 advisory: unknown charging state treats device as charging.
-        _isCharging = isCharging ?? (() async => true),
-        // E3: unknown free space proceeds; Android zero-copy needs no temp.
+        // F1: unknown charging state is treated as NOT charging (fail closed).
+        // A backup requiring charging must never run when the charging state
+        // cannot be determined.
+        _isCharging = isCharging ?? (() async => false),
+        // E3: unknown free space fails closed (no null proceed).
         _freeSpaceBytes = freeSpaceBytes ?? (() async => null);
 
   /// Resolves the ledger box keyed by asset id (opened in main.dart).
@@ -101,6 +104,10 @@ class AutoBackupService {
     try {
       if (!rule.enabled) {
         return const Success(BackupEligibility(BackupBlockReason.disabled));
+      }
+      if (!await _requestPermission()) {
+        return const Success(
+            BackupEligibility(BackupBlockReason.permissionDenied));
       }
       if (!rule.isInWindow(now ?? DateTime.now())) {
         return const Success(
@@ -161,7 +168,7 @@ class AutoBackupService {
         maxItems: maxItems,
         maxBytes: maxBytes,
       );
-      await _persistAdoptions(plan.adoptions, rule);
+      await persistAdoptions(_ledger, plan.adoptions, rule);
       return Success(BackupCollectResult(
         plan: plan,
         skippedUnresolvable: scanned.skippedUnresolvable,
@@ -275,7 +282,7 @@ class AutoBackupService {
         );
         completed++;
       }
-      await _evictLedgerIfNeeded();
+      await evictLedgerIfNeeded(_ledger, maxEntries: maxLedgerEntries);
       rule.lastRunAt = now;
       rule.lastResult = 'completed';
       rule.lastUploadedCount = completed;
@@ -343,8 +350,8 @@ class AutoBackupService {
 
   /// Pre-flight free-space guard (E3): skips below 2x the largest file.
   ///
-  /// Null probe results mean unknown and proceed (Android zero-copy needs
-  /// no temp space; iOS temp copies are bounded per-file).
+  /// Null probe results mean unknown and FAIL (fail closed): a backup must
+  /// never proceed when free space cannot be determined.
   Future<Result<void>> ensureFreeSpaceFor(List<BackupAsset> assets) async {
     try {
       if (assets.isEmpty) return const Success(null);
@@ -353,7 +360,9 @@ class AutoBackupService {
         if (asset.sizeBytes > largest) largest = asset.sizeBytes;
       }
       final free = await _freeSpaceBytes();
-      if (free == null) return const Success(null);
+      if (free == null) {
+        return const Failure(UnknownFailure('Free space unknown'));
+      }
       if (free < 2 * largest) {
         return const Failure(
             QuotaExceededFailure('Low device storage for backup'));
@@ -453,47 +462,5 @@ class AutoBackupService {
       );
     }
     return map;
-  }
-
-  /// Persists B1/A7 adoptions, migrating renamed MediaStore ids.
-  Future<void> _persistAdoptions(
-    List<BackupAdoption> adoptions,
-    BackupRule rule,
-  ) async {
-    if (adoptions.isEmpty) return;
-    final now = DateTime.now();
-    for (final adoption in adoptions) {
-      if (adoption.replacedKey != null &&
-          adoption.replacedKey != adoption.key) {
-        await _ledger.delete(adoption.replacedKey!);
-      }
-      await _ledger.put(
-        adoption.key,
-        BackupLedgerEntry(
-          assetId: adoption.key,
-          fingerprint: adoption.fingerprint,
-          lastKnownPath: adoption.lastKnownPath,
-          destFileId: adoption.destFileId,
-          destFolderId: rule.albumFolderId,
-          uploadedAt: now,
-        ),
-      );
-    }
-    await _evictLedgerIfNeeded();
-  }
-
-  /// Caps the ledger at [maxLedgerEntries] rows, oldest first (E5).
-  Future<void> _evictLedgerIfNeeded() async {
-    if (_ledger.length <= maxLedgerEntries) return;
-    final sorted = _ledger.values.toList()
-      ..sort((a, b) {
-        final at = a.uploadedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-        final bt = b.uploadedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-        return at.compareTo(bt);
-      });
-    final excess = _ledger.length - maxLedgerEntries;
-    for (var i = 0; i < excess; i++) {
-      await _ledger.delete(sorted[i].assetId);
-    }
   }
 }

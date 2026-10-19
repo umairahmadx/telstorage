@@ -131,8 +131,10 @@ class AutoBackupScheduler {
   ///
   /// Also the "Back up now" entry point ([manual]) and the app
   /// start/resume hook (killed-app recovery, C2). The due flag is consumed
-  /// immediately so a re-entrant tick cannot double-run. Uploads never run in
-  /// the Workmanager isolate — this must be called on the main isolate only.
+  /// only after the rule passes eligibility, so an ineligible run (window,
+  /// metered, not charging, permission) never loses the flag — it stays
+  /// armed and is retried when conditions change. Uploads never run in the
+  /// Workmanager isolate — this must be called on the main isolate only.
   Future<BackupRunOutcome> consumeDueFlag({bool manual = false}) async {
     final due = _state.get(AppConstants.autoBackupDueKey, defaultValue: false) ??
         false;
@@ -142,7 +144,6 @@ class AutoBackupScheduler {
         label: 'Not due',
       );
     }
-    await _state.put(AppConstants.autoBackupDueKey, false);
 
     final rule = _firstEnabledRule();
     if (rule == null) {
@@ -166,6 +167,10 @@ class AutoBackupScheduler {
         label: verdict.label,
       );
     }
+
+    // Consume the due flag only when the rule is eligible and we are about
+    // to attempt a backup. Ineligible runs leave the flag armed for retry.
+    await _state.put(AppConstants.autoBackupDueKey, false);
 
     final collected = await _service.collectDueAssets(rule);
     if (collected.isFailure) {

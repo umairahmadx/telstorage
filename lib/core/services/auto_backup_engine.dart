@@ -361,6 +361,7 @@ List<FileRecord> selectRetentionDeletions({
 
 /// Injectable charging-state hook for [evaluateEligibility] (F1).
 ///
+/// Aliased as [PowerStateProvider] in `auto_backup_types.dart`.
 /// Defaults to unknown-is-charging; the worker must either back this with
 /// `battery_plus` or mark the UI toggle coming-soon (implement-or-defer).
 typedef ChargingStateProvider = Future<bool> Function();

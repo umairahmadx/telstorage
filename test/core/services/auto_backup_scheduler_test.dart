@@ -350,7 +350,8 @@ void main() {
       expect(outcome.status, BackupRunStatus.ineligible);
       expect(outcome.label, 'Waiting for charger');
       expect(bloc.enqueued, isEmpty);
-      expect(stateBox.get(AppConstants.autoBackupDueKey), isFalse);
+      // Flag stays armed on ineligible runs — retried when conditions change.
+      expect(stateBox.get(AppConstants.autoBackupDueKey), isTrue);
     });
 
     test('iOS temp paths create temporary UploadTasks (F3)', () async {
@@ -419,11 +420,20 @@ void main() {
       bloc.enqueueStatus = TransferStatus.waiting;
 
       final consuming = scheduler.consumeDueFlag();
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      // Wait for both tasks to be enqueued before updating them — a fixed
+      // delay is racy under full-suite load (tasks may not exist yet).
+      final okId = taskIdFor(ok);
+      final badId = taskIdFor(bad);
+      while (TransferQueueService.instance.tasks
+              .where((t) => t.id == okId || t.id == badId)
+              .length <
+          2) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
       TransferQueueService.instance
-          .updateTask(taskIdFor(ok), status: TransferStatus.completed);
+          .updateTask(okId, status: TransferStatus.completed);
       TransferQueueService.instance
-          .updateTask(taskIdFor(bad), status: TransferStatus.failed);
+          .updateTask(badId, status: TransferStatus.failed);
       final outcome = await consuming;
 
       expect(outcome.status, BackupRunStatus.ran);

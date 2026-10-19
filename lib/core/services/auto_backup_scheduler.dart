@@ -153,7 +153,11 @@ class AutoBackupScheduler {
       );
     }
 
-    final eligibility = await _service.isEligibleNow(rule);
+    // For manual "Back up now", bypass window/Wi-Fi/charging gates.
+    // Keep enabled + permission checks (F2).
+    final eligibility = manual
+        ? await _service.isEligibleNowManual(rule)
+        : await _service.isEligibleNow(rule);
     if (eligibility.isFailure) {
       return BackupRunOutcome(
         status: BackupRunStatus.failed,

@@ -78,7 +78,6 @@ class _FakeBackupService extends AutoBackupService {
   /// Constructs _FakeBackupService.
   _FakeBackupService({
     required this.eligibility,
-    this.manualEligibility,
     required this.plan,
     required Box<BackupLedgerEntry> ledgerBox,
   }) : super(ledgerBox: ledgerBox);

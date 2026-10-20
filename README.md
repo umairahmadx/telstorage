@@ -12,6 +12,7 @@
 - ⬇️ **Download files** with integrity verification (SHA-256)
 - 🎨 **Modern UI** with Material Design 3
 - 💾 **Local caching** with Hive for offline access
+- 📸 **Auto Backup** — Camera album backup to Telegram with scheduling, retention, and manual trigger
 
 ## Architecture
 
@@ -130,6 +131,42 @@ Use your email and password to login on subsequent launches.
 - **Delete:** Long press → Delete
 - **Download:** Tap file to download and view
 
+### Auto Backup (Camera Album)
+
+Automatically back up your camera photos/videos to Telegram storage.
+
+#### Enable & Configure
+1. Go to **Settings → Auto Backup**
+2. Toggle **Back up Camera album** ON
+3. Choose what to include: **Photos** / **Videos**
+4. Set **Daily window** (default: 02:00–05:00 AM)
+5. Toggle **Wi-Fi only** (default: ON — saves mobile data)
+6. Set **Retention** (keep last N files, 0 = keep all)
+
+#### How It Works
+- **Scheduled runs**: Every 15 min, the app checks if the daily window is active and (if Wi-Fi only) on unmetered network. Eligible runs upload new/changed assets.
+- **Manual "Back up now"**: Bypasses window/Wi-Fi/charging gates — runs immediately if backup is enabled and permission granted.
+- **Deduplication**: Uses MediaStore ID + file fingerprint (size + modified time) to avoid re-uploads.
+- **Backfill**: One-time upload of pre-existing photos (Settings → "Back up existing photos").
+- **Destination**: Files go to `root/Backup/Camera/` in your Telegram storage.
+- **Retention**: Keeps only the latest N backed-up files in the folder (configurable).
+
+#### Eligibility Gates (Automatic Runs Only)
+| Gate | Description |
+|------|-------------|
+| Enabled | Master toggle ON |
+| Permission | MediaStore access granted |
+| Daily window | Current time within configured window |
+| Wi-Fi only | Unmetered network (if enabled) |
+| Charging only | Device charging (advisory, not yet enforced) |
+
+> **Note:** "Back up now" only requires **Enabled + Permission** — it ignores window, Wi-Fi, and charging.
+
+#### Troubleshooting
+- **"Backup not eligible now"** → Outside window, on mobile data (Wi-Fi only), or not charging. Use "Back up now" to override.
+- **Permission denied** → Grant "Photos and videos" permission in system settings.
+- **Nothing uploading** → Check daily window, Wi-Fi, and that new photos exist since last run.
+
 ## Project Structure
 
 ```
@@ -143,7 +180,9 @@ lib/
 │   │   ├── app_metadata.dart    # .metadata.json model
 │   │   ├── file_record.dart     # Hive file model
 │   │   ├── folder_record.dart   # Hive folder model
-│   │   └── chunk_info.dart      # Chunk data model
+│   │   ├── chunk_info.dart      # Chunk data model
+│   │   ├── backup_rule.dart     # Auto-backup rule (Hive)
+│   │   └── backup_ledger_entry.dart # Backup fingerprint ledger
 │   ├── services/
 │   │   ├── auth_service.dart    # Login/register
 │   │   ├── telegram_service.dart # Telegram API
@@ -151,7 +190,12 @@ lib/
 │   │   ├── hive_service.dart    # Local cache
 │   │   ├── file_manager.dart    # File operations
 │   │   ├── upload_service.dart  # Upload pipeline
-│   │   └── download_service.dart # Download pipeline
+│   │   ├── download_service.dart # Download pipeline
+│   │   ├── auto_backup_engine.dart   # Pure eligibility/planning logic
+│   │   ├── auto_backup_service.dart  # Foreground scan/upload/retention
+│   │   ├── auto_backup_scheduler.dart # Workmanager bridge + "Back up now"
+│   │   ├── auto_backup_ledger.dart   # Ledger persistence
+│   │   └── auto_backup_types.dart    # Shared hooks/DTOs
 │   ├── routing/
 │   │   └── app_router.dart      # Navigation
 │   └── theme/
@@ -165,12 +209,17 @@ lib/
 │   ├── home/
 │   │   └── screens/
 │   │       └── home_screen.dart  # Dashboard
-│   └── browser/
-│       ├── screens/
-│       │   └── browser_screen.dart # File browser
-│       └── widgets/
-│           ├── file_tile.dart
-│           └── folder_tile.dart
+│   ├── browser/
+│   │   ├── screens/
+│   │   │   └── browser_screen.dart # File browser
+│   │   └── widgets/
+│   │       ├── file_tile.dart
+│   │       └── folder_tile.dart
+│   └── settings/
+│       └── screens/
+│           └── settings/
+│               └── backup/
+│                   └── backup_screen.dart  # Auto-backup settings UI
 └── shared/
     └── widgets/
         └── storage_ring.dart    # Storage indicator
@@ -268,6 +317,12 @@ Before pushing code or opening a pull request, run the following checks to ensur
 3. **Run Unit & Widget Tests**:
    ```bash
    flutter test
+   ```
+   Auto-backup specific tests:
+   ```bash
+   flutter test test/core/services/auto_backup_engine_test.dart
+   flutter test test/core/services/auto_backup_service_test.dart
+   flutter test test/core/services/auto_backup_scheduler_test.dart
    ```
 4. **Verify Android APK Build**:
    ```bash

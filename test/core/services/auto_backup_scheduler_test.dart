@@ -63,6 +63,9 @@ class _FakeBackupService extends AutoBackupService {
   /// Verdict returned by isEligibleNow.
   BackupEligibility eligibility;
 
+  /// Verdict returned by isEligibleNowManual (for manual "Back up now").
+  BackupEligibility? manualEligibility;
+
   /// Plan returned by collectDueAssets.
   BackupPlan plan;
 
@@ -75,6 +78,7 @@ class _FakeBackupService extends AutoBackupService {
   /// Constructs _FakeBackupService.
   _FakeBackupService({
     required this.eligibility,
+    this.manualEligibility,
     required this.plan,
     required Box<BackupLedgerEntry> ledgerBox,
   }) : super(ledgerBox: ledgerBox);
@@ -85,6 +89,13 @@ class _FakeBackupService extends AutoBackupService {
     DateTime? now,
   }) async =>
       Success(eligibility);
+
+  @override
+  Future<Result<BackupEligibility>> isEligibleNowManual(
+    BackupRule rule, {
+    DateTime? now,
+  }) async =>
+      Success(manualEligibility ?? eligibility);
 
   @override
   Future<Result<BackupCollectResult>> collectDueAssets(
@@ -328,6 +339,8 @@ void main() {
         ],
         adoptions: const [],
       );
+      // Manual run uses isEligibleNowManual — set it to ready
+      fakeService.manualEligibility = const BackupEligibility(BackupBlockReason.ready);
       await rulesBox.put('camera', cameraRule());
       final scheduler = buildScheduler();
 

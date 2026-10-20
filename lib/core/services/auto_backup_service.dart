@@ -125,6 +125,27 @@ class AutoBackupService {
     }
   }
 
+  /// Eligibility check for manual "Back up now" — bypasses window, Wi-Fi,
+  /// and charging gates. Keeps enabled + permission checks.
+  Future<Result<BackupEligibility>> isEligibleNowManual(
+    BackupRule rule, {
+    DateTime? now,
+  }) async {
+    try {
+      if (!rule.enabled) {
+        return const Success(BackupEligibility(BackupBlockReason.disabled));
+      }
+      if (!await _requestPermission()) {
+        return const Success(
+            BackupEligibility(BackupBlockReason.permissionDenied));
+      }
+      // Manual run: skip window, unmetered, charging checks.
+      return const Success(BackupEligibility(BackupBlockReason.ready));
+    } catch (e) {
+      return Failure(UnknownFailure('Eligibility check failed: $e', e));
+    }
+  }
+
   /// Scans the rule album, diffs against the ledger, plans one run.
   ///
   /// Gates on permission (F2: deny yields a Failure, never a crash).

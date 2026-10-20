@@ -68,7 +68,8 @@ class _BackupScreenState extends State<BackupScreen> {
       case BackupRunStatus.noRule:
         return 'No backup rule enabled. Turn on Camera album backup first.';
       case BackupRunStatus.ineligible:
-        return 'Backup not eligible now (window, charging, or Wi‑Fi).';
+        return 'Backup not eligible now (window, charging, or Wi‑Fi). '
+            'Use "Back up now" to run immediately.';
       // BackupRunStatus has noAssets covered by 'ran' (uploads may be empty).
       case BackupRunStatus.failed:
         return 'Backup failed: ${outcome.label}.';

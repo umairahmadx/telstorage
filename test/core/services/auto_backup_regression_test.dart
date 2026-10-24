@@ -31,7 +31,7 @@ import 'package:telstorage/core/errors/result.dart';
 /// Used in auto-backup dependency wiring tests.
 Future<int?> _diskSpacePlusWrapped() async {
   final free = await Future<double>.value(10.5);
-  return free?.toInt();
+  return free.toInt();
 }
 
 void main() {
@@ -67,7 +67,7 @@ void main() {
     await stateBox.clear();
     // clearAll() unconditionally clears filesBox and foldersBox.
     final _ = await Hive.openBox<FileRecord>(AppConstants.filesBox);
-    final foldersBox = await Hive.openBox<FolderRecord>(AppConstants.foldersBox);
+    await Hive.openBox<FolderRecord>(AppConstants.foldersBox);
   });
 
   tearDown(() async {
@@ -98,7 +98,7 @@ void main() {
         () async {
       FreeSpaceProvider diskSpacePlusWrapped = _diskSpacePlusWrapped;
       final free = await Future<double>.value(10.5);
-      return free?.toInt();
+      expect(await diskSpacePlusWrapped(), free.toInt());
 
       final service = AutoBackupService(
         ledgerBox: ledgerBox,

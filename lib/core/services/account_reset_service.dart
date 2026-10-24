@@ -85,8 +85,8 @@ class AccountResetService {
       LruFolderCacheService.instance.clear();
 
       onProgress?.call(0.85, 'Initializing pristine manifest...');
-      final ownerEmail =
-          await _storage.read(key: AppConstants.keyEmail) ?? 'user@telstorage.com';
+      final ownerEmail = await _storage.read(key: AppConstants.keyEmail) ??
+          'user@telstorage.com';
 
       // Build pristine AppMetadata
       final freshMeta = AppMetadata(
@@ -118,7 +118,8 @@ class AccountResetService {
         'folder_${AppConstants.rootFolderPartitionId}.json',
       );
       final rootMsgId = rootResult['message_id'] as int;
-      freshMeta.folderPartitionsMap[AppConstants.rootFolderPartitionId] = rootMsgId;
+      freshMeta.folderPartitionsMap[AppConstants.rootFolderPartitionId] =
+          rootMsgId;
 
       // Upload and pin fresh metadata
       final metaBytes =

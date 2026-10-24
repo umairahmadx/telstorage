@@ -26,7 +26,6 @@ import 'core/services/error_log_service.dart';
 import 'core/services/hive_service.dart';
 import 'core/services/theme_service.dart';
 
-
 /// Top-level callback dispatcher for Workmanager background sync execution.
 @pragma('vm:entry-point')
 void callbackDispatcher() {
@@ -67,10 +66,16 @@ void callbackDispatcher() {
           rulesBox: rulesBox,
           stateBox: stateBox,
         );
-        final armed = await scheduler.checkDueInBackground();
-        debugPrint("WorkManager: autoBackupCheck due=$armed");
-        await Hive.close();
-        return armed;
+        try {
+          final armed = await scheduler.checkDueInBackground();
+          debugPrint("WorkManager: autoBackupCheck due=$armed");
+          await Hive.close();
+          return true; // check completed successfully (armed or not)
+        } catch (e) {
+          debugPrint("WorkManager: autoBackupCheck failed: $e");
+          await Hive.close();
+          return false; // explicit failure → Workmanager retries with backoff
+        }
       }
 
       final pendingBox =
@@ -155,10 +160,8 @@ Future<void> main() async {
     AppConstants.autoBackupStateBox,
   );
 
-
   // Initialize ErrorLogService & Hive Box
   await ErrorLogService.instance.init();
-
 
   // Setup Global Error Handlers to record uncaught crashes
   FlutterError.onError = (FlutterErrorDetails details) {
@@ -199,4 +202,3 @@ Future<void> main() async {
 
   runApp(const TelStorageApp());
 }
-

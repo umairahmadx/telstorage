@@ -29,7 +29,10 @@ class _BackupScreenState extends State<BackupScreen> {
     if (Hive.isBoxOpen(AppConstants.backupRulesBox)) {
       _rulesBox = Hive.box<BackupRule>(AppConstants.backupRulesBox);
       if (_rulesBox!.get('camera') == null) {
-        _rulesBox!.put('camera', BackupRule(id: 'camera', albumName: 'Camera'));
+        _rulesBox!.put(
+            'camera',
+            BackupRule(
+                id: 'camera', albumName: 'Camera', createdAt: DateTime.now()));
       }
     }
   }

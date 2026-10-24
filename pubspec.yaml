@@ -55,6 +55,9 @@ dependencies:
   # Background task execution
   workmanager: ^0.10.7
 
+  # Free disk space probing for auto-backup pre-flight guard (E3)
+  disk_space_plus: ^0.2.6
+
   # Animations
   flutter_animate: ^4.5.0
 

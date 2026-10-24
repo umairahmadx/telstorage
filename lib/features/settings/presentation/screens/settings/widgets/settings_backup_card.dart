@@ -32,7 +32,10 @@ class _SettingsBackupCardState extends State<SettingsBackupCard> {
       _rulesBox = Hive.box<BackupRule>(AppConstants.backupRulesBox);
       // Seed the default Camera rule so the card always has a rule to toggle.
       if (_rulesBox!.get('camera') == null) {
-        _rulesBox!.put('camera', BackupRule(id: 'camera', albumName: 'Camera'));
+        _rulesBox!.put(
+            'camera',
+            BackupRule(
+                id: 'camera', albumName: 'Camera', createdAt: DateTime.now()));
       }
     }
   }

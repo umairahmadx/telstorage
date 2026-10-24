@@ -31,8 +31,11 @@ import 'video_stream_server.dart';
 import 'lru_folder_cache_service.dart';
 import 'telegram_rate_limiter.dart';
 import 'auto_backup_scheduler.dart';
+import 'auto_backup_service.dart';
 import 'auto_backup_types.dart';
 import 'account_reset_service.dart';
+import 'package:disk_space_plus/disk_space_plus.dart';
+import 'package:telstorage/core/utils/connectivity.dart';
 import '../../features/storage/data/repositories/storage_repository.dart';
 import 'upload_service_contract.dart';
 import 'download_service_contract.dart';
@@ -72,6 +75,7 @@ class ServiceLocator {
   late DownloadFileUseCase _downloadFileUseCase;
   late GenerateWebShareUseCase _generateWebShareUseCase;
   late AccountResetService _accountResetService;
+  late AutoBackupService _autoBackupService;
   late StorageReconciler _storageReconciler;
 
   // These are always available as they don't depend on user credentials for creation
@@ -82,7 +86,8 @@ class ServiceLocator {
   TelegramService get telegram => _telegram;
   HiveService get hive => _hive;
   MetadataService get metadata => _metadata;
-  MetadataSyncCoordinator get metadataSyncCoordinator => _metadataSyncCoordinator;
+  MetadataSyncCoordinator get metadataSyncCoordinator =>
+      _metadataSyncCoordinator;
   SyncService get syncService => _syncService;
   StorageReconciler get storageReconciler => _storageReconciler;
   AccountResetService get accountResetService => _accountResetService;
@@ -148,7 +153,8 @@ class ServiceLocator {
   }
 
   /// Injects metadata sync coordinator instance for test isolation.
-  void setMetadataSyncCoordinatorForTesting(MetadataSyncCoordinator coordinator) {
+  void setMetadataSyncCoordinatorForTesting(
+      MetadataSyncCoordinator coordinator) {
     _metadataSyncCoordinator = coordinator;
   }
 
@@ -160,12 +166,13 @@ class ServiceLocator {
   NavigationService get navigation => _navigation;
   TransferQueueService get transferQueue => _transferQueue;
   AppCacheManager get cacheManager => _cacheManager;
-  ImageViewerCacheService get imageViewerCache => ImageViewerCacheService.instance;
+  ImageViewerCacheService get imageViewerCache =>
+      ImageViewerCacheService.instance;
   VideoStreamServer get videoStreamServer => VideoStreamServer.instance;
   VideoChunkCacheManager get videoChunkCache => VideoChunkCacheManager.instance;
   ErrorLogService get errorLogService => ErrorLogService.instance;
   AutoBackupScheduler get autoBackupScheduler => AutoBackupScheduler.instance;
-
+  AutoBackupService get autoBackupService => _autoBackupService;
 
   Future<void>? _initFuture;
 
@@ -207,8 +214,8 @@ class ServiceLocator {
       _downloadService = DownloadService(_telegram);
       _downloadQueue =
           DownloadQueueService(_downloadService, AppConstants.downloadsBox);
-      _fileManager =
-          FileManagerService(_metadata, _telegram, _hive, _metadataSyncCoordinator);
+      _fileManager = FileManagerService(
+          _metadata, _telegram, _hive, _metadataSyncCoordinator);
       _syncQueue = SyncQueueService(_fileManager);
       _storageRepository = StorageRepository(_hive, _fileManager, _metadata);
       _thumbnailRepository = ThumbnailRepository(_telegram);
@@ -220,6 +227,19 @@ class ServiceLocator {
         telegram: _telegram,
         metadata: _metadata,
         hive: _hive,
+      );
+
+      // AutoBackupService wired with production hooks. Free-space probe is
+      // backed by disk_space_plus; null (unknown) fails closed in the service
+      // (E3) so a backup never proceeds when free space cannot be determined.
+      _autoBackupService = AutoBackupService(
+        hive: _hive,
+        fileManager: _fileManager,
+        isUnmetered: Connectivity.isUnmetered,
+        freeSpaceBytes: () async {
+          final free = await DiskSpacePlus().getFreeDiskSpace;
+          return free?.toInt();
+        },
       );
 
       await NotificationService.instance.init();
@@ -257,7 +277,7 @@ class ServiceLocator {
   }
 
   /// Call on logout to clear all service state.
-  void reset() {
+  Future<void> reset() async {
     AppLogger.i('Resetting ServiceLocator', tag: 'ServiceLocator');
     LruFolderCacheService.instance.clear();
     TelegramRateLimiter.instance.reset();
@@ -266,6 +286,9 @@ class ServiceLocator {
     // A12: cancel the periodic auto-backup task and clear the due flag so a
     // new account never inherits the previous account's Backup/ folder ids.
     unawaited(AutoBackupScheduler.instance.teardown());
+    // Clear backup rules, ledger, and state boxes so a new account never
+    // inherits the previous account's backup state.
+    await _hive.clearAll();
     unawaited(VideoStreamServer.instance.stop());
     if (_initialized) {
       _thumbnailRepository.clearMemoryCache();

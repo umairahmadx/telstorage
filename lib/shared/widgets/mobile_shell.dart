@@ -3,10 +3,15 @@
  * Description: Bottom navigation shell container hosting persistent tab views (Home, Files, Upload, Downloads, Settings).
  */
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:path/path.dart' as p;
+import 'package:file_share_intent/file_share_intent.dart';
+import 'package:uuid/uuid.dart';
 import '../../core/utils/app_logger.dart';
 import '../../core/utils/file_opener_helper.dart';
 
@@ -21,6 +26,10 @@ import '../../features/downloads/presentation/screens/downloads/downloads_screen
 import '../../features/home/presentation/screens/home/home_screen.dart';
 import '../../features/settings/presentation/screens/settings/settings_screen.dart';
 import '../../features/upload/presentation/viewmodels/upload_file_picker_helper.dart';
+import '../../features/upload/presentation/viewmodels/incoming_share_destination_sheet.dart';
+import '../../features/upload/presentation/viewmodels/incoming_share_service.dart';
+import '../../features/upload/presentation/viewmodels/incoming_share_file_stub.dart'
+    if (dart.library.io) '../../features/upload/presentation/viewmodels/incoming_share_file_native.dart';
 import '../../features/upload/presentation/viewmodels/upload_view_model.dart';
 import 'app_drawer.dart';
 import 'mobile_shell/mobile_add_action_sheet.dart';
@@ -51,6 +60,7 @@ class MobileShellState extends State<MobileShell> {
 
   /// Scaffold key for opening navigation drawer.
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  bool _handlingIncomingShare = false;
 
   @override
   void initState() {
@@ -59,6 +69,7 @@ class MobileShellState extends State<MobileShell> {
     ServiceLocator.instance.navigation.intentNotifier
         .addListener(_onIntentChanged);
     NotificationService.instance.onNotificationTap = handleNotificationResponse;
+    IncomingShareService.instance.addListener(_onIncomingShareChanged);
 
     // Check if app was opened directly from a notification tap
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -67,6 +78,7 @@ class MobileShellState extends State<MobileShell> {
       if (launchResponse != null && mounted) {
         handleNotificationResponse(launchResponse);
       }
+      if (mounted) unawaited(_handleIncomingShare());
     });
   }
 
@@ -74,7 +86,139 @@ class MobileShellState extends State<MobileShell> {
   void dispose() {
     ServiceLocator.instance.navigation.intentNotifier
         .removeListener(_onIntentChanged);
+    IncomingShareService.instance.removeListener(_onIncomingShareChanged);
     super.dispose();
+  }
+
+  void _onIncomingShareChanged() {
+    if (mounted) unawaited(_handleIncomingShare());
+  }
+
+  Future<void> _handleIncomingShare() async {
+    if (!mounted ||
+        _handlingIncomingShare ||
+        !IncomingShareService.instance.hasPending) {
+      return;
+    }
+    _handlingIncomingShare = true;
+    final sharedFiles = IncomingShareService.instance.pendingFiles;
+    final validFiles = <SharedMediaFile>[];
+
+    try {
+      for (final sharedFile in sharedFiles) {
+        final path = IncomingShareService.localPathFor(sharedFile);
+        if (sharedFile.type == SharedMediaType.text ||
+            sharedFile.type == SharedMediaType.url) {
+          continue;
+        }
+        try {
+          if (await incomingShareFileExists(path)) validFiles.add(sharedFile);
+        } catch (error) {
+          AppLogger.w('Cannot access incoming file: $error',
+              tag: 'IncomingShare');
+        }
+      }
+
+      if (validFiles.isEmpty) {
+        await IncomingShareService.instance.complete(sharedFiles);
+        await IncomingShareService.deleteTemporaryFiles(sharedFiles);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text('This share did not contain a readable file.')),
+          );
+        }
+        return;
+      }
+
+      if (!mounted) {
+        await IncomingShareService.instance.complete(sharedFiles);
+        await IncomingShareService.deleteTemporaryFiles(sharedFiles);
+        return;
+      }
+
+      final folders = ServiceLocator.instance.storageRepository.currentFolders;
+      final destination = await IncomingShareDestinationSheet.show(
+        context,
+        fileNames: validFiles
+            .map((file) => p.basename(IncomingShareService.localPathFor(file)))
+            .toList(),
+        folders: folders,
+      );
+
+      if (destination == null) {
+        await IncomingShareService.instance.complete(sharedFiles);
+        await IncomingShareService.deleteTemporaryFiles(sharedFiles);
+        return;
+      }
+
+      if (!mounted || !ServiceLocator.instance.isInitialized) {
+        await IncomingShareService.instance.complete(sharedFiles);
+        await IncomingShareService.deleteTemporaryFiles(sharedFiles);
+        return;
+      }
+
+      final tasks = <UploadTask>[];
+      for (final file in validFiles) {
+        final path = IncomingShareService.localPathFor(file);
+        try {
+          final size = await incomingShareFileSize(path);
+          tasks.add(UploadTask(
+            id: const Uuid().v4(),
+            path: path,
+            name: p.basename(path),
+            size: size,
+            folderId: destination.folderId,
+            isTemporaryCacheFile: true,
+          ));
+        } catch (error) {
+          AppLogger.w('Cannot queue incoming file $path: $error',
+              tag: 'IncomingShare');
+        }
+      }
+
+      await IncomingShareService.instance.complete(sharedFiles);
+      for (final file
+          in sharedFiles.where((file) => !validFiles.contains(file))) {
+        await IncomingShareService.deleteTemporaryFiles([file]);
+      }
+
+      if (!mounted || !ServiceLocator.instance.isInitialized) {
+        await IncomingShareService.deleteTemporaryFiles(validFiles);
+        return;
+      }
+
+      if (tasks.isEmpty) {
+        await IncomingShareService.deleteTemporaryFiles(validFiles);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text('The shared file could not be queued.')),
+          );
+        }
+        return;
+      }
+
+      context.read<UploadBloc>().add(AddUploads(tasks));
+      ServiceLocator.instance.navigation
+          .navigateTo(AppDestination.transferUploads);
+    } catch (error, stackTrace) {
+      AppLogger.e('Incoming share flow failed: $error',
+          tag: 'IncomingShare', error: error, stackTrace: stackTrace);
+      await IncomingShareService.instance.complete(sharedFiles);
+      await IncomingShareService.deleteTemporaryFiles(sharedFiles);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Could not prepare the shared files for upload.')),
+        );
+      }
+    } finally {
+      _handlingIncomingShare = false;
+      if (mounted && IncomingShareService.instance.hasPending) {
+        unawaited(_handleIncomingShare());
+      }
+    }
   }
 
   /// Synchronizes active tab with navigation intent changes.

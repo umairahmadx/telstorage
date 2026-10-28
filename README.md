@@ -26,6 +26,12 @@ Telegram Bot API (Cloud Storage)
 Private Telegram Channel (File Storage)
 ```
 
+### Deterministic architecture guardrails
+
+Run `python scripts/architecture_guardrails.py` to enforce import boundaries and reject unresolved Dart merge markers. The allowed legacy boundary crossings are listed with reasons in `scripts/architecture_allowlist.json`; new crossings fail the check, and resolved exceptions must be removed. Run the guardrail's unit tests with `python -m unittest discover -s scripts -p 'test_*.py' -v`. CI runs both checks before Flutter analysis and tests.
+
+The incoming-share upload behavior and its remaining iOS setup requirements are documented in [`architecture/share_to_upload_flow.md`](architecture/share_to_upload_flow.md).
+
 ## Prerequisites
 
 Before you begin, you'll need:

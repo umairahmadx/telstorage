@@ -25,6 +25,7 @@ import 'core/services/auto_backup_scheduler.dart';
 import 'core/services/error_log_service.dart';
 import 'core/services/hive_service.dart';
 import 'core/services/theme_service.dart';
+import 'features/upload/presentation/viewmodels/incoming_share_service.dart';
 
 /// Top-level callback dispatcher for Workmanager background sync execution.
 @pragma('vm:entry-point')
@@ -199,6 +200,10 @@ Future<void> main() async {
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
+
+  // Start listening before the first route so cold-start shares survive the
+  // splash/login flow and can be handled after the upload services are ready.
+  await IncomingShareService.instance.initialize();
 
   runApp(const TelStorageApp());
 }

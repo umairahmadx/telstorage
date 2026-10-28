@@ -30,6 +30,11 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
+      - name: Setup Python for architecture guardrails
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Setup Flutter SDK
         uses: subosito/flutter-action@v2
         with:
@@ -72,6 +77,11 @@ jobs:
         run: flutter pub get
 
       # ── Quality gates ──────────────────────────────────────────────────────
+      - name: Run deterministic architecture guardrails
+        run: |
+          python scripts/architecture_guardrails.py
+          python -m unittest discover -s scripts -p 'test_*.py' -v
+
       - name: Run Static Analysis
         run: flutter analyze
 

@@ -45,9 +45,9 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
-	<!-- Photo library access for saving media downloads -->
+	<!-- Photo library read access for device media backup -->
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>TelStorage needs access to save downloaded media files to your photo library.</string>
+	<string>TelStorage needs access to your photo library to back up photos and videos to your TelStorage storage.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>TelStorage needs access to save downloaded images and videos to your photo library.</string>
 	<!-- File sharing — makes Documents folder visible in iOS Files app -->

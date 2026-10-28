@@ -6,6 +6,7 @@
  */
 
 import 'package:hive/hive.dart';
+import 'package:flutter/foundation.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:workmanager/workmanager.dart';
 
@@ -21,6 +22,8 @@ import 'package:telstorage/core/utils/app_logger.dart';
 import 'package:telstorage/core/utils/connectivity.dart';
 import 'package:telstorage/features/upload/presentation/viewmodels/upload_view_model.dart';
 import 'package:telstorage/shared/widgets/device_file_picker/device_media_scanner.dart';
+
+part 'auto_backup_scheduler_run.dart';
 
 /// Schedules and runs camera-album auto-backup runs.
 ///
@@ -51,6 +54,7 @@ class AutoBackupScheduler {
   final UnmeteredProvider _isUnmetered;
   final Duration _pollInterval;
   final Duration _watchTimeout;
+  bool _runInProgress = false;
 
   /// Constructs AutoBackupScheduler with injectable seams for tests.
   AutoBackupScheduler({
@@ -88,8 +92,24 @@ class AutoBackupScheduler {
   /// Attaches the UploadBloc pipeline (the bloc lives in the widget tree).
   void attachUploadBloc(UploadBloc bloc) => _bloc = bloc;
 
+  /// Supplies the fully configured foreground service after account services
+  /// are initialized. The Workmanager isolate uses its own Hive-only instance.
+  void configureService(AutoBackupService service) {
+    // The production singleton is attached before scheduled/manual runs.
+    // Test schedulers may continue using their constructor-injected service.
+    if (identical(this, instance)) _configuredService = service;
+  }
+
+  AutoBackupService? _configuredService;
+  AutoBackupService get _activeService => _configuredService ?? _service;
+
+  /// The service currently selected by this scheduler.
+  @visibleForTesting
+  AutoBackupService get activeServiceForTesting => _activeService;
+
   /// Whether an UploadBloc pipeline is attached.
   bool get hasUploadBloc => _bloc != null;
+
   /// Registers the 15-minute Workmanager periodic due-check.
   Future<void> registerPeriodic() async {
     await _registerTask(periodicTaskName);
@@ -125,218 +145,6 @@ class AutoBackupScheduler {
       AppLogger.w('Backup due-check failed: $e', tag: 'AutoBackupScheduler');
       return false;
     }
-  }
-
-  /// Foreground run: consume the due flag, enqueue, watermark completions.
-  ///
-  /// Also the "Back up now" entry point ([manual]) and the app
-  /// start/resume hook (killed-app recovery, C2). The due flag is consumed
-  /// only after the rule passes eligibility, so an ineligible run (window,
-  /// metered, not charging, permission) never loses the flag — it stays
-  /// armed and is retried when conditions change. Uploads never run in the
-  /// Workmanager isolate — this must be called on the main isolate only.
-  Future<BackupRunOutcome> consumeDueFlag({bool manual = false}) async {
-    final due = _state.get(AppConstants.autoBackupDueKey, defaultValue: false) ??
-        false;
-    if (!due && !manual) {
-      return const BackupRunOutcome(
-        status: BackupRunStatus.notDue,
-        label: 'Not due',
-      );
-    }
-
-    final rule = _firstEnabledRule();
-    if (rule == null) {
-      return const BackupRunOutcome(
-        status: BackupRunStatus.noRule,
-        label: 'Off',
-      );
-    }
-
-    // For manual "Back up now", bypass window/Wi-Fi/charging gates.
-    // Keep enabled + permission checks (F2).
-    final eligibility = manual
-        ? await _service.isEligibleNowManual(rule)
-        : await _service.isEligibleNow(rule);
-    if (eligibility.isFailure) {
-      return BackupRunOutcome(
-        status: BackupRunStatus.failed,
-        label: eligibility.failureOrNull?.message ?? 'Eligibility failed',
-      );
-    }
-    final verdict = eligibility.dataOrNull!;
-    if (!verdict.isEligible) {
-      return BackupRunOutcome(
-        status: BackupRunStatus.ineligible,
-        label: verdict.label,
-      );
-    }
-
-    // Consume the due flag only when the rule is eligible and we are about
-    // to attempt a backup. Ineligible runs leave the flag armed for retry.
-    await _state.put(AppConstants.autoBackupDueKey, false);
-
-    final collected = await _service.collectDueAssets(rule);
-    if (collected.isFailure) {
-      return BackupRunOutcome(
-        status: BackupRunStatus.failed,
-        label: collected.failureOrNull?.message ?? 'Scan failed',
-      );
-    }
-    final result = collected.dataOrNull!;
-    final uploads = result.uploads;
-    if (uploads.isEmpty) {
-      return BackupRunOutcome(
-        status: BackupRunStatus.ran,
-        label: 'Already up to date',
-        skippedUnresolvable: result.skippedUnresolvable,
-      );
-    }
-
-    final pathResult = await _service.ensureBackupPath(
-      rule.albumName,
-      rule: rule,
-    );
-    if (pathResult.isFailure) {
-      return BackupRunOutcome(
-        status: BackupRunStatus.failed,
-        label: pathResult.failureOrNull?.message ?? 'Path setup failed',
-      );
-    }
-    final albumFolderId = pathResult.dataOrNull!.albumFolderId;
-
-    final freeSpace = await _service.ensureFreeSpaceFor(
-      uploads.map((u) => u.asset).toList(),
-    );
-    if (freeSpace.isFailure) {
-      return BackupRunOutcome(
-        status: BackupRunStatus.failed,
-        label: freeSpace.failureOrNull?.message ?? 'Low storage',
-      );
-    }
-
-    final planned = <String, BackupUploadItem>{};
-    final tasks = <UploadTask>[];
-    for (final upload in uploads) {
-      final asset = upload.asset;
-      final taskId = '$taskIdPrefix${asset.assetId}:${asset.fingerprint}';
-      if (_isActive(taskId)) continue;
-      final resolved = await _resolvePath(asset);
-      if (resolved == null) continue;
-      tasks.add(UploadTask(
-        id: taskId,
-        path: resolved.path,
-        name: upload.destinationName,
-        size: asset.sizeBytes,
-        folderId: albumFolderId,
-        isTemporaryCacheFile: resolved.isTemporary,
-      ));
-      planned[taskId] = upload;
-    }
-    if (tasks.isEmpty) {
-      return BackupRunOutcome(
-        status: BackupRunStatus.ran,
-        label: 'Already up to date',
-        skippedUnresolvable: result.skippedUnresolvable,
-      );
-    }
-
-    return _enqueueAndWatch(
-      rule: rule,
-      tasks: tasks,
-      planned: planned,
-      albumFolderId: albumFolderId,
-      skippedUnresolvable: result.skippedUnresolvable,
-    );
-  }
-
-  /// Enqueues tasks and polls until all reach a terminal state.
-  ///
-  /// Advances the watermark only for tasks that reach [TransferStatus]
-  /// .completed (A9); failures and mid-run cancellations (C6) never write a
-  /// ledger row. A rule disabled mid-run cancels still-queued tasks.
-  Future<BackupRunOutcome> _enqueueAndWatch({
-    required BackupRule rule,
-    required List<UploadTask> tasks,
-    required Map<String, BackupUploadItem> planned,
-    required String albumFolderId,
-    required int skippedUnresolvable,
-  }) async {
-    final bloc = _bloc;
-    if (bloc == null) {
-      return const BackupRunOutcome(
-        status: BackupRunStatus.failed,
-        label: 'Upload pipeline unavailable',
-      );
-    }
-    bloc.add(AddUploads(tasks));
-
-    final pending = planned.keys.toSet();
-    final completedIds = <String>[];
-    final deadline = DateTime.now().add(_watchTimeout);
-
-    while (pending.isNotEmpty && DateTime.now().isBefore(deadline)) {
-      if (!rule.enabled) {
-        for (final id in pending) {
-          bloc.add(CancelUploadTask(id));
-        }
-        pending.clear();
-        break;
-      }
-      for (final id in pending.toList()) {
-        final task = _findTask(id);
-        if (task == null) continue;
-        if (task.status == TransferStatus.completed) {
-          completedIds.add(id);
-          pending.remove(id);
-        } else if (task.status == TransferStatus.failed ||
-            task.status == TransferStatus.cancelled) {
-          pending.remove(id);
-        }
-      }
-      if (pending.isNotEmpty) {
-        await Future<void>.delayed(_pollInterval);
-      }
-    }
-
-    var photos = 0;
-    var videos = 0;
-    if (completedIds.isNotEmpty) {
-      final destIds = <String, String>{
-        for (final id in completedIds) planned[id]!.asset.assetId: id,
-      };
-      final completedUploads = completedIds.map((id) => planned[id]!).toList();
-      await _service.advanceWatermark(
-        rule: rule,
-        uploads: completedUploads,
-        destFileIdsByAssetId: destIds,
-        destFolderId: albumFolderId,
-      );
-      for (final upload in completedUploads) {
-        if (upload.asset.isVideo) {
-          videos++;
-        } else {
-          photos++;
-        }
-      }
-    }
-
-    await _service.enforceRetention(rule);
-
-    if (photos + videos > 0) {
-      await _notify(
-        'Backup complete',
-        'Backed up $photos photos, $videos videos',
-      );
-    }
-
-    return BackupRunOutcome(
-      status: BackupRunStatus.ran,
-      label: 'Backed up $photos photos, $videos videos',
-      uploadedPhotos: photos,
-      uploadedVideos: videos,
-      skippedUnresolvable: skippedUnresolvable,
-    );
   }
 
   /// First enabled rule, or null when none is enabled.
@@ -404,4 +212,3 @@ class AutoBackupScheduler {
     );
   }
 }
-

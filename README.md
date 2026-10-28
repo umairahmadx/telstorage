@@ -145,9 +145,9 @@ Automatically back up your camera photos/videos to Telegram storage.
 
 #### How It Works
 - **Scheduled runs**: Every 15 min, the app checks if the daily window is active and (if Wi-Fi only) on unmetered network. Eligible runs upload new/changed assets.
-- **Manual "Back up now"**: Bypasses window/Wi-Fi/charging gates — runs immediately if backup is enabled and permission granted.
+- **Manual backup**: The single action is labelled **Back up existing photos** until the initial backfill finishes, then **Back up now**. It requests photo and video access when tapped and bypasses window/Wi-Fi/charging gates.
 - **Deduplication**: Uses MediaStore ID + file fingerprint (size + modified time) to avoid re-uploads.
-- **Backfill**: One-time upload of pre-existing photos (Settings → "Back up existing photos").
+- **Backfill**: The same action uploads pre-existing photos and videos in bounded batches. It remains available until every batch completes.
 - **Destination**: Files go to `root/Backup/Camera/` in your Telegram storage.
 - **Retention**: Keeps only the latest N backed-up files in the folder (configurable).
 
@@ -155,16 +155,16 @@ Automatically back up your camera photos/videos to Telegram storage.
 | Gate | Description |
 |------|-------------|
 | Enabled | Master toggle ON |
-| Permission | MediaStore access granted |
+| Permission | MediaStore access granted (requested from the manual backup action; scheduled runs never prompt) |
 | Daily window | Current time within configured window |
 | Wi-Fi only | Unmetered network (if enabled) |
 | Charging only | Device charging (advisory, not yet enforced) |
 
-> **Note:** "Back up now" only requires **Enabled + Permission** — it ignores window, Wi-Fi, and charging.
+> **Note:** The manual backup action only requires **Enabled + Permission** — it ignores window, Wi-Fi, and charging. Scheduled runs check existing permission and stay pending until access is granted.
 
 #### Troubleshooting
 - **"Backup not eligible now"** → Outside window, on mobile data (Wi-Fi only), or not charging. Use "Back up now" to override.
-- **Permission denied** → Grant "Photos and videos" permission in system settings.
+- **Permission denied** → Tap the manual backup action to request access, or grant "Photos and videos" in system settings if access was previously denied.
 - **Nothing uploading** → Check daily window, Wi-Fi, and that new photos exist since last run.
 
 ## Project Structure

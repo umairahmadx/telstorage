@@ -22,6 +22,7 @@ class BackupScreen extends StatefulWidget {
 
 class _BackupScreenState extends State<BackupScreen> {
   Box<BackupRule>? _rulesBox;
+  bool _isBackingUp = false;
 
   @override
   void initState() {
@@ -47,10 +48,16 @@ class _BackupScreenState extends State<BackupScreen> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _backupNow() async {
-    final outcome =
-        await AutoBackupScheduler.instance.consumeDueFlag(manual: true);
+  Future<void> _backupNow(BackupRule rule) async {
+    if (_isBackingUp) return;
+    setState(() => _isBackingUp = true);
+    final isBackfill = !rule.backfillDone;
+    final outcome = await AutoBackupScheduler.instance.consumeDueFlag(
+      manual: true,
+      backfill: isBackfill,
+    );
     if (!mounted) return;
+    setState(() => _isBackingUp = false);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(_outcomeMessage(outcome)),
@@ -65,12 +72,27 @@ class _BackupScreenState extends State<BackupScreen> {
   String _outcomeMessage(BackupRunOutcome outcome) {
     switch (outcome.status) {
       case BackupRunStatus.ran:
+        if (outcome.needsRetry && !(_rule?.backfillDone ?? true)) {
+          return 'Backup batch finished. Tap again to continue backing up existing media.';
+        }
+        if (outcome.needsRetry) {
+          return 'Some backup items need attention. Tap again to retry.';
+        }
+        if (outcome.backfillComplete) {
+          return 'Existing photos and videos have been backed up.';
+        }
+        if (!(_rule?.backfillDone ?? true)) {
+          return 'Backup batch finished. Tap again to continue backing up existing media.';
+        }
         return 'Backup started — continues in the background.';
       case BackupRunStatus.notDue:
         return 'Backup not due yet.';
       case BackupRunStatus.noRule:
         return 'No backup rule enabled. Turn on Camera album backup first.';
       case BackupRunStatus.ineligible:
+        if (outcome.label == 'Permission needed') {
+          return 'Allow access to photos and videos to run the backup.';
+        }
         return 'Backup not eligible now (window, charging, or Wi‑Fi). '
             'Use "Back up now" to run immediately.';
       // BackupRunStatus has noAssets covered by 'ran' (uploads may be empty).
@@ -130,7 +152,7 @@ class _BackupScreenState extends State<BackupScreen> {
                 _destinationCard(colors),
                 const SizedBox(height: 24),
               ],
-              _backupNowButton(colors, rule.enabled),
+              _backupNowButton(colors, rule),
             ],
           );
         },
@@ -306,7 +328,7 @@ class _BackupScreenState extends State<BackupScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Back up existing photos',
+          Text('Existing media backfill',
               style: TextStyle(
                   color: colors.textPrimary,
                   fontSize: 15,
@@ -318,16 +340,6 @@ class _BackupScreenState extends State<BackupScreen> {
                 : 'One-time upload of photos taken before enabling backup. '
                     'Large libraries upload slowly to avoid rate limits.',
             style: TextStyle(color: colors.textSecondary, fontSize: 12),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: rule.backfillDone
-                ? null
-                : () async {
-                    await _mutate((r) => r.backfillDone = true);
-                    await _backupNow();
-                  },
-            child: const Text('Back up now (one time)'),
           ),
         ],
       ),
@@ -359,15 +371,19 @@ class _BackupScreenState extends State<BackupScreen> {
     );
   }
 
-  Widget _backupNowButton(AppColorsExtension colors, bool enabled) {
+  Widget _backupNowButton(AppColorsExtension colors, BackupRule rule) {
     return ElevatedButton(
-      onPressed: enabled ? _backupNow : null,
+      onPressed: rule.enabled && !_isBackingUp ? () => _backupNow(rule) : null,
       style: ElevatedButton.styleFrom(
         backgroundColor: colors.brandPrimary,
         foregroundColor: colors.bgPrimary,
         padding: const EdgeInsets.symmetric(vertical: 16),
       ),
-      child: const Text('Back up now'),
+      child: Text(_isBackingUp
+          ? 'Preparing backup…'
+          : rule.backfillDone
+              ? 'Back up now'
+              : 'Back up existing photos'),
     );
   }
 }

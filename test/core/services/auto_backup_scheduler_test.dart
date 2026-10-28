@@ -19,6 +19,7 @@ import 'package:telstorage/core/services/auto_backup_engine.dart';
 import 'package:telstorage/core/services/auto_backup_scheduler.dart';
 import 'package:telstorage/core/services/auto_backup_service.dart';
 import 'package:telstorage/core/services/auto_backup_types.dart';
+import 'package:telstorage/core/services/error_log_service.dart';
 import 'package:telstorage/core/services/transfer_queue_service.dart';
 import 'package:telstorage/features/upload/presentation/viewmodels/upload_view_model.dart';
 
@@ -68,6 +69,8 @@ class _FakeBackupService extends AutoBackupService {
 
   /// Plan returned by collectDueAssets.
   BackupPlan plan;
+  bool lastIncludeBackfill = false;
+  bool failCollection = false;
 
   /// destFileIdsByAssetId map of every advanceWatermark call, in order.
   final List<Map<String, String>> watermarkCalls = [];
@@ -101,8 +104,14 @@ class _FakeBackupService extends AutoBackupService {
     BackupRule rule, {
     int maxItems = AutoBackupService.defaultMaxItems,
     int maxBytes = AutoBackupService.defaultMaxBytes,
-  }) async =>
-      Success(BackupCollectResult(plan: plan));
+    bool includeBackfill = false,
+  }) async {
+    lastIncludeBackfill = includeBackfill;
+    if (failCollection) {
+      return const Failure(UnknownFailure('Backup scan failed'));
+    }
+    return Success(BackupCollectResult(plan: plan));
+  }
 
   @override
   Future<Result<BackupPath>> ensureBackupPath(
@@ -200,6 +209,7 @@ void main() {
       );
 
   setUp(() async {
+    ErrorLogService.resetInstance();
     tempDir = await Directory.systemTemp.createTemp('backup_sched_');
     Hive.init(tempDir.path);
     if (!Hive.isAdapterRegistered(0)) {
@@ -241,6 +251,7 @@ void main() {
   tearDown(() async {
     TransferQueueService.instance.clearAll();
     await bloc.close();
+    ErrorLogService.resetInstance();
     await Hive.close();
     try {
       await tempDir.delete(recursive: true);
@@ -305,8 +316,8 @@ void main() {
 
       expect(outcome.status, BackupRunStatus.ran);
       expect(bloc.enqueued, hasLength(2));
-      expect(bloc.enqueued.map((t) => t.id),
-          [taskIdFor(photo), taskIdFor(video)]);
+      expect(
+          bloc.enqueued.map((t) => t.id), [taskIdFor(photo), taskIdFor(video)]);
       expect(bloc.enqueued.every((t) => t.folderId == 'album-1'), isTrue);
       expect(fakeService.watermarkCalls, hasLength(1));
       expect(fakeService.watermarkCalls.single, {
@@ -339,7 +350,8 @@ void main() {
         adoptions: const [],
       );
       // Manual run uses isEligibleNowManual — set it to ready
-      fakeService.manualEligibility = const BackupEligibility(BackupBlockReason.ready);
+      fakeService.manualEligibility =
+          const BackupEligibility(BackupBlockReason.ready);
       await rulesBox.put('camera', cameraRule());
       final scheduler = buildScheduler();
 
@@ -348,6 +360,62 @@ void main() {
       expect(outcome.status, BackupRunStatus.ran);
       expect(bloc.enqueued, hasLength(1));
       expect(bloc.enqueued.single.id, taskIdFor(photo));
+    });
+
+    test('manual backfill stays pending when a bounded batch is capped',
+        () async {
+      fakeService.plan = const BackupPlan(
+        uploads: [],
+        adoptions: [],
+        capped: true,
+      );
+      final rule = cameraRule()..backfillDone = false;
+      await rulesBox.put('camera', rule);
+      final scheduler = buildScheduler();
+
+      final outcome = await scheduler.consumeDueFlag(
+        manual: true,
+        backfill: true,
+      );
+
+      expect(fakeService.lastIncludeBackfill, isTrue);
+      expect(outcome.backfillComplete, isFalse);
+      expect(rulesBox.get('camera')!.backfillDone, isFalse);
+    });
+
+    test('manual backfill is marked complete only after a successful pass',
+        () async {
+      final rule = cameraRule()..backfillDone = false;
+      await rulesBox.put('camera', rule);
+      final scheduler = buildScheduler();
+
+      final outcome = await scheduler.consumeDueFlag(
+        manual: true,
+        backfill: true,
+      );
+
+      expect(outcome.backfillComplete, isTrue);
+      expect(rulesBox.get('camera')!.backfillDone, isTrue);
+    });
+
+    test('backup outcomes are persisted in diagnostic logs', () async {
+      final logBox = await Hive.openBox(AppConstants.errorLogsBox);
+      ErrorLogService.withBox(logBox);
+      await rulesBox.put('camera', cameraRule());
+      final scheduler = buildScheduler();
+
+      final outcome = await scheduler.consumeDueFlag(manual: true);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(outcome.status, BackupRunStatus.ran);
+      expect(
+        logBox.values.whereType<Map>().any(
+              (record) =>
+                  record['tag'] == 'AutoBackup' &&
+                  '${record['message']}'.contains('Backup run result=ran'),
+            ),
+        isTrue,
+      );
     });
 
     test('ineligible verdict (F1 charging) enqueues nothing', () async {
@@ -363,6 +431,18 @@ void main() {
       expect(outcome.label, 'Waiting for charger');
       expect(bloc.enqueued, isEmpty);
       // Flag stays armed on ineligible runs — retried when conditions change.
+      expect(stateBox.get(AppConstants.autoBackupDueKey), isTrue);
+    });
+
+    test('failed scheduled attempt keeps the due flag for retry', () async {
+      await rulesBox.put('camera', cameraRule());
+      await stateBox.put(AppConstants.autoBackupDueKey, true);
+      fakeService.failCollection = true;
+      final scheduler = buildScheduler();
+
+      final outcome = await scheduler.consumeDueFlag();
+
+      expect(outcome.status, BackupRunStatus.failed);
       expect(stateBox.get(AppConstants.autoBackupDueKey), isTrue);
     });
 
@@ -502,4 +582,3 @@ void main() {
     });
   });
 }
-

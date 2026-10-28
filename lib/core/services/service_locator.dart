@@ -32,7 +32,6 @@ import 'lru_folder_cache_service.dart';
 import 'telegram_rate_limiter.dart';
 import 'auto_backup_scheduler.dart';
 import 'auto_backup_service.dart';
-import 'auto_backup_types.dart';
 import 'account_reset_service.dart';
 import 'package:disk_space_plus/disk_space_plus.dart';
 import 'package:telstorage/core/utils/connectivity.dart';
@@ -241,6 +240,7 @@ class ServiceLocator {
           return free?.toInt();
         },
       );
+      AutoBackupScheduler.instance.configureService(_autoBackupService);
 
       await NotificationService.instance.init();
       await NotificationService.instance.requestPermissions();
@@ -252,20 +252,9 @@ class ServiceLocator {
       // Process pending actions queue in the background
       _syncQueue.processQueue();
 
-      // Register the auto-backup periodic due-check and consume any flag
-      // armed while the app was dead (A12 / C2). Uploads run in the main
-      // isolate; the Workmanager task only arms the Hive due-flag.
+      // Register the periodic due-check. Pending work is consumed from the
+      // app's UploadBloc setup after that pipeline is attached.
       unawaited(AutoBackupScheduler.instance.registerPeriodic());
-      unawaited(
-        AutoBackupScheduler.instance.consumeDueFlag().catchError((e) {
-          AppLogger.e('Auto-backup consumeDueFlag failed: $e',
-              tag: 'AutoBackup');
-          return const BackupRunOutcome(
-            status: BackupRunStatus.failed,
-            label: 'Auto-backup consume failed',
-          );
-        }),
-      );
 
       _initialized = true;
       AppLogger.i('ServiceLocator initialized successfully',

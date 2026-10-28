@@ -45,6 +45,15 @@ class DeviceMediaScanner {
     return state.isAuth || state.hasAccess;
   }
 
+  /// Checks photo library authorization without displaying a permission prompt.
+  static Future<bool> hasPermission() async {
+    if (kIsWeb) return false;
+    final state = await PhotoManager.getPermissionState(
+      requestOption: const PermissionRequestOption(),
+    );
+    return state.isAuth || state.hasAccess;
+  }
+
   /// Loads all dynamic albums from the OS MediaStore.
   /// Returns albums sorted by media count descending, with "Recent" first.
   static Future<List<MediaAlbum>> loadAlbums() async {

@@ -190,6 +190,47 @@ void main() {
       );
       expect(ready.dataOrNull!.isEligible, isTrue);
     });
+
+    test('scheduled eligibility checks permission without requesting it',
+        () async {
+      var requestCount = 0;
+      var statusChecks = 0;
+      final service = AutoBackupService(
+        ledgerBox: ledgerBox,
+        requestPermission: () async {
+          requestCount++;
+          return true;
+        },
+        hasPermission: () async {
+          statusChecks++;
+          return true;
+        },
+        isUnmetered: () async => true,
+      );
+
+      final result = await service.isEligibleNow(cameraRule());
+
+      expect(result.dataOrNull!.isEligible, isTrue);
+      expect(statusChecks, 1);
+      expect(requestCount, 0);
+    });
+
+    test('manual eligibility requests permission once', () async {
+      var requestCount = 0;
+      final service = AutoBackupService(
+        ledgerBox: ledgerBox,
+        requestPermission: () async {
+          requestCount++;
+          return true;
+        },
+        hasPermission: () async => true,
+      );
+
+      final result = await service.isEligibleNowManual(cameraRule());
+
+      expect(result.dataOrNull!.isEligible, isTrue);
+      expect(requestCount, 1);
+    });
   });
 
   group('collectDueAssets', () {
@@ -256,8 +297,7 @@ void main() {
         ledgerBox: ledgerBox,
         requestPermission: () async => true,
         loadAlbums: () async => [cameraAlbum()],
-        loadPage: (album, page, pageSize) async =>
-            page == 0 ? [broken] : [],
+        loadPage: (album, page, pageSize) async => page == 0 ? [broken] : [],
       );
       final result = await service.collectDueAssets(cameraRule());
       expect(result.isSuccess, isTrue);

@@ -94,6 +94,15 @@ void main() {
   // ── (1) Dependency wiring ──────────────────────────────────
 
   group('dependency wiring', () {
+    test('production service can be attached to the scheduler singleton', () {
+      final service = AutoBackupService(ledgerBox: ledgerBox);
+
+      AutoBackupScheduler.instance.configureService(service);
+
+      expect(
+          AutoBackupScheduler.instance.activeServiceForTesting, same(service));
+    });
+
     test('AutoBackupService accepts DiskSpacePlus-compatible freeSpaceBytes',
         () async {
       FreeSpaceProvider diskSpacePlusWrapped = _diskSpacePlusWrapped;

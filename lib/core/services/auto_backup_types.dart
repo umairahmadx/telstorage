@@ -15,6 +15,9 @@ typedef FreeSpaceProvider = Future<int?> Function();
 /// Permission prompt hook (F2). Defaults to DeviceMediaScanner.
 typedef BackupRequestPermission = Future<bool> Function();
 
+/// Permission status hook that must never display a system prompt.
+typedef BackupHasPermission = Future<bool> Function();
+
 /// Album list hook. Defaults to DeviceMediaScanner.
 typedef BackupLoadAlbums = Future<List<MediaAlbum>> Function();
 
@@ -34,10 +37,25 @@ typedef PowerStateProvider = ChargingStateProvider;
 
 /// Resolves a BackupAsset to an upload path plus temp-cache flag (F3).
 /// Returns null when the device path cannot be resolved.
-typedef BackupPathResolver = Future<({String path, bool isTemporary})?> Function(
-    BackupAsset asset);
+typedef BackupPathResolver = Future<({String path, bool isTemporary})?>
+    Function(BackupAsset asset);
+
 /// Posts the per-run summary notification body.
 typedef BackupNotifier = Future<void> Function(String title, String body);
+
+/// Converts free-form failures to stable, low-sensitivity diagnostic values.
+String backupDiagnosticFailure(String reason) {
+  final value = reason.toLowerCase();
+  if (value.contains('permission')) return 'permission_or_access';
+  if (value.contains('space')) return 'storage_check';
+  if (value.contains('path') || value.contains('folder')) {
+    return 'destination_setup';
+  }
+  if (value.contains('resolve')) return 'media_resolution';
+  if (value.contains('upload')) return 'upload_pipeline';
+  if (value.contains('scan') || value.contains('album')) return 'media_scan';
+  return 'backup_operation';
+}
 
 /// Registers / cancels the Workmanager periodic task by unique name.
 typedef BackupScheduleAction = Future<void> Function(String uniqueName);
@@ -104,6 +122,12 @@ class BackupRunOutcome {
   /// Assets skipped because they were unresolvable.
   final int skippedUnresolvable;
 
+  /// Whether a requested backfill has no remaining capped or unresolved work.
+  final bool backfillComplete;
+
+  /// Whether the caller should retry this run even though uploads were queued.
+  final bool needsRetry;
+
   /// Constructs BackupRunOutcome.
   const BackupRunOutcome({
     required this.status,
@@ -111,6 +135,7 @@ class BackupRunOutcome {
     this.uploadedPhotos = 0,
     this.uploadedVideos = 0,
     this.skippedUnresolvable = 0,
+    this.backfillComplete = false,
+    this.needsRetry = false,
   });
 }
-

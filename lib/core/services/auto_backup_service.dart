@@ -51,6 +51,7 @@ class AutoBackupService {
   final HiveService _hive;
   final FileManagerService? _files;
   final BackupRequestPermission _requestPermission;
+  final BackupHasPermission _hasPermission;
   final BackupLoadAlbums _loadAlbums;
   final BackupLoadPage _loadPage;
   final UnmeteredProvider _isUnmetered;
@@ -63,6 +64,7 @@ class AutoBackupService {
     HiveService? hive,
     FileManagerService? fileManager,
     BackupRequestPermission? requestPermission,
+    BackupHasPermission? hasPermission,
     BackupLoadAlbums? loadAlbums,
     BackupLoadPage? loadPage,
     UnmeteredProvider? isUnmetered,
@@ -73,6 +75,12 @@ class AutoBackupService {
         _files = fileManager,
         _requestPermission =
             requestPermission ?? DeviceMediaScanner.requestPermission,
+        // When callers inject only the legacy request hook, use it as the
+        // permission seam too (mostly useful for existing test doubles).
+        // Production uses PhotoManager's separate non-prompting status check.
+        _hasPermission = hasPermission ??
+            requestPermission ??
+            DeviceMediaScanner.hasPermission,
         _loadAlbums = loadAlbums ?? DeviceMediaScanner.loadAlbums,
         _loadPage = loadPage ??
             ((album, page, pageSize) => DeviceMediaScanner.loadAlbumMedia(
@@ -105,7 +113,7 @@ class AutoBackupService {
       if (!rule.enabled) {
         return const Success(BackupEligibility(BackupBlockReason.disabled));
       }
-      if (!await _requestPermission()) {
+      if (!await _hasPermission()) {
         return const Success(
             BackupEligibility(BackupBlockReason.permissionDenied));
       }
@@ -156,6 +164,7 @@ class AutoBackupService {
     BackupRule rule, {
     int maxItems = defaultMaxItems,
     int maxBytes = defaultMaxBytes,
+    bool includeBackfill = false,
   }) async {
     try {
       if (!rule.enabled) {
@@ -163,7 +172,7 @@ class AutoBackupService {
           plan: BackupPlan(uploads: [], adoptions: []),
         ));
       }
-      if (!await _requestPermission()) {
+      if (!await _hasPermission()) {
         return const Failure(UnknownFailure('Permission needed'));
       }
       final albums = await _loadAlbums();
@@ -186,6 +195,7 @@ class AutoBackupService {
         ledgerByAssetId: byId,
         ledgerByPath: byPath,
         cloudFilesByName: cloudByName,
+        includeBackfill: includeBackfill,
         maxItems: maxItems,
         maxBytes: maxBytes,
       );
@@ -449,9 +459,8 @@ class AutoBackupService {
       final title =
           (rawTitle != null && rawTitle.isNotEmpty) ? rawTitle : entity.id;
       final modifiedSec = entity.modifiedDateSecond ?? entity.createDateSecond;
-      final modifiedMs = (modifiedSec ??
-              DateTime.now().millisecondsSinceEpoch ~/ 1000) *
-          1000;
+      final modifiedMs =
+          (modifiedSec ?? DateTime.now().millisecondsSinceEpoch ~/ 1000) * 1000;
       int sizeBytes = 0;
       try {
         sizeBytes = await entity.fileSize;

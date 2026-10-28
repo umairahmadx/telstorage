@@ -13,6 +13,7 @@ import 'package:hive/hive.dart';
 import 'package:telstorage/core/constants/app_constants.dart';
 import 'package:telstorage/core/models/backup_rule.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
+import 'package:telstorage/features/settings/presentation/screens/settings/backup/backup_screen.dart';
 import 'package:telstorage/features/settings/presentation/screens/settings/widgets/settings_backup_card.dart';
 
 void main() {
@@ -85,5 +86,30 @@ void main() {
 
       expect(find.textContaining('root/Backup/Camera'), findsWidgets);
     });
+  });
+
+  testWidgets('backup screen exposes one context-aware manual action',
+      (tester) async {
+    await tester.runAsync(() async {
+      final rule = rulesBox.get('camera')!..enabled = true;
+      await rule.save();
+    });
+    await tester.pumpWidget(MaterialApp(
+      theme: ThemeData.dark().copyWith(
+        extensions: const [AppTheme.darkColorsExtension],
+      ),
+      home: const BackupScreen(),
+    ));
+    await tester.pump();
+    await tester.scrollUntilVisible(
+      find.text('Back up existing photos'),
+      250,
+      scrollable: find.byType(Scrollable),
+    );
+
+    expect(find.byType(ElevatedButton), findsOneWidget);
+    expect(find.byType(OutlinedButton), findsNothing);
+    expect(find.widgetWithText(ElevatedButton, 'Back up existing photos'),
+        findsOneWidget);
   });
 }

@@ -49,8 +49,10 @@ class BackupAsset {
       );
 
   /// Device path used for MediaStore-id fallback matching (see B1).
-  String get containerPath => relativePath == null ? title : '$relativePath$title';
+  String get containerPath =>
+      relativePath == null ? title : '$relativePath$title';
 }
+
 /// Why a rule can or cannot run right now.
 enum BackupBlockReason {
   ready,
@@ -109,6 +111,7 @@ BackupEligibility evaluateEligibility({
   }
   return const BackupEligibility(BackupBlockReason.ready);
 }
+
 /// One asset scheduled for upload in the next run.
 class BackupUploadItem {
   /// Source asset descriptor.
@@ -200,6 +203,7 @@ class BackupPlan {
   /// Total assets counted by the scheduler summary (skipped + oversized).
   int get accountedTotal => skippedTotal + skippedOversized;
 }
+
 /// An existing file in the destination folder, used for reconciliation (A7).
 class CloudFileRef {
   /// TelStorage file id.
@@ -224,6 +228,7 @@ String uniqueDestinationName(String name, Set<String> takenNames) {
   }
   return '$base ($index)$ext';
 }
+
 /// Plans one run: which assets to upload, which ledger rows to repair, and what
 /// was skipped. Pure — no I/O, no hidden clock reads.
 BackupPlan planRun({
@@ -232,6 +237,7 @@ BackupPlan planRun({
   required Map<String, BackupLedgerEntry> ledgerByAssetId,
   required Map<String, BackupLedgerEntry> ledgerByPath,
   required Map<String, CloudFileRef> cloudFilesByName,
+  bool includeBackfill = false,
   int maxItems = 200,
   int maxBytes = 2147483648,
 }) {
@@ -241,7 +247,7 @@ BackupPlan planRun({
   final cutoffMs = rule.createdAt?.millisecondsSinceEpoch;
   var skippedKnown = 0;
   var skippedBackfill = 0;
-var skippedCloudAdopted = 0;
+  var skippedCloudAdopted = 0;
   var skippedOversized = 0;
   var skippedType = 0;
   var plannedBytes = 0;
@@ -282,7 +288,7 @@ var skippedCloudAdopted = 0;
     // assets are skipped unless created after the rule. A missing cutoff
     // (createdAt == null) skips everything rather than risking an
     // accidental upload of the entire library.
-    if (known == null && !rule.backfillDone) {
+    if (known == null && !rule.backfillDone && !includeBackfill) {
       if (cutoffMs == null || asset.modifiedMs < cutoffMs) {
         skippedBackfill++;
         continue;
@@ -294,7 +300,8 @@ var skippedCloudAdopted = 0;
       // Size tolerance mirrors the UploadService dedupe threshold (under
       // 0.01 MB) so an MB-to-bytes round trip never misses a match (A7).
       if (cloud != null &&
-          (cloud.sizeBytes - asset.sizeBytes).abs() <= _reconcileToleranceBytes) {
+          (cloud.sizeBytes - asset.sizeBytes).abs() <=
+              _reconcileToleranceBytes) {
         adoptions.add(BackupAdoption(
           key: asset.assetId,
           fingerprint: asset.fingerprint,
@@ -340,6 +347,7 @@ var skippedCloudAdopted = 0;
     capped: capped,
   );
 }
+
 /// Chooses files to delete so at most [keepLast] ledger-backed files remain.
 ///
 /// Only files attributed to backup via [ledgerFileIds] are ever deleted (D7);

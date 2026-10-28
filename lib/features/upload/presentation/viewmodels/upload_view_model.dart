@@ -138,9 +138,9 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
     _isPreProcessing = true;
     try {
       while (_queue.isNotEmpty && !isClosed) {
-        final pending = _queue
-            .cast<UploadTask?>()
-            .firstWhere((t) => t != null && t.precomputedHash == null, orElse: () => null);
+        final pending = _queue.cast<UploadTask?>().firstWhere(
+            (t) => t != null && t.precomputedHash == null,
+            orElse: () => null);
         if (pending == null) break;
 
         if (TransferQueueService.instance.isCancelled(pending.id)) {
@@ -150,8 +150,7 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
 
         try {
           if (pending.path != null && pending.path!.isNotEmpty) {
-            final hashInfo =
-                await RawStreamChunker.hashFile(pending.path!);
+            final hashInfo = await RawStreamChunker.hashFile(pending.path!);
             pending.precomputedHash = hashInfo.sha256;
             pending.fileSizeOnDisk = hashInfo.fileSize;
 
@@ -212,8 +211,15 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
   }
 
   /// Cancels a queued upload task before it executes.
-  void _onCancelUploadTask(CancelUploadTask event, Emitter<UploadState> emit) {
-    _queue.removeWhere((task) => task.id == event.taskId);
+  Future<void> _onCancelUploadTask(
+    CancelUploadTask event,
+    Emitter<UploadState> emit,
+  ) async {
+    final index = _queue.indexWhere((task) => task.id == event.taskId);
+    if (index >= 0) {
+      final removed = _queue.removeAt(index);
+      await removed.cleanupCacheFile();
+    }
     TransferQueueService.instance.cancelTask(event.taskId);
     if (_totalCount > 0) _totalCount--;
   }
@@ -385,9 +391,13 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
   }
 
   /// Clears active upload state.
-  void _onResetUpload(ResetUpload event, Emitter<UploadState> emit) {
+  Future<void> _onResetUpload(
+    ResetUpload event,
+    Emitter<UploadState> emit,
+  ) async {
     for (final task in _queue) {
       TransferQueueService.instance.cancelTask(task.id);
+      await task.cleanupCacheFile();
     }
     _queue.clear();
     _totalCount = 0;

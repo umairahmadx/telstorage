@@ -3,17 +3,20 @@
  * Description: Bottom navigation shell container hosting persistent tab views (Home, Files, Upload, Downloads, Settings).
  */
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:path/path.dart' as p;
+import 'package:file_share_intent/file_share_intent.dart';
+import 'package:uuid/uuid.dart';
 import '../../core/utils/app_logger.dart';
-import '../../core/utils/file_opener_helper.dart';
 
 import '../../core/navigation/navigation_intent.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/services/service_locator.dart';
-import '../../core/services/transfer_queue_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../features/browser/presentation/screens/browser/browser_screen.dart';
 import '../../features/browser/presentation/screens/browser/viewmodel/browser_view_model.dart';
@@ -21,10 +24,15 @@ import '../../features/downloads/presentation/screens/downloads/downloads_screen
 import '../../features/home/presentation/screens/home/home_screen.dart';
 import '../../features/settings/presentation/screens/settings/settings_screen.dart';
 import '../../features/upload/presentation/viewmodels/upload_file_picker_helper.dart';
+import '../../features/upload/presentation/viewmodels/incoming_share_destination_sheet.dart';
+import '../../features/upload/presentation/viewmodels/incoming_share_service.dart';
+import '../../features/upload/presentation/viewmodels/incoming_share_file_stub.dart'
+    if (dart.library.io) '../../features/upload/presentation/viewmodels/incoming_share_file_native.dart';
 import '../../features/upload/presentation/viewmodels/upload_view_model.dart';
 import 'app_drawer.dart';
 import 'mobile_shell/mobile_add_action_sheet.dart';
 import 'mobile_shell/mobile_bottom_nav.dart';
+import 'mobile_shell/mobile_shell_notification_handler.dart';
 import 'tab_visibility_scope.dart';
 
 /// Shell component providing unified navigation scaffold with drawer and bottom bar.
@@ -51,6 +59,7 @@ class MobileShellState extends State<MobileShell> {
 
   /// Scaffold key for opening navigation drawer.
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  bool _handlingIncomingShare = false;
 
   @override
   void initState() {
@@ -59,6 +68,7 @@ class MobileShellState extends State<MobileShell> {
     ServiceLocator.instance.navigation.intentNotifier
         .addListener(_onIntentChanged);
     NotificationService.instance.onNotificationTap = handleNotificationResponse;
+    IncomingShareService.instance.addListener(_onIncomingShareChanged);
 
     // Check if app was opened directly from a notification tap
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -67,6 +77,7 @@ class MobileShellState extends State<MobileShell> {
       if (launchResponse != null && mounted) {
         handleNotificationResponse(launchResponse);
       }
+      if (mounted) unawaited(_handleIncomingShare());
     });
   }
 
@@ -74,7 +85,139 @@ class MobileShellState extends State<MobileShell> {
   void dispose() {
     ServiceLocator.instance.navigation.intentNotifier
         .removeListener(_onIntentChanged);
+    IncomingShareService.instance.removeListener(_onIncomingShareChanged);
     super.dispose();
+  }
+
+  void _onIncomingShareChanged() {
+    if (mounted) unawaited(_handleIncomingShare());
+  }
+
+  Future<void> _handleIncomingShare() async {
+    if (!mounted ||
+        _handlingIncomingShare ||
+        !IncomingShareService.instance.hasPending) {
+      return;
+    }
+    _handlingIncomingShare = true;
+    final sharedFiles = IncomingShareService.instance.pendingFiles;
+    final validFiles = <SharedMediaFile>[];
+
+    try {
+      for (final sharedFile in sharedFiles) {
+        final path = IncomingShareService.localPathFor(sharedFile);
+        if (sharedFile.type == SharedMediaType.text ||
+            sharedFile.type == SharedMediaType.url) {
+          continue;
+        }
+        try {
+          if (await incomingShareFileExists(path)) validFiles.add(sharedFile);
+        } catch (error) {
+          AppLogger.w('Cannot access incoming file: $error',
+              tag: 'IncomingShare');
+        }
+      }
+
+      if (validFiles.isEmpty) {
+        await IncomingShareService.instance.complete(sharedFiles);
+        await IncomingShareService.deleteTemporaryFiles(sharedFiles);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text('This share did not contain a readable file.')),
+          );
+        }
+        return;
+      }
+
+      if (!mounted) {
+        await IncomingShareService.instance.complete(sharedFiles);
+        await IncomingShareService.deleteTemporaryFiles(sharedFiles);
+        return;
+      }
+
+      final folders = ServiceLocator.instance.storageRepository.currentFolders;
+      final destination = await IncomingShareDestinationSheet.show(
+        context,
+        fileNames: validFiles
+            .map((file) => p.basename(IncomingShareService.localPathFor(file)))
+            .toList(),
+        folders: folders,
+      );
+
+      if (destination == null) {
+        await IncomingShareService.instance.complete(sharedFiles);
+        await IncomingShareService.deleteTemporaryFiles(sharedFiles);
+        return;
+      }
+
+      if (!mounted || !ServiceLocator.instance.isInitialized) {
+        await IncomingShareService.instance.complete(sharedFiles);
+        await IncomingShareService.deleteTemporaryFiles(sharedFiles);
+        return;
+      }
+
+      final tasks = <UploadTask>[];
+      for (final file in validFiles) {
+        final path = IncomingShareService.localPathFor(file);
+        try {
+          final size = await incomingShareFileSize(path);
+          tasks.add(UploadTask(
+            id: const Uuid().v4(),
+            path: path,
+            name: p.basename(path),
+            size: size,
+            folderId: destination.folderId,
+            isTemporaryCacheFile: true,
+          ));
+        } catch (error) {
+          AppLogger.w('Cannot queue incoming file $path: $error',
+              tag: 'IncomingShare');
+        }
+      }
+
+      await IncomingShareService.instance.complete(sharedFiles);
+      for (final file
+          in sharedFiles.where((file) => !validFiles.contains(file))) {
+        await IncomingShareService.deleteTemporaryFiles([file]);
+      }
+
+      if (!mounted || !ServiceLocator.instance.isInitialized) {
+        await IncomingShareService.deleteTemporaryFiles(validFiles);
+        return;
+      }
+
+      if (tasks.isEmpty) {
+        await IncomingShareService.deleteTemporaryFiles(validFiles);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text('The shared file could not be queued.')),
+          );
+        }
+        return;
+      }
+
+      context.read<UploadBloc>().add(AddUploads(tasks));
+      ServiceLocator.instance.navigation
+          .navigateTo(AppDestination.transferUploads);
+    } catch (error, stackTrace) {
+      AppLogger.e('Incoming share flow failed: $error',
+          tag: 'IncomingShare', error: error, stackTrace: stackTrace);
+      await IncomingShareService.instance.complete(sharedFiles);
+      await IncomingShareService.deleteTemporaryFiles(sharedFiles);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Could not prepare the shared files for upload.')),
+        );
+      }
+    } finally {
+      _handlingIncomingShare = false;
+      if (mounted && IncomingShareService.instance.hasPending) {
+        unawaited(_handleIncomingShare());
+      }
+    }
   }
 
   /// Synchronizes active tab with navigation intent changes.
@@ -89,120 +232,7 @@ class MobileShellState extends State<MobileShell> {
 
   /// Handles incoming push notification actions and payload taps.
   void handleNotificationResponse(NotificationResponse details) {
-    final payload = details.payload;
-    final actionId = details.actionId;
-
-    AppLogger.i('Notification response: actionId=$actionId, payload=$payload',
-        tag: 'MobileShell');
-
-    if (actionId != null && actionId.isNotEmpty) {
-      if (actionId.startsWith('pause_')) {
-        final id = actionId.replaceFirst('pause_', '');
-        TransferQueueService.instance.pauseTask(id);
-        return;
-      } else if (actionId.startsWith('resume_')) {
-        final id = actionId.replaceFirst('resume_', '');
-        TransferQueueService.instance.resumeTask(id);
-        return;
-      } else if (actionId.startsWith('cancel_')) {
-        final id = actionId.replaceFirst('cancel_', '');
-        TransferQueueService.instance.cancelTask(id);
-        return;
-      } else if (actionId.startsWith('open_path:')) {
-        final filePath = actionId.replaceFirst('open_path:', '');
-        FileOpenerHelper.openFile(
-          context,
-          filePath: filePath,
-        );
-        return;
-      } else if (actionId.startsWith('open_')) {
-        final id = actionId.replaceFirst('open_', '');
-        final job = ServiceLocator.instance.downloadQueue.allJobs
-            .where((j) => j.fileId == id)
-            .firstOrNull;
-        final path = job?.localPath ??
-            ServiceLocator.instance.downloadQueue.getCompletedPath(id);
-        if (path != null) {
-          FileOpenerHelper.openFile(
-            context,
-            filePath: path,
-            mimeType: job?.mimeType,
-            fileName: job?.name,
-          );
-        } else {
-          ServiceLocator.instance.navigation
-              .navigateTo(AppDestination.transferDownloads);
-        }
-        return;
-      } else if (actionId.startsWith('copy_url:')) {
-        final url = actionId.replaceFirst('copy_url:', '');
-        _copyAndFeedback(url);
-        return;
-      } else if (actionId.startsWith('copy_')) {
-        final id = actionId.replaceFirst('copy_', '');
-        final share = ServiceLocator.instance.webShareQueue.allShares
-            .where((s) => s.fileId == id)
-            .firstOrNull;
-        if (share?.shareUrl != null) {
-          _copyAndFeedback(share!.shareUrl!);
-        }
-        return;
-      } else if (actionId == 'view_all') {
-        ServiceLocator.instance.navigation
-            .navigateTo(AppDestination.transferActive);
-        return;
-      } else if (actionId == 'view_uploads') {
-        ServiceLocator.instance.navigation
-            .navigateTo(AppDestination.transferUploads);
-        return;
-      } else if (actionId == 'view_downloads') {
-        ServiceLocator.instance.navigation
-            .navigateTo(AppDestination.transferDownloads);
-        return;
-      } else if (actionId == 'view_shared') {
-        ServiceLocator.instance.navigation
-            .navigateTo(AppDestination.transferShared);
-        return;
-      }
-    }
-
-    if (payload == 'transfer_active') {
-      ServiceLocator.instance.navigation
-          .navigateTo(AppDestination.transferActive);
-    } else if (payload == 'transfer_upload') {
-      ServiceLocator.instance.navigation
-          .navigateTo(AppDestination.transferUploads);
-    } else if (payload == 'transfer_download') {
-      ServiceLocator.instance.navigation
-          .navigateTo(AppDestination.transferDownloads);
-    } else if (payload == 'transfer_share') {
-      ServiceLocator.instance.navigation
-          .navigateTo(AppDestination.transferShared);
-    }
-  }
-
-  void _copyAndFeedback(String url) {
-    Clipboard.setData(ClipboardData(text: url));
-    HapticFeedback.lightImpact();
-    if (mounted) {
-      final colors = Theme.of(context).extension<AppColorsExtension>()!;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(Icons.check_circle_rounded, color: colors.success, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text('Share link copied: $url',
-                    overflow: TextOverflow.ellipsis),
-              ),
-            ],
-          ),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    }
+    MobileShellNotificationHandler.handle(context, details);
   }
 
   /// Opens the side navigation drawer.

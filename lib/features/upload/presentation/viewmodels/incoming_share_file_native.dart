@@ -1,3 +1,8 @@
+/*
+ * File: incoming_share_file_native.dart
+ * Description: Provides filesystem access helpers for incoming shared files on native platforms.
+ */
+
 import 'dart:io';
 
 Future<bool> incomingShareFileExists(String path) => File(path).exists();

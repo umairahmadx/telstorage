@@ -1,3 +1,8 @@
+/*
+ * File: incoming_share_destination_sheet.dart
+ * Description: Lets users choose the TelStorage folder for files shared into the app.
+ */
+
 import 'package:flutter/material.dart';
 
 import '../../../../core/models/folder_record.dart';

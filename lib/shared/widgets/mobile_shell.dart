@@ -13,12 +13,10 @@ import 'package:path/path.dart' as p;
 import 'package:file_share_intent/file_share_intent.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/utils/app_logger.dart';
-import '../../core/utils/file_opener_helper.dart';
 
 import '../../core/navigation/navigation_intent.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/services/service_locator.dart';
-import '../../core/services/transfer_queue_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../features/browser/presentation/screens/browser/browser_screen.dart';
 import '../../features/browser/presentation/screens/browser/viewmodel/browser_view_model.dart';
@@ -34,6 +32,7 @@ import '../../features/upload/presentation/viewmodels/upload_view_model.dart';
 import 'app_drawer.dart';
 import 'mobile_shell/mobile_add_action_sheet.dart';
 import 'mobile_shell/mobile_bottom_nav.dart';
+import 'mobile_shell/mobile_shell_notification_handler.dart';
 import 'tab_visibility_scope.dart';
 
 /// Shell component providing unified navigation scaffold with drawer and bottom bar.
@@ -233,120 +232,7 @@ class MobileShellState extends State<MobileShell> {
 
   /// Handles incoming push notification actions and payload taps.
   void handleNotificationResponse(NotificationResponse details) {
-    final payload = details.payload;
-    final actionId = details.actionId;
-
-    AppLogger.i('Notification response: actionId=$actionId, payload=$payload',
-        tag: 'MobileShell');
-
-    if (actionId != null && actionId.isNotEmpty) {
-      if (actionId.startsWith('pause_')) {
-        final id = actionId.replaceFirst('pause_', '');
-        TransferQueueService.instance.pauseTask(id);
-        return;
-      } else if (actionId.startsWith('resume_')) {
-        final id = actionId.replaceFirst('resume_', '');
-        TransferQueueService.instance.resumeTask(id);
-        return;
-      } else if (actionId.startsWith('cancel_')) {
-        final id = actionId.replaceFirst('cancel_', '');
-        TransferQueueService.instance.cancelTask(id);
-        return;
-      } else if (actionId.startsWith('open_path:')) {
-        final filePath = actionId.replaceFirst('open_path:', '');
-        FileOpenerHelper.openFile(
-          context,
-          filePath: filePath,
-        );
-        return;
-      } else if (actionId.startsWith('open_')) {
-        final id = actionId.replaceFirst('open_', '');
-        final job = ServiceLocator.instance.downloadQueue.allJobs
-            .where((j) => j.fileId == id)
-            .firstOrNull;
-        final path = job?.localPath ??
-            ServiceLocator.instance.downloadQueue.getCompletedPath(id);
-        if (path != null) {
-          FileOpenerHelper.openFile(
-            context,
-            filePath: path,
-            mimeType: job?.mimeType,
-            fileName: job?.name,
-          );
-        } else {
-          ServiceLocator.instance.navigation
-              .navigateTo(AppDestination.transferDownloads);
-        }
-        return;
-      } else if (actionId.startsWith('copy_url:')) {
-        final url = actionId.replaceFirst('copy_url:', '');
-        _copyAndFeedback(url);
-        return;
-      } else if (actionId.startsWith('copy_')) {
-        final id = actionId.replaceFirst('copy_', '');
-        final share = ServiceLocator.instance.webShareQueue.allShares
-            .where((s) => s.fileId == id)
-            .firstOrNull;
-        if (share?.shareUrl != null) {
-          _copyAndFeedback(share!.shareUrl!);
-        }
-        return;
-      } else if (actionId == 'view_all') {
-        ServiceLocator.instance.navigation
-            .navigateTo(AppDestination.transferActive);
-        return;
-      } else if (actionId == 'view_uploads') {
-        ServiceLocator.instance.navigation
-            .navigateTo(AppDestination.transferUploads);
-        return;
-      } else if (actionId == 'view_downloads') {
-        ServiceLocator.instance.navigation
-            .navigateTo(AppDestination.transferDownloads);
-        return;
-      } else if (actionId == 'view_shared') {
-        ServiceLocator.instance.navigation
-            .navigateTo(AppDestination.transferShared);
-        return;
-      }
-    }
-
-    if (payload == 'transfer_active') {
-      ServiceLocator.instance.navigation
-          .navigateTo(AppDestination.transferActive);
-    } else if (payload == 'transfer_upload') {
-      ServiceLocator.instance.navigation
-          .navigateTo(AppDestination.transferUploads);
-    } else if (payload == 'transfer_download') {
-      ServiceLocator.instance.navigation
-          .navigateTo(AppDestination.transferDownloads);
-    } else if (payload == 'transfer_share') {
-      ServiceLocator.instance.navigation
-          .navigateTo(AppDestination.transferShared);
-    }
-  }
-
-  void _copyAndFeedback(String url) {
-    Clipboard.setData(ClipboardData(text: url));
-    HapticFeedback.lightImpact();
-    if (mounted) {
-      final colors = Theme.of(context).extension<AppColorsExtension>()!;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(Icons.check_circle_rounded, color: colors.success, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text('Share link copied: $url',
-                    overflow: TextOverflow.ellipsis),
-              ),
-            ],
-          ),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    }
+    MobileShellNotificationHandler.handle(context, details);
   }
 
   /// Opens the side navigation drawer.

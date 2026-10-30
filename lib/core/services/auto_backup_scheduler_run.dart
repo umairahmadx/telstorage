@@ -43,7 +43,7 @@ extension AutoBackupSchedulerRuns on AutoBackupScheduler {
       return outcome;
     } catch (e) {
       AppLogger.e(
-          'Backup run result=failed reason=${backupDiagnosticFailure('$e')}',
+          'Backup run result=failed reason=${backupDiagnosticFailure('$e')} exception=$e',
           tag: 'AutoBackup');
       return const BackupRunOutcome(
         status: BackupRunStatus.failed,
@@ -136,15 +136,11 @@ extension AutoBackupSchedulerRuns on AutoBackupScheduler {
     }
     final albumFolderId = pathResult.dataOrNull!.albumFolderId;
 
-    final freeSpace = await _activeService.ensureFreeSpaceFor(
-      uploads.map((u) => u.asset).toList(),
-    );
-    if (freeSpace.isFailure) {
-      return BackupRunOutcome(
-        status: BackupRunStatus.failed,
-        label: freeSpace.failureOrNull?.message ?? 'Low storage',
-      );
-    }
+    // NOTE: Free-space gate intentionally removed — AutoBackup streams directly
+    // from MediaStore paths to Telegram without local caching or disk duplication
+    // (RawStreamChunker reads in-place, Mp4FastStartProjector uses virtual projection).
+    // No temporary files or duplicated media are written to disk, so free space
+    // is not a precondition for backup uploads.
 
     final planned = <String, BackupUploadItem>{};
     final tasks = <UploadTask>[];
@@ -161,6 +157,9 @@ extension AutoBackupSchedulerRuns on AutoBackupScheduler {
       final resolved = await _resolvePath(asset);
       if (resolved == null) {
         unresolved++;
+        AppLogger.w(
+            'Backup: could not resolve upload path for asset ${asset.assetId} (${asset.title}), skipping',
+            tag: 'AutoBackupScheduler');
         continue;
       }
       tasks.add(UploadTask(

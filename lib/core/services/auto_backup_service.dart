@@ -379,29 +379,15 @@ class AutoBackupService {
     }
   }
 
-  /// Pre-flight free-space guard (E3): skips below 2x the largest file.
+  /// Pre-flight free-space guard — intentionally a no-op (always succeeds).
   ///
-  /// Null probe results mean unknown and FAIL (fail closed): a backup must
-  /// never proceed when free space cannot be determined.
+  /// AutoBackup streams directly from MediaStore paths to Telegram without
+  /// local caching or disk duplication (RawStreamChunker reads in-place,
+  /// Mp4FastStartProjector uses virtual projection). No temporary files or
+  /// duplicated media are written to disk, so free space is not a precondition
+  /// for backup uploads. Retained as a no-op for API compatibility.
   Future<Result<void>> ensureFreeSpaceFor(List<BackupAsset> assets) async {
-    try {
-      if (assets.isEmpty) return const Success(null);
-      var largest = 0;
-      for (final asset in assets) {
-        if (asset.sizeBytes > largest) largest = asset.sizeBytes;
-      }
-      final free = await _freeSpaceBytes();
-      if (free == null) {
-        return const Failure(UnknownFailure('Free space unknown'));
-      }
-      if (free < 2 * largest) {
-        return const Failure(
-            QuotaExceededFailure('Low device storage for backup'));
-      }
-      return const Success(null);
-    } catch (e) {
-      return Failure(UnknownFailure('Free-space check failed: $e', e));
-    }
+    return const Success(null);
   }
 
   /// Persists a rule when it lives in the rules box, else a no-op.

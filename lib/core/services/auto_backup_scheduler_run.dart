@@ -142,6 +142,32 @@ extension AutoBackupSchedulerRuns on AutoBackupScheduler {
     // No temporary files or duplicated media are written to disk, so free space
     // is not a precondition for backup uploads.
 
+
+    // NOTE: Free-space gate intentionally removed — AutoBackup streams directly
+    // from MediaStore paths to Telegram without local caching or disk duplication
+    // (RawStreamChunker reads in-place, Mp4FastStartProjector uses virtual projection).
+    // No temporary files or duplicated media are written to disk, so free space
+    // is not a precondition for backup uploads.
+
+
+<<<<<<< HEAD
+    // NOTE: Free-space gate intentionally removed — AutoBackup streams directly
+    // from MediaStore paths to Telegram without local caching or disk duplication
+    // (RawStreamChunker reads in-place, Mp4FastStartProjector uses virtual projection).
+    // No temporary files or duplicated media are written to disk, so free space
+    // is not a precondition for backup uploads.
+=======
+    final freeSpace = await _activeService.ensureFreeSpaceFor(
+      uploads.map((u) => u.asset).toList(),
+    );
+    if (freeSpace.isFailure) {
+      return BackupRunOutcome(
+        status: BackupRunStatus.failed,
+        label: freeSpace.failureOrNull?.message ?? 'Low storage',
+      );
+    }
+>>>>>>> origin/main
+
     final planned = <String, BackupUploadItem>{};
     final tasks = <UploadTask>[];
     var alreadyActive = 0;
@@ -157,9 +183,12 @@ extension AutoBackupSchedulerRuns on AutoBackupScheduler {
       final resolved = await _resolvePath(asset);
       if (resolved == null) {
         unresolved++;
+<<<<<<< HEAD
         AppLogger.w(
             'Backup: could not resolve upload path for asset ${asset.assetId} (${asset.title}), skipping',
             tag: 'AutoBackupScheduler');
+=======
+>>>>>>> origin/main
         continue;
       }
       tasks.add(UploadTask(

@@ -5,6 +5,8 @@
  * api.telegram.org).
  */
 
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:telstorage/core/services/telegram_rate_limiter.dart';

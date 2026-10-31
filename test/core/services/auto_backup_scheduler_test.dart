@@ -566,7 +566,8 @@ void main() {
     });
 
     test('unexpected exception in eligibility is caught and returns failed outcome', () async {
-      fakeService.throwOnEligibility = StateError('unexpected eligibility boom');
+      fakeService.throwOnEligibility =
+          Exception('unexpected eligibility boom');
       final rule = cameraRule();
       await rulesBox.put('camera', rule);
       await stateBox.put(AppConstants.autoBackupDueKey, true);

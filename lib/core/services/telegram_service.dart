@@ -41,7 +41,10 @@ class TelegramService {
   TelegramService({Dio? dio})
       : _dio = dio ??
             Dio(BaseOptions(
-              connectTimeout: const Duration(seconds: 60),
+              // 60s connect timeout is too short for spotty Android mobile
+              // networks; raise to 120s so transient DNS/TCP stalls don't
+              // fail every attempt before retry logic can kick in.
+              connectTimeout: const Duration(seconds: 120),
               sendTimeout: const Duration(seconds: 180),
               receiveTimeout: const Duration(seconds: 180),
             )) {
@@ -362,7 +365,9 @@ class TelegramService {
       }, operationName: 'deleteMessage($messageId)');
     } on DioException catch (e) {
       final desc = e.response?.data?['description']?.toString() ?? e.message ?? '';
-      if (e.response?.statusCode == 400 && desc.contains('message to delete not found')) return;
+      if (e.response?.statusCode == 400 &&
+          (desc.contains('message to delete not found') ||
+              desc.contains("message can't be deleted"))) return;
       AppLogger.w('deleteMessage($messageId) failed: $desc', tag: 'TelegramService', error: e);
     } catch (e) {
       AppLogger.w('deleteMessage($messageId) failed: $e', tag: 'TelegramService', error: e);

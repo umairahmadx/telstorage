@@ -22,16 +22,20 @@ import 'core/models/folder_record.dart';
 import 'core/models/pending_action.dart';
 import 'core/services/app_cache_manager.dart';
 import 'core/services/auto_backup_scheduler.dart';
+import 'core/services/auto_backup_background_runner.dart';
 import 'core/services/error_log_service.dart';
 import 'core/services/hive_service.dart';
 import 'core/services/theme_service.dart';
+import 'core/services/auto_backup_types.dart';
+import 'core/utils/app_logger.dart';
 import 'features/upload/presentation/viewmodels/incoming_share_service.dart';
 
-/// Top-level callback dispatcher for Workmanager background sync execution.
+/// Top-level callback dispatcher for Workmanager background sync and backup.
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
     try {
+      WidgetsFlutterBinding.ensureInitialized();
       debugPrint("WorkManager: background sync task triggered: $task");
 
       // Re-initialize Hive in the background isolate
@@ -55,9 +59,8 @@ void callbackDispatcher() {
         Hive.registerAdapter(BackupLedgerEntryAdapter());
       }
 
-      // Auto-backup due-check: Hive-only, isolate-safe. Never touches
-      // Telegram/photo_manager/UploadBloc — real uploads run on the main
-      // isolate via AutoBackupScheduler.consumeDueFlag (plan Task 4).
+      // The periodic task performs a cheap Hive-only due-check. Android then
+      // schedules a foreground one-off worker for the actual upload pass.
       if (task == AutoBackupScheduler.periodicTaskName) {
         final rulesBox =
             await Hive.openBox<BackupRule>(AppConstants.backupRulesBox);
@@ -70,6 +73,9 @@ void callbackDispatcher() {
         try {
           final armed = await scheduler.checkDueInBackground();
           debugPrint("WorkManager: autoBackupCheck due=$armed");
+          if (Platform.isAndroid && armed) {
+            await scheduler.scheduleBackgroundRun();
+          }
           await Hive.close();
           return true; // check completed successfully (armed or not)
         } catch (e) {
@@ -77,6 +83,24 @@ void callbackDispatcher() {
           await Hive.close();
           return false; // explicit failure → Workmanager retries with backoff
         }
+      }
+
+      if (task == AutoBackupScheduler.backgroundRunTaskName) {
+        final outcome = await AutoBackupBackgroundRunner.runProduction();
+        debugPrint(
+            "WorkManager: background backup result=${outcome.status.name} "
+                "label=${outcome.label}");
+        final summary = 'Background backup result=${outcome.status.name} '
+            'photos=${outcome.uploadedPhotos} '
+            'videos=${outcome.uploadedVideos} '
+            'skipped=${outcome.skippedUnresolvable}';
+        if (outcome.status == BackupRunStatus.failed || outcome.needsRetry) {
+          AppLogger.e('$summary reason=${outcome.label}', tag: 'AutoBackup');
+        } else {
+          AppLogger.i(summary, tag: 'AutoBackup');
+        }
+        await Hive.close();
+        return outcome.status != BackupRunStatus.failed;
       }
 
       final pendingBox =

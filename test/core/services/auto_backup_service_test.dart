@@ -20,7 +20,7 @@ import 'package:telstorage/core/services/file_manager.dart';
 import 'package:telstorage/core/services/hive_service.dart';
 import 'package:telstorage/core/services/metadata_service.dart';
 import 'package:telstorage/core/services/telegram_service.dart';
-import 'package:telstorage/shared/widgets/device_file_picker/device_media_scanner.dart';
+import 'package:telstorage/core/services/device_media_scanner.dart';
 
 /// Fake AssetEntity exposing only the metadata the service reads.
 class _FakeAsset extends AssetEntity {

@@ -150,7 +150,7 @@ Automatically back up your camera photos/videos to Telegram storage.
 6. Set **Retention** (keep last N files, 0 = keep all)
 
 #### How It Works
-- **Scheduled runs**: Every 15 min, the app checks if the daily window is active and (if Wi-Fi only) on unmetered network. Eligible runs upload new/changed assets.
+- **Scheduled runs**: Every 15 min, Android checks if the daily window is active and (if Wi-Fi only) on an unmetered network. Eligible runs launch a foreground background worker with a persistent notification and upload new/changed assets even when the app UI is closed. iOS keeps the system-scheduled due check and consumes work when the app resumes.
 - **Manual backup**: The single action is labelled **Back up existing photos** until the initial backfill finishes, then **Back up now**. It requests photo and video access when tapped and bypasses window/Wi-Fi/charging gates.
 - **Deduplication**: Uses MediaStore ID + file fingerprint (size + modified time) to avoid re-uploads.
 - **Backfill**: The same action uploads pre-existing photos and videos in bounded batches. It remains available until every batch completes.

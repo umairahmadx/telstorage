@@ -79,7 +79,7 @@ class AuthService {
 
   Future<void> logout() async {
     _cachedEmail = null;
-    ServiceLocator.instance.reset();
+    await ServiceLocator.instance.reset();
     await _storage.deleteAll();
   }
 

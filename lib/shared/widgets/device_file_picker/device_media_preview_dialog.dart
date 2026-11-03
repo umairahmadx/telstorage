@@ -12,7 +12,7 @@ import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_view/photo_view.dart';
 import '../../../../core/theme/app_colors_extension.dart';
 import '../../../../core/theme/app_icons.dart';
-import 'device_media_scanner.dart';
+import 'package:telstorage/core/services/device_media_scanner.dart';
 
 /// Modal dialog displaying high-resolution image zoom or video playback for an AssetEntity.
 class DeviceMediaPreviewDialog extends StatefulWidget {

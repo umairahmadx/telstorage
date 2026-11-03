@@ -12,7 +12,7 @@ import '../../../../core/theme/app_colors_extension.dart';
 import '../../../../core/theme/app_icons.dart';
 import 'device_media_album_sheet.dart';
 import 'device_media_preview_dialog.dart';
-import 'device_media_scanner.dart';
+import 'package:telstorage/core/services/device_media_scanner.dart';
 import 'device_picker_bottom_bar.dart';
 
 /// Bottom sheet dialog presenting device photos and videos in a 1:1 square grid.

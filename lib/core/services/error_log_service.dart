@@ -51,6 +51,19 @@ class ErrorLogService {
     _loadLogs();
   }
 
+  /// Reloads logs written by a separate WorkManager background isolate.
+  Future<void> refresh() async {
+    try {
+      if (_box != null && _box!.isOpen) {
+        await _box!.close();
+      }
+      await init();
+    } catch (e) {
+      debugPrint('ErrorLogService: failed to refresh logs: $e');
+      _loadLogs();
+    }
+  }
+
   void _loadLogs() {
     if (_box == null || !_box!.isOpen) return;
     final records = <ErrorLogRecord>[];
@@ -75,7 +88,6 @@ class ErrorLogService {
     dynamic stackTrace,
     Map<String, dynamic>? metadata,
   }) async {
-
     await _addRecord(
       ErrorLogRecord(
         id: '${DateTime.now().microsecondsSinceEpoch}',

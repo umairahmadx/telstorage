@@ -43,7 +43,7 @@ extension AutoBackupSchedulerRuns on AutoBackupScheduler {
       return outcome;
     } catch (e) {
       AppLogger.e(
-          'Backup run result=failed reason=${backupDiagnosticFailure('$e')}',
+          'Backup run result=failed reason=${backupDiagnosticFailure('$e')} exception=$e',
           tag: 'AutoBackup');
       return const BackupRunOutcome(
         status: BackupRunStatus.failed,

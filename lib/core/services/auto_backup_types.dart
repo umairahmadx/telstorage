@@ -47,7 +47,7 @@ typedef BackupNotifier = Future<void> Function(String title, String body);
 String backupDiagnosticFailure(String reason) {
   final value = reason.toLowerCase();
   if (value.contains('permission')) return 'permission_or_access';
-  if (value.contains('space')) return 'storage_check';
+  if (value.contains('space') || value.contains('storage')) return 'storage_check';
   if (value.contains('path') || value.contains('folder')) {
     return 'destination_setup';
   }

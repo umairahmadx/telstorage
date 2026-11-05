@@ -72,6 +72,10 @@ class _FakeBackupService extends AutoBackupService {
   bool lastIncludeBackfill = false;
   bool failCollection = false;
 
+  /// When set, isEligibleNow throws this exception instead of returning a
+  /// verdict — simulates an unexpected failure during eligibility gating.
+  Exception? throwOnEligibility;
+
   /// destFileIdsByAssetId map of every advanceWatermark call, in order.
   final List<Map<String, String>> watermarkCalls = [];
 
@@ -89,8 +93,10 @@ class _FakeBackupService extends AutoBackupService {
   Future<Result<BackupEligibility>> isEligibleNow(
     BackupRule rule, {
     DateTime? now,
-  }) async =>
-      Success(eligibility);
+  }) async {
+    if (throwOnEligibility != null) throw throwOnEligibility!;
+    return Success(eligibility);
+  }
 
   @override
   Future<Result<BackupEligibility>> isEligibleNowManual(
@@ -557,6 +563,19 @@ void main() {
       expect(fakeService.retentionCalls, 1);
       expect(stateBox.get(AppConstants.autoBackupDueKey), isFalse);
       expect(outcome.status, BackupRunStatus.ran);
+    });
+
+    test('unexpected exception in eligibility is caught and returns failed outcome', () async {
+      fakeService.throwOnEligibility = StateError('unexpected eligibility boom');
+      final rule = cameraRule();
+      await rulesBox.put('camera', rule);
+      await stateBox.put(AppConstants.autoBackupDueKey, true);
+      final scheduler = buildScheduler();
+
+      final outcome = await scheduler.consumeDueFlag();
+
+      expect(outcome.status, BackupRunStatus.failed);
+      expect(outcome.label, 'Backup run failed');
     });
   });
 

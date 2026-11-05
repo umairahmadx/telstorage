@@ -1,8 +1,9 @@
 /*
  * File: auto_backup_service.dart
- * Description: Foreground bridge between the pure auto-backup engine and
+ * Description: Bridge between the pure auto-backup engine and
  * device/cloud integrations (MediaStore scan, Backup folders, ledger).
- * Foreground only — never call from the Workmanager isolate.
+ * Safe for the configured Android WorkManager foreground worker and the app
+ * foreground pipeline.
  */
 
 import 'package:hive/hive.dart';
@@ -20,7 +21,8 @@ import 'package:telstorage/core/services/folder_traversal_service.dart';
 import 'package:telstorage/core/services/hive_service.dart';
 import 'package:telstorage/core/utils/app_logger.dart';
 import 'package:telstorage/core/utils/connectivity.dart';
-import 'package:telstorage/shared/widgets/device_file_picker/device_media_scanner.dart';
+import 'package:telstorage/core/utils/power_state.dart';
+import 'package:telstorage/core/services/device_media_scanner.dart';
 
 /// Foreground backup service wiring scan, folders, eligibility, retention.
 ///
@@ -29,8 +31,8 @@ import 'package:telstorage/shared/widgets/device_file_picker/device_media_scanne
 /// destination folders, [advanceWatermark] persists completions, and
 /// [enforceRetention] trims ledger-backed files. All async work returns
 /// [Result]. Folder creation and deletions need the Telegram stack, so this
-/// service must never run inside the Workmanager isolate (Task 4 calls only
-/// the Hive-only due-check there).
+/// the WorkManager isolate until its dependencies are rebuilt there by the
+/// background runner.
 class AutoBackupService {
   /// Maximum ledger rows before LRU eviction (E5).
   static const int maxLedgerEntries = 5000;
@@ -92,7 +94,7 @@ class AutoBackupService {
         // F1: unknown charging state is treated as NOT charging (fail closed).
         // A backup requiring charging must never run when the charging state
         // cannot be determined.
-        _isCharging = isCharging ?? (() async => false),
+        _isCharging = isCharging ?? PowerState.isCharging,
         // E3: unknown free space fails closed (no null proceed).
         _freeSpaceBytes = freeSpaceBytes ?? (() async => null);
 

@@ -55,7 +55,7 @@ class NotificationService {
     );
 
     try {
-      await _notificationsPlugin.initialize(
+      final initialized = await _notificationsPlugin.initialize(
         settings: initSettings,
         onDidReceiveNotificationResponse: (details) {
           AppLogger.d('Notification tapped: ${details.payload}',
@@ -65,18 +65,26 @@ class NotificationService {
           }
         },
       );
+      if (initialized != true) {
+        throw StateError('Notification plugin initialization was rejected');
+      }
       _initialized = true;
       await _createNotificationChannel();
 
       // Defensively stop any orphaned foreground service left from previous process termination
-      final androidPlugin = _notificationsPlugin
-          .resolvePlatformSpecificImplementation<
+      final androidPlugin =
+          _notificationsPlugin.resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>();
       await androidPlugin?.stopForegroundService();
 
       AppLogger.i('NotificationService initialized successfully',
           tag: 'NotificationService');
     } catch (e) {
+      // Allow a later call to recover from transient platform/channel
+      // failures instead of permanently disabling notifications for this
+      // process.
+      _initialized = false;
+      _initAttempted = false;
       AppLogger.w('Failed to initialize NotificationService: $e',
           tag: 'NotificationService');
     }
@@ -302,12 +310,10 @@ class NotificationService {
                 : 'Sharing Files...');
 
         final speedText = task.formattedSpeed;
-        final stageText =
-            (task.currentStage != null && task.currentStage!.isNotEmpty)
-                ? task.currentStage!
-                : (task.type == TransferType.upload
-                    ? 'Uploading'
-                    : 'Downloading');
+        final stageText = (task.currentStage != null &&
+                task.currentStage!.isNotEmpty)
+            ? task.currentStage!
+            : (task.type == TransferType.upload ? 'Uploading' : 'Downloading');
         final metricsParts = <String>[task.formattedProgress];
         if (task.sizeMb > 0) {
           metricsParts.add(task.formattedTransferredAndTotal);

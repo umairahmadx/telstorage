@@ -1,8 +1,7 @@
 /*
  * File: auto_backup_scheduler.dart
- * Description: Foreground auto-backup scheduler bridging the Workmanager
- * due-flag to the UploadBloc pipeline. The background due-check is Hive-only
- * (isolate-safe); uploads always run in the main isolate.
+ * Description: Auto-backup scheduler bridging periodic WorkManager checks,
+ * Android foreground background runs, and the foreground UploadBloc pipeline.
  */
 
 import 'package:hive/hive.dart';
@@ -21,21 +20,24 @@ import 'package:telstorage/core/services/transfer_queue_service.dart';
 import 'package:telstorage/core/utils/app_logger.dart';
 import 'package:telstorage/core/utils/connectivity.dart';
 import 'package:telstorage/features/upload/presentation/viewmodels/upload_view_model.dart';
-import 'package:telstorage/shared/widgets/device_file_picker/device_media_scanner.dart';
+import 'package:telstorage/core/services/device_media_scanner.dart';
+
+part 'auto_backup_scheduler_run.dart';
 
 part 'auto_backup_scheduler_run.dart';
 
 /// Schedules and runs camera-album auto-backup runs.
 ///
-/// The background due-check ([checkDueInBackground]) is Hive-only so it is
-/// safe inside the Workmanager isolate: it never touches Telegram,
-/// photo_manager, or the UploadBloc. Real uploads always run in the main
-/// isolate via [consumeDueFlag], which is also invoked on app start/resume
-/// and the manual "Back up now" button. See plan Task 4 (edge cases A9, A10,
-/// C6, C2, F1, F3, A12).
+/// The periodic due-check ([checkDueInBackground]) is Hive-only. On Android it
+/// schedules a foreground one-off worker that runs the upload pipeline in the
+/// background isolate; foreground app startup/resume and the manual button
+/// continue to use [consumeDueFlag].
 class AutoBackupScheduler {
   /// Workmanager unique name for the 15-minute periodic due-check.
   static const String periodicTaskName = 'telstorage.autoBackupCheck';
+
+  /// Workmanager unique name for a foreground background-upload pass.
+  static const String backgroundRunTaskName = 'telstorage.autoBackupRun';
 
   /// Deterministic id prefix for backup upload tasks (A10).
   static const String taskIdPrefix = 'backup:';
@@ -115,9 +117,17 @@ class AutoBackupScheduler {
     await _registerTask(periodicTaskName);
   }
 
+  /// Schedules one foreground worker after the due-check arms backup work.
+  Future<void> scheduleBackgroundRun() async {
+    await _registerTask(backgroundRunTaskName);
+  }
+
   /// Cancels the periodic task and clears the due flag (A12 logout teardown).
   Future<void> teardown() async {
     await _cancelTask(periodicTaskName);
+    if (_rulesBox == null && _stateBox == null) {
+      await _defaultCancel(backgroundRunTaskName);
+    }
     try {
       if (_state.isOpen) await _state.put(AppConstants.autoBackupDueKey, false);
     } catch (_) {}
@@ -171,14 +181,32 @@ class AutoBackupScheduler {
     return null;
   }
 
-  /// Default Workmanager registration (15-minute cadence).
-  static Future<void> _defaultRegister(String uniqueName) =>
-      Workmanager().registerPeriodicTask(
+  /// Default Workmanager registration for periodic checks and foreground runs.
+  static Future<void> _defaultRegister(String uniqueName) {
+    if (uniqueName == backgroundRunTaskName) {
+      return Workmanager().registerOneOffTask(
         uniqueName,
         uniqueName,
-        frequency: const Duration(minutes: 15),
-        existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
+        existingWorkPolicy: ExistingWorkPolicy.keep,
+        constraints: Constraints(networkType: NetworkType.connected),
+        foregroundServiceConfig: ForegroundServiceConfig(
+          notificationTitle: 'TelStorage backup',
+          notificationText: 'Backing up your camera media…',
+          notificationChannelId: 'telstorage_backup_worker',
+          notificationChannelName: 'Background backup',
+          notificationId: 1901,
+          foregroundServiceType: ForegroundServiceType.dataSync,
+        ),
       );
+    }
+    return Workmanager().registerPeriodicTask(
+      uniqueName,
+      uniqueName,
+      frequency: const Duration(minutes: 15),
+      existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
+      constraints: Constraints(networkType: NetworkType.connected),
+    );
+  }
 
   /// Default Workmanager cancellation.
   static Future<void> _defaultCancel(String uniqueName) =>

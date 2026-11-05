@@ -4,7 +4,7 @@
  */
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:telstorage/shared/widgets/device_file_picker/device_media_scanner.dart';
+import 'package:telstorage/core/services/device_media_scanner.dart';
 
 void main() {
   group('DeviceMediaScanner', () {

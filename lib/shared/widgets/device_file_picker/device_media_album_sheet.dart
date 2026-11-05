@@ -10,7 +10,7 @@ import 'package:photo_manager/photo_manager.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_colors_extension.dart';
 import '../../../../core/theme/app_icons.dart';
-import 'device_media_scanner.dart';
+import 'package:telstorage/core/services/device_media_scanner.dart';
 
 /// Bottom sheet dialog listing all device media albums for user selection.
 class DeviceMediaAlbumSheet extends StatelessWidget {

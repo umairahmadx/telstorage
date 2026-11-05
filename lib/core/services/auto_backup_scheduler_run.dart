@@ -10,9 +10,9 @@ extension AutoBackupSchedulerRuns on AutoBackupScheduler {
   /// Also the "Back up now" entry point ([manual]) and the app
   /// start/resume hook (killed-app recovery, C2). The due flag is consumed
   /// only after the rule passes eligibility, so an ineligible run (window,
-  /// metered, not charging, permission) never loses the flag — it stays
+  /// metered, not charging, permission) never loses the flag â€” it stays
   /// armed and is retried when conditions change. Uploads never run in the
-  /// Workmanager isolate — this must be called on the main isolate only.
+  /// Workmanager isolate â€” this must be called on the main isolate only.
   Future<BackupRunOutcome> consumeDueFlag({
     bool manual = false,
     bool backfill = false,
@@ -136,21 +136,15 @@ extension AutoBackupSchedulerRuns on AutoBackupScheduler {
     }
     final albumFolderId = pathResult.dataOrNull!.albumFolderId;
 
-    // NOTE: Free-space gate intentionally removed — AutoBackup streams directly
-    // from MediaStore paths to Telegram without local caching or disk duplication
-    // (RawStreamChunker reads in-place, Mp4FastStartProjector uses virtual projection).
-    // No temporary files or duplicated media are written to disk, so free space
-    // is not a precondition for backup uploads.
-
-
-
-
-
-
-
-
-
-
+    final freeSpace = await _activeService.ensureFreeSpaceFor(
+      uploads.map((u) => u.asset).toList(),
+    );
+    if (freeSpace.isFailure) {
+      return BackupRunOutcome(
+        status: BackupRunStatus.failed,
+        label: freeSpace.failureOrNull?.message ?? 'Low storage',
+      );
+    }
 
     final planned = <String, BackupUploadItem>{};
     final tasks = <UploadTask>[];
@@ -166,13 +160,7 @@ extension AutoBackupSchedulerRuns on AutoBackupScheduler {
       }
       final resolved = await _resolvePath(asset);
       if (resolved == null) {
-        continue;
-
-
-
-        continue;
-
-
+        unresolved++;
         continue;
       }
       tasks.add(UploadTask(

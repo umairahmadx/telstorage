@@ -274,11 +274,11 @@ class ServiceLocator {
     TransferQueueService.instance.clear();
     // A12: cancel the periodic auto-backup task and clear the due flag so a
     // new account never inherits the previous account's Backup/ folder ids.
-    unawaited(AutoBackupScheduler.instance.teardown());
+    await AutoBackupScheduler.instance.teardown();
     // Clear backup rules, ledger, and state boxes so a new account never
     // inherits the previous account's backup state.
     await _hive.clearAll();
-    unawaited(VideoStreamServer.instance.stop());
+    await VideoStreamServer.instance.stop();
     if (_initialized) {
       _thumbnailRepository.clearMemoryCache();
     }

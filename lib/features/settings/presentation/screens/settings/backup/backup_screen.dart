@@ -204,7 +204,8 @@ class _BackupScreenState extends State<BackupScreen> {
               (v) => _mutate((r) => r.includeVideos = v)),
           _switchRow(colors, 'Wi-Fi only', rule.wifiOnly,
               (v) => _mutate((r) => r.wifiOnly = v)),
-          _comingSoonRow(colors, 'Charging only', rule.chargingOnly),
+          _switchRow(colors, 'Charging only', rule.chargingOnly,
+              (v) => _mutate((r) => r.chargingOnly = v)),
         ],
       ),
     );
@@ -222,23 +223,6 @@ class _BackupScreenState extends State<BackupScreen> {
       activeThumbColor: colors.brandPrimary,
       title: Text(title,
           style: TextStyle(color: colors.textPrimary, fontSize: 14)),
-    );
-  }
-
-  Widget _comingSoonRow(
-    AppColorsExtension colors,
-    String title,
-    bool value,
-  ) {
-    // F1: no charging-state API exists yet. Never ship a dead toggle.
-    return SwitchListTile(
-      value: value,
-      onChanged: null,
-      activeThumbColor: colors.brandPrimary,
-      title: Text(title,
-          style: TextStyle(color: colors.textPrimary, fontSize: 14)),
-      subtitle: Text('Coming soon',
-          style: TextStyle(color: colors.textTertiary, fontSize: 11)),
     );
   }
 

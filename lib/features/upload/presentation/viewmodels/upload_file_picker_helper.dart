@@ -17,7 +17,7 @@ import '../../../../core/utils/battery_optimization_helper.dart';
 import '../../../../core/utils/storage_permission_helper.dart';
 import '../../../../shared/widgets/device_file_picker/device_file_picker_sheet.dart';
 import '../../../../shared/widgets/device_file_picker/device_media_picker_sheet.dart';
-import '../../../../shared/widgets/device_file_picker/device_media_scanner.dart';
+import '../../../../core/services/device_media_scanner.dart';
 import 'upload_folder_helper.dart';
 import 'upload_view_model.dart';
 

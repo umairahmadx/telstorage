@@ -373,7 +373,7 @@ void main() {
       expect(rule.lastUploadedCount, 1);
     });
 
-    test('free-space guard skips below twice the largest file', () async {
+    test('free-space guard is a no-op for streaming uploads', () async {
       final tight = AutoBackupService(
         ledgerBox: ledgerBox,
         freeSpaceBytes: () async => 100,
@@ -386,15 +386,14 @@ void main() {
         isVideo: true,
       );
       final blocked = await tight.ensureFreeSpaceFor([asset]);
-      expect(blocked.isFailure, isTrue);
+      expect(blocked.isSuccess, isTrue);
 
       final unknown = AutoBackupService(
         ledgerBox: ledgerBox,
         freeSpaceBytes: () async => null,
       );
       final allowed = await unknown.ensureFreeSpaceFor([asset]);
-      // Unknown free space fails closed (deterministic rule).
-      expect(allowed.isFailure, isTrue);
+      expect(allowed.isSuccess, isTrue);
     });
   });
 }

@@ -18,7 +18,9 @@ doc/
 docs/
 docs/superpowers/
 /docs/superpowers/
-
+.commandcode
+.kilo
+.opencode
 
 # Environment files
 .env

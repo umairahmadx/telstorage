@@ -74,7 +74,7 @@ class _FakeBackupService extends AutoBackupService {
 
   /// When set, isEligibleNow throws this exception instead of returning a
   /// verdict — simulates an unexpected failure during eligibility gating.
-  Exception? throwOnEligibility;
+  Object? throwOnEligibility;
 
   /// destFileIdsByAssetId map of every advanceWatermark call, in order.
   final List<Map<String, String>> watermarkCalls = [];

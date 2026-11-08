@@ -21,7 +21,7 @@ void main() {
     });
 
     test(
-        'TC-01: HTTP 400 "message can'\''t be deleted" returns without throwing',
+        'TC-01: HTTP 400 "message can\'t be deleted" returns without throwing',
         () async {
       int requestCount = 0;
       final dio = Dio();

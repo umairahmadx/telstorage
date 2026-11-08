@@ -41,9 +41,7 @@ class TelegramService {
   TelegramService({Dio? dio})
       : _dio = dio ??
             Dio(BaseOptions(
-              // 60s connect timeout is too short for spotty Android mobile
-              // networks; raise to 120s so transient DNS/TCP stalls don't
-              // fail every attempt before retry logic can kick in.
+              // 120s connect timeout avoids stalls on spotty mobile networks.
               connectTimeout: const Duration(seconds: 120),
               sendTimeout: const Duration(seconds: 180),
               receiveTimeout: const Duration(seconds: 180),
@@ -367,7 +365,9 @@ class TelegramService {
       final desc = e.response?.data?['description']?.toString() ?? e.message ?? '';
       if (e.response?.statusCode == 400 &&
           (desc.contains('message to delete not found') ||
-              desc.contains("message can't be deleted"))) return;
+              desc.contains("message can't be deleted"))) {
+        return;
+      }
       AppLogger.w('deleteMessage($messageId) failed: $desc', tag: 'TelegramService', error: e);
     } catch (e) {
       AppLogger.w('deleteMessage($messageId) failed: $e', tag: 'TelegramService', error: e);
@@ -433,14 +433,11 @@ class TelegramService {
     return _withRetry(() async {
       await TelegramRateLimiter.instance.acquire();
       try {
-        final response = await _dio.post(
-          '$_base/pinChatMessage',
-          data: {
-            'chat_id': _channelId,
-            'message_id': messageId,
-            'disable_notification': true,
-          },
-        );
+        final response = await _dio.post('$_base/pinChatMessage', data: {
+          'chat_id': _channelId,
+          'message_id': messageId,
+          'disable_notification': true,
+        });
 
         if (response.data['ok'] != true) {
           throw Exception('Pin failed: ${response.data['description']}');
@@ -466,10 +463,7 @@ class TelegramService {
     return _withRetry(() async {
       await TelegramRateLimiter.instance.acquire();
       try {
-        final res = await _dio.get(
-          '$_base/getChat',
-          queryParameters: {'chat_id': _channelId},
-        );
+        final res = await _dio.get('$_base/getChat', queryParameters: {'chat_id': _channelId});
 
         final pinnedMsg = res.data['result']['pinned_message'];
         if (pinnedMsg == null) {

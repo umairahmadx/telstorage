@@ -5,6 +5,8 @@
  * api.telegram.org).
  */
 
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:telstorage/core/services/telegram_rate_limiter.dart';
@@ -39,9 +41,8 @@ void main() {
                       statusCode: 408,
                     ),
                     type: DioExceptionType.connectionTimeout,
-                    error: SocketException(
+                    error: const SocketException(
                       'Connection timed out',
-                      address: 'api.telegram.org',
                       port: 443,
                     ),
                   ),
@@ -94,9 +95,8 @@ void main() {
                     statusCode: 408,
                   ),
                   type: DioExceptionType.connectionTimeout,
-                  error: SocketException(
+                  error: const SocketException(
                     'Connection timed out',
-                    address: 'api.telegram.org',
                     port: 443,
                   ),
                 ),

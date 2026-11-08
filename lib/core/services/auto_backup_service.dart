@@ -58,7 +58,6 @@ class AutoBackupService {
   final BackupLoadPage _loadPage;
   final UnmeteredProvider _isUnmetered;
   final ChargingStateProvider _isCharging;
-  final FreeSpaceProvider _freeSpaceBytes;
 
   /// Constructs AutoBackupService with injectable hooks for tests.
   AutoBackupService({
@@ -94,9 +93,7 @@ class AutoBackupService {
         // F1: unknown charging state is treated as NOT charging (fail closed).
         // A backup requiring charging must never run when the charging state
         // cannot be determined.
-        _isCharging = isCharging ?? PowerState.isCharging,
-        // E3: unknown free space fails closed (no null proceed).
-        _freeSpaceBytes = freeSpaceBytes ?? (() async => null);
+        _isCharging = isCharging ?? PowerState.isCharging;
 
   /// Resolves the ledger box keyed by asset id (opened in main.dart).
   Box<BackupLedgerEntry> get _ledger =>

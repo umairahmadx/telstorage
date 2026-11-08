@@ -24,8 +24,6 @@ import 'package:telstorage/core/services/device_media_scanner.dart';
 
 part 'auto_backup_scheduler_run.dart';
 
-part 'auto_backup_scheduler_run.dart';
-
 /// Schedules and runs camera-album auto-backup runs.
 ///
 /// The periodic due-check ([checkDueInBackground]) is Hive-only. On Android it

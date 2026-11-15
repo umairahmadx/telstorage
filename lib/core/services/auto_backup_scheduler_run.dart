@@ -153,7 +153,7 @@ extension AutoBackupSchedulerRuns on AutoBackupScheduler {
     for (final upload in uploads) {
       final asset = upload.asset;
       final taskId =
-          '${AutoBackupScheduler.taskIdPrefix}${asset.assetId}_${asset.fingerprint}';
+          '${AutoBackupScheduler.taskIdPrefix}${asset.assetId}:${asset.fingerprint}';
       if (_isActive(taskId)) {
         alreadyActive++;
         continue;

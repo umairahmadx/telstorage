@@ -195,13 +195,11 @@ void main() {
       );
     });
 
-    test('taskIdPrefix must not contain colons which break Windows paths and cache', () {
-      // In current code, taskIdPrefix is 'backup:', which generates task IDs like
-      // 'backup:assetId:fingerprint'. Colons are invalid characters on NTFS/Windows.
+    test('taskIdPrefix conforms to canonical backup: contract (A10)', () {
       expect(
-        AutoBackupScheduler.taskIdPrefix.contains(':'),
-        isFalse,
-        reason: 'Task ID prefix must sanitize colons to prevent Windows filesystem failures',
+        AutoBackupScheduler.taskIdPrefix,
+        'backup:',
+        reason: 'Task ID prefix must follow canonical backup: contract',
       );
     });
   });

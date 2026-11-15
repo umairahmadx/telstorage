@@ -224,7 +224,7 @@ class AutoBackupBackgroundRunner {
         continue;
       }
       final taskId =
-          'backup_${upload.asset.assetId}_${upload.asset.fingerprint}';
+          'backup:${upload.asset.assetId}:${upload.asset.fingerprint}';
       final outcome = await _uploads.uploadFile(
         null,
         upload.destinationName,

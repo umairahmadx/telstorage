@@ -38,7 +38,7 @@ class AutoBackupScheduler {
   static const String backgroundRunTaskName = 'telstorage.autoBackupRun';
 
   /// Deterministic id prefix for backup upload tasks (A10).
-  static const String taskIdPrefix = 'backup_';
+  static const String taskIdPrefix = 'backup:';
 
   /// Production singleton wired in ServiceLocator.
   static final AutoBackupScheduler instance = AutoBackupScheduler();

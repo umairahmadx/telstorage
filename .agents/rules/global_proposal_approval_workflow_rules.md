@@ -156,7 +156,7 @@ Copy this skeleton into the Phase 1 response and fill it in:
 1. **Precedence**: this rule outranks every other rule module on the question of *when* edits may occur. If another module appears to demand an immediate edit, the gate still holds and that module is satisfied inside Phase 2.
 2. **Bug Fix Reproduction-First, section 3** ("show solution before execution") is the narrow form of this rule; this document is its canonical definition. The RED test is step 1 of the approved plan, which satisfies that rule's "reproduce before production edits" requirement.
 3. **Verification, Reporting & Claim Integrity, section 1**: a proposal is a Level 1 claim; the three-state closure report is Phase 2's final artifact.
-4. **Folder Structure, Coding Standards, Theming, Widget Reuse, Error Handling, Security, Performance, Ripple** modules constrain *what* the approved solution looks like; the proposal must state compliance with each module it touches.
+4. **Folder Structure, Coding Standards, Theming, Widget Reuse, Error Handling, Security, Performance, Ripple, Git Workflow** modules constrain *what* the approved solution looks like; the proposal must state compliance with each module it touches.
 5. Only an explicit user instruction can relax this gate, and only for the turn in which it is given.
 
 ---
@@ -180,3 +180,4 @@ The final Phase 2 report must:
 2. Record every deviation from the approved plan and whether re-approval was requested for it.
 3. Close with one of the three states defined by the Verification rules: `Holds up`, `Holds up with a named residual risk`, or `Not done yet`.
 4. Confirm that the rule index (`.agents/AGENTS.md`) and any affected documentation were updated when behavior or rules changed.
+5. Confirm adherence to the [Git Branching, Pull Request & Repository Hygiene Rules](git_workflow_branch_pr_hygiene_rules.md): work lands via Pull Request (Squash and Merge), remote branches are pruned, and the local repository concludes on a clean `main` branch with zero lingering branches.

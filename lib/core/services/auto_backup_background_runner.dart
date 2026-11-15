@@ -4,6 +4,7 @@
  * WorkManager foreground-worker pipeline.
  */
 
+import 'dart:io';
 import 'package:disk_space_plus/disk_space_plus.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive/hive.dart';
@@ -223,7 +224,7 @@ class AutoBackupBackgroundRunner {
         continue;
       }
       final taskId =
-          'backup:${upload.asset.assetId}:${upload.asset.fingerprint}';
+          'backup_${upload.asset.assetId}_${upload.asset.fingerprint}';
       final outcome = await _uploads.uploadFile(
         null,
         upload.destinationName,
@@ -234,6 +235,16 @@ class AutoBackupBackgroundRunner {
         skipGlobalMetadataUpdate: true,
         taskId: taskId,
       );
+
+      if (resolved.isTemporary) {
+        try {
+          final tempF = File(resolved.path);
+          if (tempF.existsSync()) {
+            tempF.deleteSync();
+          }
+        } catch (_) {}
+      }
+
       if (outcome.isFailure) {
         failed++;
         AppLogger.e(
@@ -245,7 +256,8 @@ class AutoBackupBackgroundRunner {
       }
 
       final fileMeta = outcome.dataOrNull!;
-      final destinationId = fileMeta['metadata_file_id'] as String?;
+      final destinationId =
+          fileMeta['file_id'] as String? ?? fileMeta['metadata_file_id'] as String?;
       if (destinationId == null || destinationId.isEmpty) {
         failed++;
         AppLogger.e(
@@ -321,6 +333,12 @@ class AutoBackupBackgroundRunner {
     BackupAsset asset,
   ) async {
     try {
+      final fast = DeviceMediaScanner.resolveFastDirectPath(
+        relativePath: asset.relativePath,
+        title: asset.title,
+      );
+      if (fast != null) return fast;
+
       final entity = await AssetEntity.fromId(asset.assetId);
       if (entity == null) return null;
       final resolved = await DeviceMediaScanner.resolveUploadPath(entity);

@@ -153,7 +153,7 @@ extension AutoBackupSchedulerRuns on AutoBackupScheduler {
     for (final upload in uploads) {
       final asset = upload.asset;
       final taskId =
-          '${AutoBackupScheduler.taskIdPrefix}${asset.assetId}:${asset.fingerprint}';
+          '${AutoBackupScheduler.taskIdPrefix}${asset.assetId}_${asset.fingerprint}';
       if (_isActive(taskId)) {
         alreadyActive++;
         continue;
@@ -312,8 +312,10 @@ extension AutoBackupSchedulerRuns on AutoBackupScheduler {
             : pending.isNotEmpty
                 ? '${pending.length} upload(s) still pending'
                 : 'Backed up $photos photos, $videos videos';
+    final hasFailed = (photos == 0 && videos == 0 && failedTasks > 0) ||
+        (tasks.isNotEmpty && completedIds.isEmpty && failedTasks > 0);
     return BackupRunOutcome(
-      status: BackupRunStatus.ran,
+      status: hasFailed ? BackupRunStatus.failed : BackupRunStatus.ran,
       label: label,
       uploadedPhotos: photos,
       uploadedVideos: videos,

@@ -62,7 +62,7 @@ class _BackupScreenState extends State<BackupScreen> {
       SnackBar(
         content: Text(_outcomeMessage(outcome)),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: outcome.status == BackupRunStatus.ran
+        backgroundColor: (outcome.status == BackupRunStatus.ran && !outcome.needsRetry)
             ? Theme.of(context).extension<AppColorsExtension>()!.brandPrimary
             : null,
       ),
@@ -73,10 +73,10 @@ class _BackupScreenState extends State<BackupScreen> {
     switch (outcome.status) {
       case BackupRunStatus.ran:
         if (outcome.needsRetry && !(_rule?.backfillDone ?? true)) {
-          return 'Backup batch finished. Tap again to continue backing up existing media.';
+          return 'Backup batch completed with issues: ${outcome.label}. Tap again to retry.';
         }
         if (outcome.needsRetry) {
-          return 'Some backup items need attention. Tap again to retry.';
+          return 'Some backup items need attention: ${outcome.label}. Tap again to retry.';
         }
         if (outcome.backfillComplete) {
           return 'Existing photos and videos have been backed up.';
@@ -92,6 +92,10 @@ class _BackupScreenState extends State<BackupScreen> {
       case BackupRunStatus.ineligible:
         if (outcome.label == 'Permission needed') {
           return 'Allow access to photos and videos to run the backup.';
+        }
+        if (outcome.label.contains('already running') ||
+            outcome.label.contains('already in progress')) {
+          return 'A backup is already running in the background.';
         }
         return 'Backup not eligible now (window, charging, or Wi‑Fi). '
             'Use "Back up now" to run immediately.';

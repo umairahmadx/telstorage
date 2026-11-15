@@ -284,6 +284,11 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
       if (!await checkFileExists(task.path!)) {
         AppLogger.w('File inaccessible: ${task.name}', tag: 'UploadBloc');
         await task.cleanupCacheFile();
+        TransferQueueService.instance.updateTask(
+          task.id,
+          status: TransferStatus.failed,
+          error: 'File inaccessible: ${task.name}',
+        );
         _safeAdd(UploadFailed('File inaccessible: ${task.name}',
             fileName: task.name));
         return;
@@ -296,6 +301,11 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
         AppLogger.w('Failed to read bytes for ${task.name}: $e',
             tag: 'UploadBloc');
         await task.cleanupCacheFile();
+        TransferQueueService.instance.updateTask(
+          task.id,
+          status: TransferStatus.failed,
+          error: 'Failed to read bytes for ${task.name}: $e',
+        );
         _safeAdd(UploadFailed('File inaccessible: ${task.name}',
             fileName: task.name));
         return;
@@ -355,6 +365,11 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
           _retryWhenOnline();
         } else {
           await task.cleanupCacheFile();
+          TransferQueueService.instance.updateTask(
+            task.id,
+            status: TransferStatus.failed,
+            error: failure.message,
+          );
           _safeAdd(UploadFailed(failure.message, fileName: task.name));
         }
     }
@@ -386,6 +401,19 @@ class UploadBloc extends Bloc<UploadEvent, UploadState> {
   void _onUploadFailed(UploadFailed event, Emitter<UploadState> emit) {
     _completedCount++;
     _activeWorkers--;
+    final queue = TransferQueueService.instance;
+    for (final task in queue.tasks) {
+      if (task.name == event.fileName &&
+          task.status != TransferStatus.completed &&
+          task.status != TransferStatus.cancelled &&
+          task.status != TransferStatus.failed) {
+        queue.updateTask(
+          task.id,
+          status: TransferStatus.failed,
+          error: event.message,
+        );
+      }
+    }
     emit(UploadSingleError(fileName: event.fileName, message: event.message));
     _safeAdd(ProcessNextUpload());
   }

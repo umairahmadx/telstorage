@@ -111,31 +111,57 @@ class DeviceMediaScanner {
 
   /// Resolves the zero-copy upload path for an AssetEntity.
   /// On Android: constructs direct POSIX path from MediaStore metadata.
-  /// On iOS: retrieves sandbox file and marks as temporary for cleanup.
+  /// Falls back to originFile, and if unavailable, asset.file (marked temporary).
   static Future<(String path, bool isTemporary)> resolveUploadPath(
     AssetEntity asset,
   ) async {
     if (!kIsWeb && Platform.isAndroid) {
-      final directPath = constructDirectPath(
-        relativePath: asset.relativePath ?? '',
-        title: asset.title ?? 'file',
-      );
-      if (File(directPath).existsSync()) {
-        return (directPath, false);
-      }
+      try {
+        final directPath = constructDirectPath(
+          relativePath: asset.relativePath ?? '',
+          title: asset.title ?? 'file',
+        );
+        final file = File(directPath);
+        if (file.existsSync()) {
+          try {
+            final raf = file.openSync(mode: FileMode.read);
+            raf.closeSync();
+            return (directPath, false);
+          } catch (_) {}
+        }
+      } catch (_) {}
 
-      final file = await asset.originFile;
-      if (file != null) {
-        return (file.path, isTemporaryPath(file.path));
-      }
+      try {
+        final origin = await asset.originFile;
+        if (origin != null && origin.existsSync()) {
+          return (origin.path, isTemporaryPath(origin.path));
+        }
+      } catch (_) {}
+
+      try {
+        final fallback = await asset.file;
+        if (fallback != null && fallback.existsSync()) {
+          return (fallback.path, true);
+        }
+      } catch (_) {}
 
       throw StateError('Cannot resolve upload path for asset ${asset.id}');
     } else {
-      final file = await asset.originFile;
-      if (file == null) {
-        throw StateError('Cannot access file for asset ${asset.id}');
-      }
-      return (file.path, true);
+      try {
+        final origin = await asset.originFile;
+        if (origin != null && origin.existsSync()) {
+          return (origin.path, isTemporaryPath(origin.path));
+        }
+      } catch (_) {}
+
+      try {
+        final fallback = await asset.file;
+        if (fallback != null && fallback.existsSync()) {
+          return (fallback.path, true);
+        }
+      } catch (_) {}
+
+      throw StateError('Cannot access file for asset ${asset.id}');
     }
   }
 
@@ -146,7 +172,38 @@ class DeviceMediaScanner {
     required String relativePath,
     required String title,
   }) {
-    return '$_androidStorageRoot$relativePath$title';
+    var rel = relativePath.trim();
+    while (rel.startsWith('/')) {
+      rel = rel.substring(1);
+    }
+    if (rel.isNotEmpty && !rel.endsWith('/')) {
+      rel = '$rel/';
+    }
+    final cleanTitle = title.trim();
+    return '$_androidStorageRoot$rel$cleanTitle';
+  }
+
+  /// Resolves direct POSIX path from preserved asset metadata if readable.
+  static ({String path, bool isTemporary})? resolveFastDirectPath({
+    required String? relativePath,
+    required String title,
+  }) {
+    if (kIsWeb || !Platform.isAndroid || title.trim().isEmpty) return null;
+    try {
+      final directPath = constructDirectPath(
+        relativePath: relativePath ?? '',
+        title: title,
+      );
+      final file = File(directPath);
+      if (file.existsSync()) {
+        try {
+          final raf = file.openSync(mode: FileMode.read);
+          raf.closeSync();
+          return (path: directPath, isTemporary: false);
+        } catch (_) {}
+      }
+    } catch (_) {}
+    return null;
   }
 
   /// Determines if a resolved path points to a temporary cache location.

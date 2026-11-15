@@ -11,6 +11,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:telstorage/core/constants/app_constants.dart';
 import 'package:telstorage/core/models/backup_rule.dart';
 import 'package:telstorage/core/services/auto_backup_engine.dart';
+import 'package:telstorage/core/services/auto_backup_scheduler.dart';
 import 'package:telstorage/core/utils/connectivity.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
 import 'package:telstorage/features/settings/presentation/screens/settings/backup/backup_screen.dart';
@@ -32,6 +33,9 @@ class SettingsBackupCard extends StatefulWidget {
   /// Optional battery checker used to read the current charging state.
   final Future<bool> Function()? chargingChecker;
 
+  /// Whether to schedule periodic status refreshes (disabled in widget tests).
+  final bool enablePolling;
+
   /// Constructs SettingsBackupCard.
   const SettingsBackupCard({
     super.key,
@@ -39,6 +43,7 @@ class SettingsBackupCard extends StatefulWidget {
     this.unmeteredChecker,
     this.connectionChecker,
     this.chargingChecker,
+    this.enablePolling = true,
   });
 
   @override
@@ -56,10 +61,12 @@ class _SettingsBackupCardState extends State<SettingsBackupCard>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _statusRefreshTimer = Timer.periodic(
-      const Duration(seconds: 30),
-      (_) => _refreshStatus(),
-    );
+    if (widget.enablePolling) {
+      _statusRefreshTimer = Timer.periodic(
+        const Duration(seconds: 30),
+        (_) => _refreshStatus(),
+      );
+    }
     if (Hive.isBoxOpen(AppConstants.backupRulesBox)) {
       _rulesBox = Hive.box<BackupRule>(AppConstants.backupRulesBox);
       // Seed the default Camera rule so the card always has a rule to toggle.
@@ -90,6 +97,9 @@ class _SettingsBackupCardState extends State<SettingsBackupCard>
   Future<String> _loadStatusLine(BackupRule rule) async {
     if (!rule.enabled) return 'Off';
     try {
+      if (AutoBackupScheduler.instance.isRunInProgress) {
+        return 'Backing up…';
+      }
       final permissionGranted = await (widget.permissionChecker ??
           DeviceMediaScanner.hasPermission)();
       final connected =
@@ -108,10 +118,13 @@ class _SettingsBackupCardState extends State<SettingsBackupCard>
         charging: charging,
         permissionGranted: permissionGranted,
       );
-      if (!eligibility.isEligible) return eligibility.label;
+      if (rule.lastResult == 'failed' || rule.lastResult == 'error') {
+        return 'Last run failed';
+      }
       if (rule.lastResult == 'completed') {
         return 'Last run: ${rule.lastUploadedCount} item(s) backed up';
       }
+      if (!eligibility.isEligible) return eligibility.label;
       return eligibility.label;
     } catch (_) {
       return 'Backup status unavailable';

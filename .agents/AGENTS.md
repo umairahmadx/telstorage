@@ -77,3 +77,11 @@ Enterprise-grade quality and long-term stability always outrank fast completion,
     - Canonical proposal template, forbidden workflow anti-patterns, precedence over all other rule modules, and a pre-response self-check.
     - Guarded by `test/architecture/global_workflow_rules_test.dart`.
 
+12. [**Git Branching, Pull Request & Repository Hygiene Rules**](file:///c:/Users/umair-dell/StudioProjects/telstorage/.agents/rules/git_workflow_branch_pr_hygiene_rules.md)
+    - Zero direct commits to `main`; all changes land via Pull Request.
+    - Post-verification branch creation and conventional commit discipline.
+    - Mandatory Squash-and-Merge convention on GitHub.
+    - Immediate post-merge local synchronization, branch pruning, and local branch deletion.
+    - Enforced single-branch invariant: repository concludes on clean `main` with zero lingering local branches.
+    - Guarded by `test/architecture/git_workflow_rules_test.dart`.
+

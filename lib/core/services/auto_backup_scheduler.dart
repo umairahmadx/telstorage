@@ -38,10 +38,17 @@ class AutoBackupScheduler {
   static const String backgroundRunTaskName = 'telstorage.autoBackupRun';
 
   /// Deterministic id prefix for backup upload tasks (A10).
-  static const String taskIdPrefix = 'backup:';
+  static const String taskIdPrefix = 'backup_';
 
   /// Production singleton wired in ServiceLocator.
   static final AutoBackupScheduler instance = AutoBackupScheduler();
+
+  /// Whether a backup execution is currently running.
+  bool get isRunInProgress => _runInProgress;
+
+  /// Visible for unit tests to simulate in-progress runs.
+  @visibleForTesting
+  set runInProgressForTesting(bool value) => _runInProgress = value;
 
   final AutoBackupService _service;
   final Box<BackupRule>? _rulesBox;
@@ -210,14 +217,18 @@ class AutoBackupScheduler {
   static Future<void> _defaultCancel(String uniqueName) =>
       Workmanager().cancelByUniqueName(uniqueName);
 
-  /// Default path resolver: re-fetch the AssetEntity by id and resolve via
-  /// DeviceMediaScanner. Runs on the main isolate only (Android zero-copy
-  /// path, iOS temp fallback, F3). Returns null when unreachable so the run
-  /// skips it without blocking other assets.
+  /// Default path resolver: directly checks preserved metadata path on disk,
+  /// then falls back to photo_manager AssetEntity resolution.
   static Future<({String path, bool isTemporary})?> _defaultResolve(
     BackupAsset asset,
   ) async {
     try {
+      final fast = DeviceMediaScanner.resolveFastDirectPath(
+        relativePath: asset.relativePath,
+        title: asset.title,
+      );
+      if (fast != null) return fast;
+
       final entity = await AssetEntity.fromId(asset.assetId);
       if (entity == null) return null;
       final resolved = await DeviceMediaScanner.resolveUploadPath(entity);

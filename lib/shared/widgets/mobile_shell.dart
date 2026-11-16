@@ -143,6 +143,13 @@ class MobileShellState extends State<MobileShell> {
             .map((file) => p.basename(IncomingShareService.localPathFor(file)))
             .toList(),
         folders: folders,
+        onCreateFolder: (name, parentId) async {
+          final repository = ServiceLocator.instance.storageRepository;
+          final result = await repository.createFolder(name, parentId: parentId);
+          final folderId = result.dataOrNull;
+          if (folderId == null) return null;
+          return repository.getFolder(folderId);
+        },
       );
 
       if (destination == null) {

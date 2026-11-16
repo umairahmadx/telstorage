@@ -89,6 +89,7 @@ class _FolderCreatingBackupService extends AutoBackupService {
     required List<BackupUploadItem> uploads,
     required Map<String, String> destFileIdsByAssetId,
     String? destFolderId,
+    Map<String, String>? destFolderIdsByAssetId,
     bool deleteReplaced = true,
   }) async =>
       const Success(null);

@@ -7,7 +7,6 @@
  */
 
 import 'package:hive/hive.dart';
-import 'package:photo_manager/photo_manager.dart';
 
 import 'package:telstorage/core/constants/app_constants.dart';
 import 'package:telstorage/core/errors/result.dart';
@@ -15,6 +14,7 @@ import 'package:telstorage/core/models/backup_ledger_entry.dart';
 import 'package:telstorage/core/models/backup_rule.dart';
 import 'package:telstorage/core/services/auto_backup_engine.dart';
 import 'package:telstorage/core/services/auto_backup_ledger.dart';
+import 'package:telstorage/core/services/auto_backup_sources.dart';
 import 'package:telstorage/core/services/auto_backup_types.dart';
 import 'package:telstorage/core/services/file_manager.dart';
 import 'package:telstorage/core/services/folder_traversal_service.dart';
@@ -112,7 +112,7 @@ class AutoBackupService {
       if (!rule.enabled) {
         return const Success(BackupEligibility(BackupBlockReason.disabled));
       }
-      if (!await _hasPermission()) {
+      if (!rule.isDirectory && !await _hasPermission()) {
         return const Success(
             BackupEligibility(BackupBlockReason.permissionDenied));
       }
@@ -142,7 +142,7 @@ class AutoBackupService {
       if (!rule.enabled) {
         return const Success(BackupEligibility(BackupBlockReason.disabled));
       }
-      if (!await _requestPermission()) {
+      if (!rule.isDirectory && !await _requestPermission()) {
         return const Success(
             BackupEligibility(BackupBlockReason.permissionDenied));
       }
@@ -171,26 +171,49 @@ class AutoBackupService {
           plan: BackupPlan(uploads: [], adoptions: []),
         ));
       }
-      if (!await _hasPermission()) {
-        return const Failure(UnknownFailure('Permission needed'));
+      final List<BackupAsset> scannedAssets;
+      final int skippedUnresolvable;
+      if (rule.isDirectory) {
+        final scanned = await scanBackupDirectory(
+          rule,
+          maxFiles: maxScanPages * scanPageSize,
+        );
+        scannedAssets = scanned.assets;
+        skippedUnresolvable = scanned.skippedUnresolvable;
+      } else {
+        if (!await _hasPermission()) {
+          return const Failure(UnknownFailure('Permission needed'));
+        }
+        final albums = await _loadAlbums();
+        final album = findBackupAlbum(albums, rule.albumName);
+        if (album == null) {
+          return Failure(
+              NotFoundFailure('Album "${rule.albumName}" missing'));
+        }
+        final scanned = await _scanAlbum(album);
+        scannedAssets = scanned.assets;
+        skippedUnresolvable = scanned.skippedUnresolvable;
       }
-      final albums = await _loadAlbums();
-      final album = _findAlbum(albums, rule.albumName);
-      if (album == null) {
-        return Failure(NotFoundFailure('Album "${rule.albumName}" missing'));
-      }
-      final scanned = await _scanAlbum(album);
-      final cloudByName = _cloudFilesByName(rule.albumFolderId);
+      final cloudByName = rule.isDirectory
+          ? cloudTreeFilesByPath(_hive, rule.albumFolderId)
+          : cloudFilesByName(_hive, rule.albumFolderId);
       final byId = <String, BackupLedgerEntry>{};
       final byPath = <String, BackupLedgerEntry>{};
       for (final entry in _ledger.values) {
+        // Directory asset ids are absolute paths; scope path matching to
+        // this rule's tree so identical relative paths in other backed-up
+        // folders never adopt each other's ledger rows.
+        if (rule.isDirectory &&
+            !entry.assetId.startsWith('${rule.sourcePath}/')) {
+          continue;
+        }
         byId[entry.assetId] = entry;
         final path = entry.lastKnownPath;
         if (path != null) byPath[path] = entry;
       }
       final plan = planRun(
         rule: rule,
-        assets: scanned.assets,
+        assets: scannedAssets,
         ledgerByAssetId: byId,
         ledgerByPath: byPath,
         cloudFilesByName: cloudByName,
@@ -201,7 +224,7 @@ class AutoBackupService {
       await persistAdoptions(_ledger, plan.adoptions, rule);
       return Success(BackupCollectResult(
         plan: plan,
-        skippedUnresolvable: scanned.skippedUnresolvable,
+        skippedUnresolvable: skippedUnresolvable,
       ));
     } catch (e) {
       return Failure(UnknownFailure('Backup scan failed: $e', e));
@@ -282,6 +305,7 @@ class AutoBackupService {
     required List<BackupUploadItem> uploads,
     required Map<String, String> destFileIdsByAssetId,
     String? destFolderId,
+    Map<String, String>? destFolderIdsByAssetId,
     bool deleteReplaced = true,
   }) async {
     try {
@@ -306,7 +330,9 @@ class AutoBackupService {
             fingerprint: upload.asset.fingerprint,
             lastKnownPath: upload.asset.containerPath,
             destFileId: destFileId,
-            destFolderId: destFolderId ?? rule.albumFolderId,
+            destFolderId: destFolderIdsByAssetId?[upload.asset.assetId] ??
+                destFolderId ??
+                rule.albumFolderId,
             uploadedAt: now,
           ),
         );
@@ -341,7 +367,13 @@ class AutoBackupService {
         return const Failure(
             UnknownFailure('FileManager missing for retention'));
       }
-      final folderFiles = _hive.filesInFolder(albumFolderId);
+      final folderFiles = rule.isDirectory
+          ? FolderTraversalService.resolveDescendants(
+              targetFolderId: albumFolderId,
+              allFolders: _hive.allFolders,
+              allFiles: _hive.allFiles,
+            ).map((item) => item.file).toList()
+          : _hive.filesInFolder(albumFolderId);
       final ledgerFileIds = <String>{};
       for (final entry in _ledger.values) {
         final id = entry.destFileId;
@@ -403,29 +435,37 @@ class AutoBackupService {
     }
   }
 
-  /// Matches the rule album by exact name, then case-insensitively.
-  MediaAlbum? _findAlbum(List<MediaAlbum> albums, String name) {
-    for (final album in albums) {
-      if (album.name == name) return album;
-    }
-    final lower = name.toLowerCase();
-    for (final album in albums) {
-      if (album.name.toLowerCase() == lower) return album;
-    }
-    return null;
-  }
+  /// Resolves `root/Backup/<Album>/<subfolders…>` for one tree-relative
+  /// directory, creating missing segments idempotently. [cache] memoizes
+  /// resolved ids for the duration of a run.
+  Future<Result<String>> ensureSubfolderPath(
+    BackupRule rule,
+    String relativeDir, {
+    Map<String, String>? cache,
+  }) =>
+      resolveBackupSubfolderPath(
+        rule: rule,
+        relativeDir: relativeDir,
+        hive: _hive,
+        files: _files,
+        cache: cache,
+      );
 
   /// Pages through one album converting to engine DTOs without file reads.
   Future<({List<BackupAsset> assets, int skippedUnresolvable})> _scanAlbum(
     MediaAlbum album,
   ) async {
     final assets = <BackupAsset>[];
+    final seenIds = <String>{};
     var skippedUnresolvable = 0;
     for (var page = 0; page < maxScanPages; page++) {
       final slice = await _loadPage(album, page, scanPageSize);
       if (slice.isEmpty) break;
       for (final entity in slice) {
-        final dto = await _toBackupAsset(entity);
+        // MediaStore pagination can repeat rows when the library changes
+        // mid-scan; duplicates would upload twice but watermark once.
+        if (!seenIds.add(entity.id)) continue;
+        final dto = await backupAssetFromEntity(entity);
         if (dto == null) {
           skippedUnresolvable++;
           continue;
@@ -435,47 +475,5 @@ class AutoBackupService {
       if (slice.length < scanPageSize) break;
     }
     return (assets: assets, skippedUnresolvable: skippedUnresolvable);
-  }
-
-  /// Converts one AssetEntity to a DTO; null when metadata is unreadable.
-  Future<BackupAsset?> _toBackupAsset(AssetEntity entity) async {
-    try {
-      final rawTitle = entity.title;
-      final title =
-          (rawTitle != null && rawTitle.isNotEmpty) ? rawTitle : entity.id;
-      final modifiedSec = entity.modifiedDateSecond ?? entity.createDateSecond;
-      final modifiedMs =
-          (modifiedSec ?? DateTime.now().millisecondsSinceEpoch ~/ 1000) * 1000;
-      int sizeBytes = 0;
-      try {
-        sizeBytes = await entity.fileSize;
-      } catch (_) {
-        return null;
-      }
-      return BackupAsset(
-        assetId: entity.id,
-        title: title,
-        relativePath: entity.relativePath,
-        modifiedMs: modifiedMs,
-        sizeBytes: sizeBytes,
-        isVideo: entity.type == AssetType.video,
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// Indexes existing destination files by name for cloud adoption (A7).
-  Map<String, CloudFileRef> _cloudFilesByName(String? albumFolderId) {
-    final map = <String, CloudFileRef>{};
-    if (albumFolderId == null) return map;
-    for (final file in _hive.filesInFolder(albumFolderId)) {
-      if (map.containsKey(file.name)) continue;
-      map[file.name] = CloudFileRef(
-        fileId: file.fileId,
-        sizeBytes: (file.sizeMb * 1048576).round(),
-      );
-    }
-    return map;
   }
 }

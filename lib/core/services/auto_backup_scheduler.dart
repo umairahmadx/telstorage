@@ -46,6 +46,12 @@ class AutoBackupScheduler {
   /// Whether a backup execution is currently running.
   bool get isRunInProgress => _runInProgress;
 
+  final ValueNotifier<BackupRunProgress?> _runProgress =
+      ValueNotifier<BackupRunProgress?>(null);
+
+  /// Live progress of the current run; null when no run is active.
+  ValueListenable<BackupRunProgress?> get runProgress => _runProgress;
+
   /// Visible for unit tests to simulate in-progress runs.
   @visibleForTesting
   set runInProgressForTesting(bool value) => _runInProgress = value;
@@ -162,14 +168,6 @@ class AutoBackupScheduler {
     }
   }
 
-  /// First enabled rule, or null when none is enabled.
-  BackupRule? _firstEnabledRule() {
-    for (final rule in _rules.values) {
-      if (rule.enabled) return rule;
-    }
-    return null;
-  }
-
   /// Whether an active (non-terminal) transfer already covers [taskId] (A10).
   bool _isActive(String taskId) {
     for (final task in TransferQueueService.instance.activeTasks) {
@@ -196,7 +194,7 @@ class AutoBackupScheduler {
         constraints: Constraints(networkType: NetworkType.connected),
         foregroundServiceConfig: ForegroundServiceConfig(
           notificationTitle: 'TelStorage backup',
-          notificationText: 'Backing up your camera media…',
+          notificationText: 'Backing up your media…',
           notificationChannelId: 'telstorage_backup_worker',
           notificationChannelName: 'Background backup',
           notificationId: 1901,

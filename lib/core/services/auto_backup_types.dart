@@ -105,6 +105,40 @@ enum BackupRunStatus {
   ran,
 }
 
+/// Live progress of an in-flight backup run for UI status surfaces.
+class BackupRunProgress {
+  /// Whether the run is still scanning/planning (no upload totals yet).
+  final bool scanning;
+
+  /// Files that reached a terminal state (completed or failed).
+  final int completed;
+
+  /// Total files planned for upload across all enabled rules.
+  final int total;
+
+  /// Aggregate 0..1 progress including partial in-flight uploads.
+  final double fraction;
+
+  /// Name of a file currently uploading, when known.
+  final String? currentFileName;
+
+  /// Constructs BackupRunProgress.
+  const BackupRunProgress({
+    this.scanning = false,
+    this.completed = 0,
+    this.total = 0,
+    this.fraction = 0,
+    this.currentFileName,
+  });
+
+  /// Human-readable status line.
+  String get label => scanning
+      ? 'Scanning for new media…'
+      : total > 0
+          ? 'Backing up $completed of $total…'
+          : 'Preparing backup…';
+}
+
 /// Summary of one consumeDueFlag run for status lines and tests.
 class BackupRunOutcome {
   /// Terminal run state.

@@ -9,8 +9,8 @@ part 'backup_rule.g.dart';
 
 /// Hive local model for an auto-backup rule.
 ///
-/// v1 supports a single Camera-album rule; the shape is generic so later
-/// phases can add WhatsApp/custom folders without a schema migration.
+/// One rule per source: a MediaStore album (`kind: album`) or a device
+/// directory tree (`kind: directory`, mirrored with subfolders).
 @HiveType(typeId: 4)
 class BackupRule extends HiveObject {
   /// Stable rule identifier (e.g. `camera`).
@@ -82,6 +82,20 @@ class BackupRule extends HiveObject {
   @HiveField(16)
   DateTime? createdAt;
 
+  /// Source kind: `album` (MediaStore album) or `directory` (device folder).
+  /// Null on rows persisted before multi-source support — treated as album.
+  @HiveField(17)
+  String? kind;
+
+  /// Absolute device directory path for `directory` rules; null for albums.
+  @HiveField(18)
+  String? sourcePath;
+
+  /// Whether directory rules recurse into subfolders, mirroring the tree.
+  /// Null on pre-existing rows — treated as true.
+  @HiveField(19)
+  bool? includeSubfolders;
+
   /// Constructs BackupRule.
   BackupRule({
     required this.id,
@@ -101,7 +115,16 @@ class BackupRule extends HiveObject {
     this.lastResult,
     this.lastUploadedCount = 0,
     this.createdAt,
+    this.kind = 'album',
+    this.sourcePath,
+    this.includeSubfolders = true,
   });
+
+  /// Whether this rule backs up a device directory tree instead of an album.
+  bool get isDirectory => kind == 'directory';
+
+  /// Whether subfolders are mirrored (defaults to true for legacy rows).
+  bool get mirrorsSubfolders => includeSubfolders ?? true;
 
   /// Whether [when] (local time) falls inside the rule's daily window.
   ///

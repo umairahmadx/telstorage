@@ -1,17 +1,26 @@
 /*
  * File: backup_screen.dart
- * Description: Auto-backup rule screen — toggles, daily window, retention,
- * backfill, live status, and destination copy.
+ * Description: Auto-backup screen — source rules (Camera album, extra albums,
+ * device folders with subfolders), toggles, daily window, retention, backfill,
+ * live run progress, and destination copy.
  */
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:path/path.dart' as p;
 import 'package:telstorage/core/constants/app_constants.dart';
 import 'package:telstorage/core/models/backup_rule.dart';
 import 'package:telstorage/core/services/auto_backup_scheduler.dart';
 import 'package:telstorage/core/services/auto_backup_types.dart';
+import 'package:telstorage/core/services/device_media_scanner.dart';
 import 'package:telstorage/core/theme/app_theme.dart';
+import 'package:telstorage/core/utils/backup_permission_helper.dart';
+import 'package:telstorage/core/utils/storage_permission_helper.dart';
 import 'package:telstorage/shared/widgets/app_surface_card.dart';
+import 'package:telstorage/shared/widgets/dialogs/app_dialogs.dart';
+
+import 'backup_settings_cards.dart';
 
 class BackupScreen extends StatefulWidget {
   const BackupScreen({super.key});
@@ -48,10 +57,142 @@ class _BackupScreenState extends State<BackupScreen> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _backupNow(BackupRule rule) async {
+  Future<void> _toggleRule(BackupRule rule, bool value) async {
+    rule.enabled = value;
+    await rule.save();
+    if (mounted) setState(() {});
+    if (value && mounted) {
+      final granted = await BackupPermissionHelper.promptForRule(context, rule);
+      if (!granted && mounted) {
+        _showSnack(rule.isDirectory
+            ? 'Allow "All files access" so the folder can be backed up.'
+            : 'Allow access to photos and videos to run the backup.');
+      }
+      if (mounted) setState(() {});
+    }
+  }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+    );
+  }
+
+  Future<void> _removeRule(BackupRule rule) async {
+    final confirmed = await AppDialogs.showConfirm(
+      context,
+      title: 'Stop backing up "${rule.albumName}"?',
+      message:
+          'New files will no longer be backed up from this source. '
+          'Files already backed up stay in TelStorage.',
+      confirmText: 'Remove',
+      cancelText: 'Cancel',
+    );
+    if (confirmed != true) return;
+    await rule.delete();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _addAlbum() async {
+    final granted = await DeviceMediaScanner.requestPermission().catchError(
+      (_) => true,
+    );
+    if (!granted || !mounted) {
+      if (mounted) {
+        _showSnack('Allow access to photos and videos to add an album.');
+      }
+      return;
+    }
+    final albums = await DeviceMediaScanner.loadAlbums();
+    if (!mounted) return;
+    final existing =
+        _rulesBox?.values.map((r) => r.albumName.toLowerCase()).toSet() ?? {};
+    final candidates = albums
+        .where((a) =>
+            !(a.pathEntity?.isAll ?? false) &&
+            !existing.contains(a.name.toLowerCase()))
+        .toList();
+    if (candidates.isEmpty) {
+      _showSnack('No more device albums available to add.');
+      return;
+    }
+    final selected = await showModalBottomSheet<MediaAlbum>(
+      context: context,
+      backgroundColor: Theme.of(context).extension<AppColorsExtension>()!.bgSurface,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text('Add a device album',
+                  style: TextStyle(
+                      color: Theme.of(sheetContext)
+                          .extension<AppColorsExtension>()!
+                          .textPrimary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold)),
+            ),
+            for (final album in candidates)
+              ListTile(
+                leading: const Icon(Icons.photo_album_outlined),
+                title: Text(album.name),
+                subtitle: Text('${album.mediaCount} item(s)'),
+                onTap: () => Navigator.of(sheetContext).pop(album),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null || !mounted) return;
+    final rule = BackupRule(
+      id: 'album:${selected.name}',
+      albumName: selected.name,
+      enabled: true,
+      createdAt: DateTime.now(),
+    );
+    await _rulesBox!.put(rule.id, rule);
+    if (mounted) {
+      await BackupPermissionHelper.promptForRule(context, rule);
+      setState(() {});
+    }
+  }
+
+  Future<void> _addFolder() async {
+    final hasPermission =
+        await StoragePermissionHelper.ensureStoragePermission(context);
+    if (!hasPermission || !mounted) return;
+    final dirPath = await FilePicker.platform.getDirectoryPath();
+    if (dirPath == null || dirPath.isEmpty || !mounted) return;
+    final normalized = p.normalize(dirPath).replaceAll('\\', '/');
+    final id = 'dir:$normalized';
+    if (_rulesBox?.get(id) != null) {
+      _showSnack('This folder is already being backed up.');
+      return;
+    }
+    final name = p.basename(normalized);
+    final rule = BackupRule(
+      id: id,
+      albumName: name.isEmpty ? 'Folder' : name,
+      enabled: true,
+      createdAt: DateTime.now(),
+      kind: 'directory',
+      sourcePath: normalized,
+      includeSubfolders: true,
+    );
+    await _rulesBox!.put(rule.id, rule);
+    if (mounted) {
+      await BackupPermissionHelper.promptForRule(context, rule);
+      setState(() {});
+    }
+  }
+
+  Future<void> _backupNow() async {
     if (_isBackingUp) return;
+    final rules = _rulesBox?.values.where((r) => r.enabled).toList() ?? [];
+    if (rules.isEmpty) return;
     setState(() => _isBackingUp = true);
-    final isBackfill = !rule.backfillDone;
+    final isBackfill = rules.any((r) => !r.backfillDone);
     final outcome = await AutoBackupScheduler.instance.consumeDueFlag(
       manual: true,
       backfill: isBackfill,
@@ -70,9 +211,11 @@ class _BackupScreenState extends State<BackupScreen> {
   }
 
   String _outcomeMessage(BackupRunOutcome outcome) {
+    final backfillPending =
+        _rulesBox?.values.any((r) => r.enabled && !r.backfillDone) ?? false;
     switch (outcome.status) {
       case BackupRunStatus.ran:
-        if (outcome.needsRetry && !(_rule?.backfillDone ?? true)) {
+        if (outcome.needsRetry && backfillPending) {
           return 'Backup batch completed with issues: ${outcome.label}. Tap again to retry.';
         }
         if (outcome.needsRetry) {
@@ -81,14 +224,14 @@ class _BackupScreenState extends State<BackupScreen> {
         if (outcome.backfillComplete) {
           return 'Existing photos and videos have been backed up.';
         }
-        if (!(_rule?.backfillDone ?? true)) {
+        if (backfillPending) {
           return 'Backup batch finished. Tap again to continue backing up existing media.';
         }
         return 'Backup started — continues in the background.';
       case BackupRunStatus.notDue:
         return 'Backup not due yet.';
       case BackupRunStatus.noRule:
-        return 'No backup rule enabled. Turn on Camera album backup first.';
+        return 'No backup source enabled. Turn on Camera or add a folder first.';
       case BackupRunStatus.ineligible:
         if (outcome.label == 'Permission needed') {
           return 'Allow access to photos and videos to run the backup.';
@@ -103,12 +246,6 @@ class _BackupScreenState extends State<BackupScreen> {
       case BackupRunStatus.failed:
         return 'Backup failed: ${outcome.label}.';
     }
-  }
-
-  String _formatWindow(int minutes) {
-    final h = (minutes ~/ 60).toString().padLeft(2, '0');
-    final m = (minutes % 60).toString().padLeft(2, '0');
-    return '$h:$m';
   }
 
   @override
@@ -139,24 +276,28 @@ class _BackupScreenState extends State<BackupScreen> {
         builder: (context, box, _) {
           final rule = box.get('camera');
           if (rule == null) return const SizedBox.shrink();
+          final extraRules =
+              box.values.where((r) => r.id != 'camera').toList();
+          final anyEnabled = box.values.any((r) => r.enabled);
+          final backfillPending =
+              box.values.any((r) => r.enabled && !r.backfillDone);
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
               _masterCard(colors, rule),
+              for (final extra in extraRules) ...[
+                const SizedBox(height: 12),
+                _sourceCard(colors, extra),
+              ],
+              const SizedBox(height: 12),
+              _addSourcesCard(colors),
               const SizedBox(height: 16),
               if (rule.enabled) ...[
-                _togglesCard(colors, rule),
-                const SizedBox(height: 16),
-                _windowCard(colors, rule),
-                const SizedBox(height: 16),
-                _retentionCard(colors, rule),
-                const SizedBox(height: 16),
-                _backfillCard(colors, rule),
-                const SizedBox(height: 16),
-                _destinationCard(colors),
+                BackupSettingsCards(rule: rule, onMutate: _mutate),
                 const SizedBox(height: 24),
               ],
-              _backupNowButton(colors, rule),
+              _progressCard(colors),
+              _backupNowButton(colors, anyEnabled, backfillPending),
             ],
           );
         },
@@ -188,7 +329,7 @@ class _BackupScreenState extends State<BackupScreen> {
           ),
           Switch(
             value: rule.enabled,
-            onChanged: (v) => _mutate((r) => r.enabled = v),
+            onChanged: (v) => _toggleRule(rule, v),
             activeThumbColor: colors.brandPrimary,
           ),
         ],
@@ -196,182 +337,144 @@ class _BackupScreenState extends State<BackupScreen> {
     );
   }
 
-  Widget _togglesCard(AppColorsExtension colors, BackupRule rule) {
+  Widget _sourceCard(AppColorsExtension colors, BackupRule rule) {
+    return AppSurfaceCard(
+      padding: const EdgeInsets.all(18),
+      borderColor: colors.borderSubtle,
+      child: Row(
+        children: [
+          Icon(
+            rule.isDirectory
+                ? Icons.folder_outlined
+                : Icons.photo_album_outlined,
+            color: colors.textSecondary,
+            size: 22,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(rule.albumName,
+                    style: TextStyle(
+                        color: colors.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold)),
+                const SizedBox(height: 2),
+                Text(
+                  rule.isDirectory
+                      ? '${rule.sourcePath}${rule.mirrorsSubfolders ? ' · incl. subfolders' : ''}'
+                      : 'Device album',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, size: 20),
+            color: colors.textTertiary,
+            tooltip: 'Remove source',
+            onPressed: () => _removeRule(rule),
+          ),
+          Switch(
+            value: rule.enabled,
+            onChanged: (v) => _toggleRule(rule, v),
+            activeThumbColor: colors.brandPrimary,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _addSourcesCard(AppColorsExtension colors) {
     return AppSurfaceCard(
       padding: const EdgeInsets.all(6),
       borderColor: colors.borderSubtle,
       child: Column(
         children: [
-          _switchRow(colors, 'Photos', rule.includePhotos,
-              (v) => _mutate((r) => r.includePhotos = v)),
-          _switchRow(colors, 'Videos', rule.includeVideos,
-              (v) => _mutate((r) => r.includeVideos = v)),
-          _switchRow(colors, 'Wi-Fi only', rule.wifiOnly,
-              (v) => _mutate((r) => r.wifiOnly = v)),
-          _switchRow(colors, 'Charging only', rule.chargingOnly,
-              (v) => _mutate((r) => r.chargingOnly = v)),
+          ListTile(
+            leading: Icon(Icons.photo_album_outlined, color: colors.textPrimary),
+            title: Text('Add device album',
+                style: TextStyle(color: colors.textPrimary, fontSize: 14)),
+            subtitle: Text('Screenshots, WhatsApp, Downloads…',
+                style: TextStyle(color: colors.textSecondary, fontSize: 12)),
+            onTap: _addAlbum,
+          ),
+          ListTile(
+            leading: Icon(Icons.create_new_folder_outlined,
+                color: colors.textPrimary),
+            title: Text('Add device folder',
+                style: TextStyle(color: colors.textPrimary, fontSize: 14)),
+            subtitle: Text('Any folder, subfolders kept as folder-in-folder',
+                style: TextStyle(color: colors.textSecondary, fontSize: 12)),
+            onTap: _addFolder,
+          ),
         ],
       ),
     );
   }
 
-  Widget _switchRow(
-    AppColorsExtension colors,
-    String title,
-    bool value,
-    ValueChanged<bool> onChanged,
-  ) {
-    return SwitchListTile(
-      value: value,
-      onChanged: onChanged,
-      activeThumbColor: colors.brandPrimary,
-      title: Text(title,
-          style: TextStyle(color: colors.textPrimary, fontSize: 14)),
-    );
-  }
-
-  Widget _windowCard(AppColorsExtension colors, BackupRule rule) {
-    return AppSurfaceCard(
-      padding: const EdgeInsets.all(18),
-      borderColor: colors.borderSubtle,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Daily window',
-              style: TextStyle(
-                  color: colors.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          Text(
-              '${_formatWindow(rule.windowStartMinutes)} - ${_formatWindow(rule.windowEndMinutes)}',
-              style: TextStyle(color: colors.textSecondary, fontSize: 13)),
-          RangeSlider(
-            min: 0,
-            max: 1440,
-            divisions: 48,
-            activeColor: colors.accentPrimary,
-            values: RangeValues(
-              rule.windowStartMinutes.toDouble(),
-              rule.windowEndMinutes.toDouble(),
+  Widget _progressCard(AppColorsExtension colors) {
+    return ValueListenableBuilder<BackupRunProgress?>(
+      valueListenable: AutoBackupScheduler.instance.runProgress,
+      builder: (context, progress, _) {
+        if (progress == null) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: AppSurfaceCard(
+            padding: const EdgeInsets.all(18),
+            borderColor: colors.borderSubtle,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(progress.label,
+                    style: TextStyle(
+                        color: colors.textPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold)),
+                const SizedBox(height: 10),
+                LinearProgressIndicator(
+                  value: progress.scanning ? null : progress.fraction,
+                  color: colors.brandPrimary,
+                  backgroundColor: colors.bgSurfaceInset,
+                ),
+                if (progress.currentFileName != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    progress.currentFileName!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style:
+                        TextStyle(color: colors.textSecondary, fontSize: 12),
+                  ),
+                ],
+              ],
             ),
-            onChanged: (values) => _mutate((r) {
-              r.windowStartMinutes = values.start.round();
-              r.windowEndMinutes = values.end.round();
-            }),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  Widget _retentionCard(AppColorsExtension colors, BackupRule rule) {
-    return AppSurfaceCard(
-      padding: const EdgeInsets.all(18),
-      borderColor: colors.borderSubtle,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Retention',
-              style: TextStyle(
-                  color: colors.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          Text(
-            rule.retentionKeepLast == 0
-                ? 'Keep all backups'
-                : 'Keep the latest ${rule.retentionKeepLast} backed-up files',
-            style: TextStyle(color: colors.textSecondary, fontSize: 13),
-          ),
-          Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.remove_circle_outline),
-                color: colors.textPrimary,
-                onPressed: rule.retentionKeepLast > 0
-                    ? () => _mutate(
-                        (r) => r.retentionKeepLast = r.retentionKeepLast - 10)
-                    : null,
-              ),
-              Text('${rule.retentionKeepLast}',
-                  style: TextStyle(color: colors.textPrimary, fontSize: 14)),
-              IconButton(
-                icon: const Icon(Icons.add_circle_outline),
-                color: colors.textPrimary,
-                onPressed: () => _mutate(
-                    (r) => r.retentionKeepLast = r.retentionKeepLast + 10),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _backfillCard(AppColorsExtension colors, BackupRule rule) {
-    return AppSurfaceCard(
-      padding: const EdgeInsets.all(18),
-      borderColor: colors.borderSubtle,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Existing media backfill',
-              style: TextStyle(
-                  color: colors.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          Text(
-            rule.backfillDone
-                ? 'Existing photos have already been backed up.'
-                : 'One-time upload of photos taken before enabling backup. '
-                    'Large libraries upload slowly to avoid rate limits.',
-            style: TextStyle(color: colors.textSecondary, fontSize: 12),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _destinationCard(AppColorsExtension colors) {
-    return AppSurfaceCard(
-      padding: const EdgeInsets.all(18),
-      borderColor: colors.borderSubtle,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Destination',
-              style: TextStyle(
-                  color: colors.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          Text(
-              'root/Backup/Camera\n'
-              'An existing root "Backup" folder is adopted, not duplicated.',
-              style: TextStyle(color: colors.textSecondary, fontSize: 12)),
-          const SizedBox(height: 8),
-          Text('Deleting device photos never deletes backups.',
-              style: TextStyle(color: colors.textTertiary, fontSize: 12)),
-        ],
-      ),
-    );
-  }
-
-  Widget _backupNowButton(AppColorsExtension colors, BackupRule rule) {
+  Widget _backupNowButton(
+    AppColorsExtension colors,
+    bool anyEnabled,
+    bool backfillPending,
+  ) {
     return ElevatedButton(
-      onPressed: rule.enabled && !_isBackingUp ? () => _backupNow(rule) : null,
+      onPressed: anyEnabled && !_isBackingUp ? _backupNow : null,
       style: ElevatedButton.styleFrom(
         backgroundColor: colors.brandPrimary,
         foregroundColor: colors.bgPrimary,
         padding: const EdgeInsets.symmetric(vertical: 16),
       ),
       child: Text(_isBackingUp
-          ? 'Preparing backup…'
-          : rule.backfillDone
-              ? 'Back up now'
-              : 'Back up existing photos'),
+          ? 'Backup running…'
+          : backfillPending
+              ? 'Back up existing photos'
+              : 'Back up now'),
     );
   }
 }

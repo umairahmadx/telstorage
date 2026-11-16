@@ -8,6 +8,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
+import 'package:path/path.dart' as p;
 import 'package:photo_manager/photo_manager.dart';
 import 'package:telstorage/core/constants/app_constants.dart';
 import 'package:telstorage/core/models/backup_ledger_entry.dart';
@@ -304,6 +305,75 @@ void main() {
       expect(result.dataOrNull!.skippedUnresolvable, 1);
       expect(result.dataOrNull!.uploads, isEmpty);
     });
+
+    test('duplicate scan rows are planned once (uploaded=count regression)',
+        () async {
+      final dup = _FakeAsset(
+        id: 'dup-1',
+        title: 'IMG_DUP.jpg',
+        modifiedDateSecond: 1749000000,
+        fileSize: 1024,
+      );
+      final service = AutoBackupService(
+        ledgerBox: ledgerBox,
+        requestPermission: () async => true,
+        loadAlbums: () async => [cameraAlbum()],
+        loadPage: (album, page, pageSize) async =>
+            page == 0 ? [dup, dup] : [],
+      );
+      final result = await service.collectDueAssets(cameraRule());
+      expect(result.isSuccess, isTrue);
+      expect(result.dataOrNull!.uploads.length, 1);
+    });
+
+    test('directory rule scans subfolders with tree-relative paths',
+        () async {
+      final root = Directory(p.join(tempDir.path, 'Docs'))..createSync();
+      File(p.join(root.path, 'a.txt')).writeAsStringSync('a');
+      Directory(p.join(root.path, 'sub')).createSync();
+      File(p.join(root.path, 'sub', 'b.mp4')).writeAsStringSync('b');
+      final rule = BackupRule(
+        id: 'dir:${root.path}',
+        albumName: 'Docs',
+        enabled: true,
+        backfillDone: true,
+        createdAt: DateTime(2025, 6, 1),
+        kind: 'directory',
+        sourcePath: root.path,
+      );
+      final service = AutoBackupService(ledgerBox: ledgerBox);
+      final result = await service.collectDueAssets(rule);
+      expect(result.isSuccess, isTrue);
+      final uploads = result.dataOrNull!.uploads;
+      expect(uploads.length, 2);
+      final a = uploads.firstWhere((u) => u.asset.title == 'a.txt');
+      final b = uploads.firstWhere((u) => u.asset.title == 'b.mp4');
+      expect(a.asset.relativePath, '');
+      expect(b.asset.relativePath, 'sub/');
+      expect(b.asset.isVideo, isTrue);
+      expect(a.asset.assetId, p.join(root.path, 'a.txt'));
+    });
+
+    test('directory rule without subfolders stays flat', () async {
+      final root = Directory(p.join(tempDir.path, 'Flat'))..createSync();
+      File(p.join(root.path, 'a.txt')).writeAsStringSync('a');
+      Directory(p.join(root.path, 'sub')).createSync();
+      File(p.join(root.path, 'sub', 'b.txt')).writeAsStringSync('b');
+      final rule = BackupRule(
+        id: 'dir:${root.path}',
+        albumName: 'Flat',
+        enabled: true,
+        backfillDone: true,
+        createdAt: DateTime(2025, 6, 1),
+        kind: 'directory',
+        sourcePath: root.path,
+        includeSubfolders: false,
+      );
+      final service = AutoBackupService(ledgerBox: ledgerBox);
+      final result = await service.collectDueAssets(rule);
+      expect(result.isSuccess, isTrue);
+      expect(result.dataOrNull!.uploads.map((u) => u.asset.title), ['a.txt']);
+    });
   });
 
   group('ensureBackupPath', () {
@@ -335,6 +405,45 @@ void main() {
       expect(files.createdParents['Camera'], 'backup-root');
       expect(rule.backupFolderId, 'backup-root');
       expect(rule.albumFolderId, isNotNull);
+    });
+
+    test('ensureSubfolderPath mirrors nested folders idempotently', () async {
+      final telegram = TelegramService();
+      final meta = MetadataService(telegram);
+      final files = _RecordingFileManager(
+        meta,
+        telegram,
+        HiveService.instance,
+      );
+      await HiveService.instance.saveFolder(FolderRecord(
+        id: 'backup-root',
+        name: 'Backup',
+        createdAt: DateTime(2025, 1, 1),
+      ));
+      final service = AutoBackupService(
+        ledgerBox: ledgerBox,
+        fileManager: files,
+      );
+      final rule = cameraRule();
+      await service.ensureBackupPath('Camera', rule: rule);
+
+      final cache = <String, String>{};
+      final first =
+          await service.ensureSubfolderPath(rule, 'sub/deep/', cache: cache);
+      final second =
+          await service.ensureSubfolderPath(rule, 'sub/deep', cache: cache);
+      expect(first.isSuccess, isTrue);
+      expect(second.dataOrNull, first.dataOrNull);
+      expect(files.createdFolders, ['Camera', 'sub', 'deep']);
+      expect(files.createdParents['sub'], rule.albumFolderId);
+      final subId = HiveService.instance.allFolders
+          .firstWhere((f) => f.name == 'sub')
+          .id;
+      expect(files.createdParents['deep'], subId);
+
+      final rootLevel =
+          await service.ensureSubfolderPath(rule, '', cache: cache);
+      expect(rootLevel.dataOrNull, rule.albumFolderId);
     });
   });
 
@@ -370,6 +479,33 @@ void main() {
       expect(result.isSuccess, isTrue);
       expect(ledgerBox.get('done-1')!.destFileId, 'cloud-done-1');
       expect(ledgerBox.get('todo-1'), isNull);
+      expect(rule.lastUploadedCount, 1);
+    });
+
+    test('watermark stores per-asset destination folders for trees',
+        () async {
+      final service = AutoBackupService(ledgerBox: ledgerBox);
+      final rule = cameraRule();
+      const asset = BackupAsset(
+        assetId: 'tree-1',
+        title: 'doc.pdf',
+        relativePath: 'sub/',
+        modifiedMs: 1749000000000,
+        sizeBytes: 1024,
+        isVideo: false,
+      );
+      final result = await service.advanceWatermark(
+        rule: rule,
+        uploads: [
+          const BackupUploadItem(asset: asset, destinationName: 'doc.pdf'),
+        ],
+        destFileIdsByAssetId: {'tree-1': 'cloud-tree-1'},
+        destFolderId: 'album-folder',
+        destFolderIdsByAssetId: {'tree-1': 'sub-folder'},
+        deleteReplaced: false,
+      );
+      expect(result.isSuccess, isTrue);
+      expect(ledgerBox.get('tree-1')!.destFolderId, 'sub-folder');
       expect(rule.lastUploadedCount, 1);
     });
 

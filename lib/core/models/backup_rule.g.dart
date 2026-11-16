@@ -34,13 +34,16 @@ class BackupRuleAdapter extends TypeAdapter<BackupRule> {
       lastResult: fields[14] as String?,
       lastUploadedCount: fields[15] as int,
       createdAt: fields[16] as DateTime?,
+      kind: fields[17] as String?,
+      sourcePath: fields[18] as String?,
+      includeSubfolders: fields[19] as bool?,
     );
   }
 
   @override
   void write(BinaryWriter writer, BackupRule obj) {
     writer
-      ..writeByte(17)
+      ..writeByte(20)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -74,7 +77,13 @@ class BackupRuleAdapter extends TypeAdapter<BackupRule> {
       ..writeByte(15)
       ..write(obj.lastUploadedCount)
       ..writeByte(16)
-      ..write(obj.createdAt);
+      ..write(obj.createdAt)
+      ..writeByte(17)
+      ..write(obj.kind)
+      ..writeByte(18)
+      ..write(obj.sourcePath)
+      ..writeByte(19)
+      ..write(obj.includeSubfolders);
   }
 
   @override

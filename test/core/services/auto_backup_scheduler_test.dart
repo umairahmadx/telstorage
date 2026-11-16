@@ -72,6 +72,9 @@ class _FakeBackupService extends AutoBackupService {
   bool lastIncludeBackfill = false;
   bool failCollection = false;
 
+  /// Optional per-rule plan builder (multi-rule runs).
+  BackupPlan Function(BackupRule rule)? planBuilder;
+
   /// When set, isEligibleNow throws this exception instead of returning a
   /// verdict — simulates an unexpected failure during eligibility gating.
   Object? throwOnEligibility;
@@ -116,8 +119,16 @@ class _FakeBackupService extends AutoBackupService {
     if (failCollection) {
       return const Failure(UnknownFailure('Backup scan failed'));
     }
-    return Success(BackupCollectResult(plan: plan));
+    return Success(BackupCollectResult(plan: planBuilder?.call(rule) ?? plan));
   }
+
+  @override
+  Future<Result<String>> ensureSubfolderPath(
+    BackupRule rule,
+    String relativeDir, {
+    Map<String, String>? cache,
+  }) async =>
+      Success(relativeDir.isEmpty ? 'album-1' : 'folder-$relativeDir');
 
   @override
   Future<Result<BackupPath>> ensureBackupPath(
@@ -138,6 +149,7 @@ class _FakeBackupService extends AutoBackupService {
     required List<BackupUploadItem> uploads,
     required Map<String, String> destFileIdsByAssetId,
     String? destFolderId,
+    Map<String, String>? destFolderIdsByAssetId,
     bool deleteReplaced = true,
   }) async {
     watermarkCalls.add(destFileIdsByAssetId);
@@ -366,6 +378,84 @@ void main() {
       expect(outcome.status, BackupRunStatus.ran);
       expect(bloc.enqueued, hasLength(1));
       expect(bloc.enqueued.single.id, taskIdFor(photo));
+    });
+
+    test('manual run backs up every enabled rule in one pass', () async {
+      final photoA = asset('a1', 'IMG_A.jpg');
+      final photoB = asset('b1', 'IMG_B.jpg');
+      fakeService.planBuilder = (rule) => BackupPlan(
+            uploads: [
+              BackupUploadItem(
+                asset: rule.id == 'camera' ? photoA : photoB,
+                destinationName:
+                    rule.id == 'camera' ? 'IMG_A.jpg' : 'IMG_B.jpg',
+              ),
+            ],
+            adoptions: const [],
+          );
+      await rulesBox.put('camera', cameraRule());
+      await rulesBox.put(
+        'album:Screenshots',
+        BackupRule(
+          id: 'album:Screenshots',
+          albumName: 'Screenshots',
+          enabled: true,
+          backfillDone: true,
+          createdAt: DateTime(2025, 6, 1),
+          windowStartMinutes: 0,
+          windowEndMinutes: 1440,
+        ),
+      );
+      final scheduler = buildScheduler();
+
+      final outcome = await scheduler.consumeDueFlag(manual: true);
+
+      expect(outcome.status, BackupRunStatus.ran);
+      expect(outcome.uploadedPhotos, 2);
+      expect(
+        bloc.enqueued.map((t) => t.id),
+        containsAll([taskIdFor(photoA), taskIdFor(photoB)]),
+      );
+      expect(scheduler.runProgress.value, isNull);
+    });
+
+    test('directory rule uploads device paths into mirrored subfolders',
+        () async {
+      const doc = BackupAsset(
+        assetId: '/sdcard/Docs/sub/a.pdf',
+        title: 'a.pdf',
+        relativePath: 'sub/',
+        modifiedMs: 1749000000000,
+        sizeBytes: 2048,
+        isVideo: false,
+      );
+      fakeService.plan = const BackupPlan(
+        uploads: [BackupUploadItem(asset: doc, destinationName: 'a.pdf')],
+        adoptions: [],
+      );
+      await rulesBox.put(
+        'dir:/sdcard/Docs',
+        BackupRule(
+          id: 'dir:/sdcard/Docs',
+          albumName: 'Docs',
+          enabled: true,
+          backfillDone: true,
+          createdAt: DateTime(2025, 6, 1),
+          windowStartMinutes: 0,
+          windowEndMinutes: 1440,
+          kind: 'directory',
+          sourcePath: '/sdcard/Docs',
+        ),
+      );
+      final scheduler = buildScheduler();
+
+      final outcome = await scheduler.consumeDueFlag(manual: true);
+
+      expect(outcome.status, BackupRunStatus.ran);
+      expect(outcome.uploadedPhotos, 1);
+      expect(bloc.enqueued.single.path, '/sdcard/Docs/sub/a.pdf');
+      expect(bloc.enqueued.single.folderId, 'folder-sub/');
+      expect(bloc.enqueued.single.isTemporaryCacheFile, isFalse);
     });
 
     test('manual backfill stays pending when a bounded batch is capped',

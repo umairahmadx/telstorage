@@ -17,6 +17,7 @@ import 'package:telstorage/core/theme/app_theme.dart';
 import 'package:telstorage/features/settings/presentation/screens/settings/backup/backup_screen.dart';
 import 'package:telstorage/shared/widgets/app_surface_card.dart';
 import 'package:telstorage/core/services/device_media_scanner.dart';
+import 'package:telstorage/core/utils/backup_permission_helper.dart';
 import 'package:telstorage/core/utils/power_state.dart';
 
 /// Card component rendering the auto-backup master switch and live status.
@@ -61,6 +62,7 @@ class _SettingsBackupCardState extends State<SettingsBackupCard>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    AutoBackupScheduler.instance.runProgress.addListener(_onRunProgress);
     if (widget.enablePolling) {
       _statusRefreshTimer = Timer.periodic(
         const Duration(seconds: 30),
@@ -97,6 +99,8 @@ class _SettingsBackupCardState extends State<SettingsBackupCard>
   Future<String> _loadStatusLine(BackupRule rule) async {
     if (!rule.enabled) return 'Off';
     try {
+      final progress = AutoBackupScheduler.instance.runProgress.value;
+      if (progress != null) return progress.label;
       if (AutoBackupScheduler.instance.isRunInProgress) {
         return 'Backing up…';
       }
@@ -151,6 +155,8 @@ class _SettingsBackupCardState extends State<SettingsBackupCard>
     setState(() {});
   }
 
+  void _onRunProgress() => _refreshStatus();
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) _refreshStatus();
@@ -159,6 +165,7 @@ class _SettingsBackupCardState extends State<SettingsBackupCard>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    AutoBackupScheduler.instance.runProgress.removeListener(_onRunProgress);
     _statusRefreshTimer?.cancel();
     super.dispose();
   }
@@ -171,6 +178,22 @@ class _SettingsBackupCardState extends State<SettingsBackupCard>
     if (mounted) {
       _invalidateStatus();
       setState(() {});
+    }
+    if (value && mounted) {
+      final granted = await BackupPermissionHelper.promptForRule(context, rule);
+      if (!granted && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Allow access to photos and videos to run the backup.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      if (mounted) {
+        _invalidateStatus();
+        setState(() {});
+      }
     }
   }
 

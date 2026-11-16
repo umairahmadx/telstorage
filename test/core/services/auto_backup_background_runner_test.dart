@@ -75,6 +75,7 @@ class _FakeBackupService extends AutoBackupService {
     required List<BackupUploadItem> uploads,
     required Map<String, String> destFileIdsByAssetId,
     String? destFolderId,
+    Map<String, String>? destFolderIdsByAssetId,
     bool deleteReplaced = true,
   }) async {
     watermarkCalls++;
@@ -86,6 +87,7 @@ class _FakeBackupService extends AutoBackupService {
       uploads: uploads,
       destFileIdsByAssetId: destFileIdsByAssetId,
       destFolderId: destFolderId,
+      destFolderIdsByAssetId: destFolderIdsByAssetId,
       deleteReplaced: deleteReplaced,
     );
   }

@@ -145,14 +145,70 @@ class AutoBackupBackgroundRunner {
       );
     }
 
-    final rule = _firstEnabledRule();
-    if (rule == null) {
+    final rules = _rules.values.where((rule) => rule.enabled).toList();
+    if (rules.isEmpty) {
       return const BackupRunOutcome(
         status: BackupRunStatus.noRule,
         label: 'Off',
       );
     }
 
+    final outcomes = <BackupRunOutcome>[];
+    for (final rule in rules) {
+      outcomes.add(await _runRule(rule, now: now));
+    }
+    final merged = _mergeOutcomes(outcomes);
+    if (merged.status == BackupRunStatus.ran && !merged.needsRetry) {
+      await _state.put(AppConstants.autoBackupDueKey, false);
+    }
+    return merged;
+  }
+
+  /// Combines per-rule outcomes; a single rule keeps its exact outcome.
+  static BackupRunOutcome _mergeOutcomes(List<BackupRunOutcome> outcomes) {
+    if (outcomes.length == 1) return outcomes.first;
+    var photos = 0;
+    var videos = 0;
+    var skipped = 0;
+    var needsRetry = false;
+    var anyRan = false;
+    var anyFailed = false;
+    var anyIneligible = false;
+    for (final outcome in outcomes) {
+      photos += outcome.uploadedPhotos;
+      videos += outcome.uploadedVideos;
+      skipped += outcome.skippedUnresolvable;
+      needsRetry = needsRetry || outcome.needsRetry;
+      anyRan = anyRan || outcome.status == BackupRunStatus.ran;
+      anyFailed = anyFailed || outcome.status == BackupRunStatus.failed;
+      anyIneligible =
+          anyIneligible || outcome.status == BackupRunStatus.ineligible;
+    }
+    final status = anyRan
+        ? BackupRunStatus.ran
+        : anyFailed
+            ? BackupRunStatus.failed
+            : anyIneligible
+                ? BackupRunStatus.ineligible
+                : outcomes.first.status;
+    final label = anyRan
+        ? 'Backed up $photos photos, $videos videos'
+        : outcomes
+            .firstWhere((o) => o.status == status,
+                orElse: () => outcomes.first)
+            .label;
+    return BackupRunOutcome(
+      status: status,
+      label: label,
+      uploadedPhotos: photos,
+      uploadedVideos: videos,
+      skippedUnresolvable: skipped,
+      needsRetry: needsRetry,
+    );
+  }
+
+  /// Runs one rule inside the background isolate.
+  Future<BackupRunOutcome> _runRule(BackupRule rule, {DateTime? now}) async {
     final eligibility = await _backup.isEligibleNow(rule, now: now);
     if (eligibility.isFailure) {
       return BackupRunOutcome(
@@ -177,9 +233,6 @@ class AutoBackupBackgroundRunner {
     }
     final result = collected.dataOrNull!;
     if (result.uploads.isEmpty) {
-      if (result.skippedUnresolvable == 0 && !result.plan.capped) {
-        await _state.put(AppConstants.autoBackupDueKey, false);
-      }
       return BackupRunOutcome(
         status: BackupRunStatus.ran,
         label: 'Already up to date',
@@ -211,24 +264,45 @@ class AutoBackupBackgroundRunner {
 
     final completed = <BackupUploadItem>[];
     final destinationIds = <String, String>{};
+    final destinationFolders = <String, String>{};
+    final subfolderCache = <String, String>{};
     final metadataBatch = <Map<String, dynamic>>[];
+    final seenTaskIds = <String>{};
     var failed = 0;
     var unresolved = result.skippedUnresolvable;
     var photos = 0;
     var videos = 0;
 
     for (final upload in result.uploads) {
-      final resolved = await _resolvePath(upload.asset);
+      final taskId =
+          'backup:${upload.asset.assetId}:${upload.asset.fingerprint}';
+      if (!seenTaskIds.add(taskId)) continue;
+      final resolved = rule.isDirectory
+          ? (path: upload.asset.assetId, isTemporary: false)
+          : await _resolvePath(upload.asset);
       if (resolved == null) {
         unresolved++;
         continue;
       }
-      final taskId =
-          'backup:${upload.asset.assetId}:${upload.asset.fingerprint}';
+      var folderId = albumFolderId;
+      if (rule.isDirectory) {
+        final sub = await _backup.ensureSubfolderPath(
+          rule,
+          upload.asset.relativePath ?? '',
+          cache: subfolderCache,
+        );
+        if (sub.isFailure) {
+          return BackupRunOutcome(
+            status: BackupRunStatus.failed,
+            label: sub.failureOrNull?.message ?? 'Folder setup failed',
+          );
+        }
+        folderId = sub.dataOrNull!;
+      }
       final outcome = await _uploads.uploadFile(
         null,
         upload.destinationName,
-        albumFolderId,
+        folderId,
         (_, __) {},
         filePath: resolved.path,
         fileLength: upload.asset.sizeBytes,
@@ -269,6 +343,7 @@ class AutoBackupBackgroundRunner {
       }
       completed.add(upload);
       destinationIds[upload.asset.assetId] = destinationId;
+      destinationFolders[upload.asset.assetId] = folderId;
       metadataBatch.add(fileMeta);
       if (upload.asset.isVideo) {
         videos++;
@@ -290,6 +365,7 @@ class AutoBackupBackgroundRunner {
         failed += completed.length;
         completed.clear();
         destinationIds.clear();
+        destinationFolders.clear();
       }
     }
 
@@ -300,6 +376,7 @@ class AutoBackupBackgroundRunner {
         uploads: completed,
         destFileIdsByAssetId: destinationIds,
         destFolderId: albumFolderId,
+        destFolderIdsByAssetId: destinationFolders,
       );
       watermarkFailed = watermark.isFailure;
     }
@@ -307,9 +384,6 @@ class AutoBackupBackgroundRunner {
 
     final needsRetry =
         failed > 0 || unresolved > 0 || result.plan.capped || watermarkFailed;
-    if (!needsRetry) {
-      await _state.put(AppConstants.autoBackupDueKey, false);
-    }
     return BackupRunOutcome(
       status: BackupRunStatus.ran,
       label: 'Backed up $photos photos, $videos videos',
@@ -318,14 +392,6 @@ class AutoBackupBackgroundRunner {
       skippedUnresolvable: unresolved,
       needsRetry: needsRetry,
     );
-  }
-
-  /// Returns the first enabled backup rule, if any.
-  BackupRule? _firstEnabledRule() {
-    for (final rule in _rules.values) {
-      if (rule.enabled) return rule;
-    }
-    return null;
   }
 
   /// Resolves a MediaStore asset to a native or temporary upload path.

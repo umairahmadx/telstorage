@@ -261,7 +261,10 @@ BackupPlan planRun({
     });
 
   for (final asset in ordered) {
-    if (asset.isVideo ? !rule.includeVideos : !rule.includePhotos) {
+    // Directory rules mirror whole folder trees (any file type); the
+    // photos/videos toggles only apply to MediaStore album rules.
+    if (!rule.isDirectory &&
+        (asset.isVideo ? !rule.includeVideos : !rule.includePhotos)) {
       skippedType++;
       continue;
     }
@@ -296,7 +299,10 @@ BackupPlan planRun({
     }
 
     if (known == null) {
-      final cloud = cloudFilesByName[asset.title];
+      // Directory rules key cloud copies by tree-relative path so identically
+      // named files in different subfolders never adopt each other (A7).
+      final cloud =
+          cloudFilesByName[asset.containerPath] ?? cloudFilesByName[asset.title];
       // Size tolerance mirrors the UploadService dedupe threshold (under
       // 0.01 MB) so an MB-to-bytes round trip never misses a match (A7).
       if (cloud != null &&

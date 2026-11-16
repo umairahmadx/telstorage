@@ -4,15 +4,21 @@
  */
 part of 'auto_backup_scheduler.dart';
 
+/// Mutable per-run progress counters shared across rules.
+class _BackupProgressTracker {
+  int processed = 0;
+  int total = 0;
+}
+
 extension AutoBackupSchedulerRuns on AutoBackupScheduler {
   /// Foreground run: consume the due flag, enqueue, watermark completions.
   ///
   /// Also the "Back up now" entry point ([manual]) and the app
   /// start/resume hook (killed-app recovery, C2). The due flag is consumed
-  /// only after the rule passes eligibility, so an ineligible run (window,
-  /// metered, not charging, permission) never loses the flag — it stays
-  /// armed and is retried when conditions change. Uploads never run in the
-  /// Workmanager isolate — this must be called on the main isolate only.
+  /// only after every enabled rule passes eligibility, so an ineligible run
+  /// (window, metered, not charging, permission) never loses the flag — it
+  /// stays armed and is retried when conditions change. Uploads never run in
+  /// the Workmanager isolate — this must be called on the main isolate only.
   Future<BackupRunOutcome> consumeDueFlag({
     bool manual = false,
     bool backfill = false,
@@ -24,6 +30,7 @@ extension AutoBackupSchedulerRuns on AutoBackupScheduler {
       );
     }
     _runInProgress = true;
+    _runProgress.value = const BackupRunProgress(scanning: true);
     AppLogger.i('Backup run started type=${manual ? 'manual' : 'scheduled'}',
         tag: 'AutoBackup');
     try {
@@ -51,6 +58,7 @@ extension AutoBackupSchedulerRuns on AutoBackupScheduler {
       );
     } finally {
       _runInProgress = false;
+      _runProgress.value = null;
     }
   }
 
@@ -67,14 +75,97 @@ extension AutoBackupSchedulerRuns on AutoBackupScheduler {
       );
     }
 
-    final rule = _firstEnabledRule();
-    if (rule == null) {
+    final rules = _rules.values.where((rule) => rule.enabled).toList();
+    if (rules.isEmpty) {
       return const BackupRunOutcome(
         status: BackupRunStatus.noRule,
         label: 'Off',
       );
     }
 
+    final tracker = _BackupProgressTracker();
+    final outcomes = <BackupRunOutcome>[];
+    var anyBackfillRequested = false;
+    var allRequestedBackfillsComplete = true;
+    for (final rule in rules) {
+      final requested = backfill && !rule.backfillDone;
+      final outcome = await _runRule(
+        rule,
+        manual: manual,
+        backfill: requested,
+        tracker: tracker,
+      );
+      outcomes.add(outcome);
+      if (requested) {
+        anyBackfillRequested = true;
+        allRequestedBackfillsComplete =
+            allRequestedBackfillsComplete && outcome.backfillComplete;
+      }
+    }
+    return _mergeOutcomes(
+      outcomes,
+      backfillComplete: anyBackfillRequested && allRequestedBackfillsComplete,
+    );
+  }
+
+  /// Combines per-rule outcomes; a single rule keeps its exact outcome.
+  BackupRunOutcome _mergeOutcomes(
+    List<BackupRunOutcome> outcomes, {
+    required bool backfillComplete,
+  }) {
+    if (outcomes.length == 1) return outcomes.first;
+    var photos = 0;
+    var videos = 0;
+    var skipped = 0;
+    var needsRetry = false;
+    var anyRan = false;
+    var anyFailed = false;
+    var anyIneligible = false;
+    for (final outcome in outcomes) {
+      photos += outcome.uploadedPhotos;
+      videos += outcome.uploadedVideos;
+      skipped += outcome.skippedUnresolvable;
+      needsRetry = needsRetry || outcome.needsRetry;
+      anyRan = anyRan || outcome.status == BackupRunStatus.ran;
+      anyFailed = anyFailed || outcome.status == BackupRunStatus.failed;
+      anyIneligible =
+          anyIneligible || outcome.status == BackupRunStatus.ineligible;
+    }
+    final status = anyRan
+        ? BackupRunStatus.ran
+        : anyFailed
+            ? BackupRunStatus.failed
+            : anyIneligible
+                ? BackupRunStatus.ineligible
+                : outcomes.first.status;
+    final label = anyRan
+        ? (photos + videos > 0
+            ? 'Backed up $photos photos, $videos videos'
+            : 'Already up to date')
+        : outcomes
+            .firstWhere(
+              (o) => o.status == status,
+              orElse: () => outcomes.first,
+            )
+            .label;
+    return BackupRunOutcome(
+      status: status,
+      label: label,
+      uploadedPhotos: photos,
+      uploadedVideos: videos,
+      skippedUnresolvable: skipped,
+      backfillComplete: backfillComplete,
+      needsRetry: needsRetry,
+    );
+  }
+
+  /// Runs one rule: eligibility, scan, path setup, enqueue, watermark.
+  Future<BackupRunOutcome> _runRule(
+    BackupRule rule, {
+    required bool manual,
+    required bool backfill,
+    required _BackupProgressTracker tracker,
+  }) async {
     // For manual "Back up now", bypass window/Wi-Fi/charging gates.
     // Keep enabled + permission checks (F2).
     final eligibility = manual
@@ -148,27 +239,54 @@ extension AutoBackupSchedulerRuns on AutoBackupScheduler {
 
     final planned = <String, BackupUploadItem>{};
     final tasks = <UploadTask>[];
+    final destFolders = <String, String>{};
+    final subfolderCache = <String, String>{};
     var alreadyActive = 0;
     var unresolved = 0;
     for (final upload in uploads) {
       final asset = upload.asset;
       final taskId =
           '${AutoBackupScheduler.taskIdPrefix}${asset.assetId}:${asset.fingerprint}';
+      // Duplicate scan rows must never enqueue a second copy: the cloud
+      // would receive it but the watermark counts unique task ids only.
+      if (planned.containsKey(taskId)) continue;
       if (_isActive(taskId)) {
         alreadyActive++;
         continue;
       }
-      final resolved = await _resolvePath(asset);
+      final ({String path, bool isTemporary})? resolved;
+      if (rule.isDirectory) {
+        // Directory asset ids are absolute device paths — no MediaStore.
+        resolved = (path: asset.assetId, isTemporary: false);
+      } else {
+        resolved = await _resolvePath(asset);
+      }
       if (resolved == null) {
         unresolved++;
         continue;
+      }
+      var folderId = albumFolderId;
+      if (rule.isDirectory) {
+        final sub = await _activeService.ensureSubfolderPath(
+          rule,
+          asset.relativePath ?? '',
+          cache: subfolderCache,
+        );
+        if (sub.isFailure) {
+          return BackupRunOutcome(
+            status: BackupRunStatus.failed,
+            label: sub.failureOrNull?.message ?? 'Folder setup failed',
+          );
+        }
+        folderId = sub.dataOrNull!;
+        destFolders[asset.assetId] = folderId;
       }
       tasks.add(UploadTask(
         id: taskId,
         path: resolved.path,
         name: upload.destinationName,
         size: asset.sizeBytes,
-        folderId: albumFolderId,
+        folderId: folderId,
         isTemporaryCacheFile: resolved.isTemporary,
       ));
       planned[taskId] = upload;
@@ -195,15 +313,18 @@ extension AutoBackupSchedulerRuns on AutoBackupScheduler {
       );
     }
 
+    tracker.total += tasks.length;
     final outcome = await _enqueueAndWatch(
       rule: rule,
       tasks: tasks,
       planned: planned,
       albumFolderId: albumFolderId,
+      destFolderIdsByAssetId: destFolders,
       skippedUnresolvable: result.skippedUnresolvable + unresolved,
       backfillRequested: backfill,
       backfillPlanCapped: result.plan.capped,
       allPlannedResolved: unresolved == 0 && alreadyActive == 0,
+      tracker: tracker,
     );
     if (outcome.backfillComplete) {
       rule.backfillDone = true;
@@ -222,10 +343,12 @@ extension AutoBackupSchedulerRuns on AutoBackupScheduler {
     required List<UploadTask> tasks,
     required Map<String, BackupUploadItem> planned,
     required String albumFolderId,
+    required Map<String, String> destFolderIdsByAssetId,
     required int skippedUnresolvable,
     required bool backfillRequested,
     required bool backfillPlanCapped,
     required bool allPlannedResolved,
+    required _BackupProgressTracker tracker,
   }) async {
     final bloc = _bloc;
     if (bloc == null) {
@@ -249,6 +372,8 @@ extension AutoBackupSchedulerRuns on AutoBackupScheduler {
         pending.clear();
         break;
       }
+      var partialProgress = 0.0;
+      String? currentFile;
       for (final id in pending.toList()) {
         final task = _findTask(id);
         if (task == null) continue;
@@ -259,12 +384,30 @@ extension AutoBackupSchedulerRuns on AutoBackupScheduler {
             task.status == TransferStatus.cancelled) {
           failedTasks++;
           pending.remove(id);
+        } else {
+          partialProgress += task.progress.clamp(0.0, 1.0).toDouble();
+          if (currentFile == null && task.status == TransferStatus.uploading) {
+            currentFile = task.name;
+          }
         }
       }
+      final processed =
+          tracker.processed + completedIds.length + failedTasks;
+      _runProgress.value = BackupRunProgress(
+        completed: processed,
+        total: tracker.total,
+        fraction: tracker.total == 0
+            ? 0.0
+            : ((processed + partialProgress) / tracker.total)
+                .clamp(0.0, 1.0)
+                .toDouble(),
+        currentFileName: currentFile,
+      );
       if (pending.isNotEmpty) {
         await Future<void>.delayed(_pollInterval);
       }
     }
+    tracker.processed += completedIds.length + failedTasks;
 
     var photos = 0;
     var videos = 0;
@@ -279,6 +422,7 @@ extension AutoBackupSchedulerRuns on AutoBackupScheduler {
         uploads: completedUploads,
         destFileIdsByAssetId: destIds,
         destFolderId: albumFolderId,
+        destFolderIdsByAssetId: destFolderIdsByAssetId,
       );
       watermarkFailed = watermark.isFailure;
       for (final upload in completedUploads) {

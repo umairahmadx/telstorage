@@ -18,16 +18,24 @@ class IncomingShareDestinationSheet extends StatefulWidget {
   const IncomingShareDestinationSheet({
     required this.fileNames,
     required this.folders,
+    this.onCreateFolder,
     super.key,
   });
 
   final List<String> fileNames;
   final List<FolderRecord> folders;
 
+  /// Creates a folder under [parentId] (null for root) and returns its
+  /// record, or null on failure. When absent, folder creation is hidden.
+  final Future<FolderRecord?> Function(String name, String? parentId)?
+      onCreateFolder;
+
   static Future<IncomingShareDestination?> show(
     BuildContext context, {
     required List<String> fileNames,
     required List<FolderRecord> folders,
+    Future<FolderRecord?> Function(String name, String? parentId)?
+        onCreateFolder,
   }) {
     return showModalBottomSheet<IncomingShareDestination>(
       context: context,
@@ -36,6 +44,7 @@ class IncomingShareDestinationSheet extends StatefulWidget {
       builder: (_) => IncomingShareDestinationSheet(
         fileNames: fileNames,
         folders: folders,
+        onCreateFolder: onCreateFolder,
       ),
     );
   }
@@ -48,6 +57,7 @@ class IncomingShareDestinationSheet extends StatefulWidget {
 class _IncomingShareDestinationSheetState
     extends State<IncomingShareDestinationSheet> {
   final List<String> _folderStack = [];
+  late final List<FolderRecord> _folders = List.of(widget.folders);
 
   String? get _currentFolderId =>
       _folderStack.isEmpty ? null : _folderStack.last;
@@ -55,17 +65,57 @@ class _IncomingShareDestinationSheetState
   FolderRecord? get _currentFolder {
     final id = _currentFolderId;
     if (id == null) return null;
-    for (final folder in widget.folders) {
+    for (final folder in _folders) {
       if (folder.id == id) return folder;
     }
     return null;
+  }
+
+  Future<void> _promptCreateFolder() async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('New folder'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Folder name'),
+          onSubmitted: (value) => Navigator.pop(ctx, value.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+
+    if (name == null || name.isEmpty || !mounted) return;
+    final folder = await widget.onCreateFolder!(name, _currentFolderId);
+    if (!mounted) return;
+    if (folder == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not create the folder.')),
+      );
+      return;
+    }
+    setState(() {
+      _folders.add(folder);
+      _folderStack.add(folder.id);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final currentFolder = _currentFolder;
-    final children = widget.folders
+    final children = _folders
         .where((folder) => folder.parentId == _currentFolderId)
         .toList()
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
@@ -126,6 +176,12 @@ class _IncomingShareDestinationSheetState
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      if (widget.onCreateFolder != null)
+                        IconButton(
+                          tooltip: 'New folder',
+                          onPressed: _promptCreateFolder,
+                          icon: const Icon(Icons.create_new_folder_outlined),
+                        ),
                     ],
                   ),
                 ],
@@ -137,7 +193,9 @@ class _IncomingShareDestinationSheetState
                   ? Center(
                       child: Text(
                         _currentFolderId == null
-                            ? 'No folders yet. Upload to the root folder.'
+                            ? (widget.onCreateFolder == null
+                                ? 'No folders yet. Upload to the root folder.'
+                                : 'No folders yet. Create one or upload to the root folder.')
                             : 'This folder has no subfolders.',
                         style: theme.textTheme.bodyMedium,
                       ),

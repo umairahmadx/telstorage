@@ -84,5 +84,19 @@ void main() {
         ]),
       );
     });
+
+    test('TC-05: acquireSend spaces message-creating calls by minSendInterval', () async {
+      final limiter = TelegramRateLimiter.instance;
+      final timestamps = <DateTime>[];
+
+      await Future.wait([
+        limiter.acquireSend().then((_) => timestamps.add(DateTime.now())),
+        limiter.acquireSend().then((_) => timestamps.add(DateTime.now())),
+      ]);
+
+      final gapMs = timestamps[1].difference(timestamps[0]).inMilliseconds;
+      expect(gapMs,
+          greaterThanOrEqualTo(TelegramRateLimiter.minSendInterval.inMilliseconds - 100));
+    });
   });
 }

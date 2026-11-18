@@ -217,5 +217,59 @@ void main() {
       expect(TelegramRateLimiter.instance.isPaused, isTrue,
           reason: '429 from unpinAllMessages must pause rate limiter');
     });
+
+    test(
+        'TC-05: repeated HTTP 429s do not consume the transient-failure retry budget',
+        () async {
+      int getChatAttempts = 0;
+      final dio = Dio();
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            if (options.path.endsWith('/getChat')) {
+              getChatAttempts++;
+              if (getChatAttempts <= 3) {
+                handler.reject(
+                  DioException(
+                    requestOptions: options,
+                    response: Response(
+                      requestOptions: options,
+                      statusCode: 429,
+                      data: {
+                        'ok': false,
+                        'description': 'Too Many Requests: retry after 0',
+                        'parameters': {'retry_after': 0},
+                      },
+                    ),
+                    type: DioExceptionType.badResponse,
+                  ),
+                );
+                return;
+              }
+              handler.resolve(
+                Response(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: {
+                    'ok': true,
+                    'result': {
+                      'pinned_message': {'message_id': 4242}
+                    },
+                  },
+                ),
+              );
+              return;
+            }
+            handler.next(options);
+          },
+        ),
+      );
+
+      final service = TelegramService(dio: dio);
+      await service.init('dummy_token', '-1001234567890');
+
+      expect(await service.getPinnedMessageId(), equals(4242));
+      expect(getChatAttempts, equals(4));
+    });
   });
 }

@@ -35,6 +35,11 @@ class TelegramRateLimiter {
   DateTime _pauseUntil = DateTime.fromMillisecondsSinceEpoch(0);
   static const Duration _minInterval = Duration(milliseconds: 1000);
 
+  /// Telegram caps bots at ~20 new messages per minute in the same chat.
+  static const Duration minSendInterval = Duration(seconds: 3);
+  DateTime _lastSendTime = DateTime.fromMillisecondsSinceEpoch(0);
+  Future<void> _sendGate = Future.value();
+
   final List<_QueuedRequest> _queue = [];
   bool _isProcessing = false;
 
@@ -92,6 +97,24 @@ class TelegramRateLimiter {
     return completer.future;
   }
 
+  /// Like [acquire], but additionally spaces calls that post a new message to the channel
+  /// (sendDocument, forwardMessage) by [minSendInterval] so bulk uploads avoid HTTP 429.
+  Future<void> acquireSend([RequestPriority priority = RequestPriority.normal]) {
+    final slot = _sendGate.then((_) async {
+      while (true) {
+        final intervalWait =
+            minSendInterval - DateTime.now().difference(_lastSendTime);
+        final cooldown = remainingCooldown;
+        final wait = cooldown > intervalWait ? cooldown : intervalWait;
+        if (wait <= Duration.zero) break;
+        await Future.delayed(wait);
+      }
+      _lastSendTime = DateTime.now();
+    });
+    _sendGate = slot;
+    return slot.then((_) => acquire(priority));
+  }
+
   Future<void> _processQueue() async {
     if (_isProcessing) return;
     _isProcessing = true;
@@ -138,6 +161,8 @@ class TelegramRateLimiter {
   void reset() {
     _lastRequestTime = DateTime.fromMillisecondsSinceEpoch(0);
     _pauseUntil = DateTime.fromMillisecondsSinceEpoch(0);
+    _lastSendTime = DateTime.fromMillisecondsSinceEpoch(0);
+    _sendGate = Future.value();
     for (final req in _queue) {
       if (!req.completer.isCompleted) req.completer.complete();
     }

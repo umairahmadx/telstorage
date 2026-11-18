@@ -401,9 +401,9 @@ class UploadService implements UploadServiceContract {
             'thumbnail_message_id': thumbnailMessageId,
         };
 
-        final metaResult = await _telegram.uploadBytesWithFileId(
-          Uint8List.fromList(utf8.encode(jsonEncode(fileMeta))),
-          '$fileId.json',
+        final metaBytes = Uint8List.fromList(utf8.encode(jsonEncode(fileMeta)));
+        final metaResult = await _withRetry(
+          () => _telegram.uploadBytesWithFileId(metaBytes, '$fileId.json'),
         );
         fileMeta['metadata_message_id'] = metaResult['message_id'] as int;
         fileMeta['metadata_file_id'] = metaResult['file_id'] as String;

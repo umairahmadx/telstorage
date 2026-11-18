@@ -41,8 +41,8 @@ class TelegramService {
   TelegramService({Dio? dio})
       : _dio = dio ??
             Dio(BaseOptions(
-              // 120s connect timeout avoids stalls on spotty mobile networks.
-              connectTimeout: const Duration(seconds: 120),
+              // A TCP/TLS handshake silent for 30s is dead; failing fast lets _withRetry reconnect.
+              connectTimeout: const Duration(seconds: 30),
               sendTimeout: const Duration(seconds: 180),
               receiveTimeout: const Duration(seconds: 180),
             )) {
@@ -64,15 +64,15 @@ class TelegramService {
     _isInitialized = true;
   }
 
-  /// Helper executing API actions with automatic 3-attempt exponential retry on network/transient failures.
+  /// Retries transient network failures up to [maxAttempts]; HTTP 429 flood waits use a separate budget.
   Future<T> _withRetry<T>(
     Future<T> Function() action, {
     int maxAttempts = 3,
     String operationName = 'Telegram operation',
   }) async {
     int attempt = 0;
+    int rateLimitWaits = 0;
     while (true) {
-      attempt++;
       try {
         return await action();
       } on TelegramAuthException {
@@ -91,7 +91,7 @@ class TelegramService {
           final retryAfter =
               e.response?.data?['parameters']?['retry_after'] as int? ?? 5;
           TelegramRateLimiter.instance.report429(retryAfter);
-          if (attempt < maxAttempts) {
+          if (rateLimitWaits++ < 5) {
             await Future.delayed(Duration(seconds: retryAfter));
             continue;
           }
@@ -108,7 +108,7 @@ class TelegramService {
                 e.response!.statusCode! >= 500 &&
                 e.response!.statusCode! <= 504);
 
-        if (isTransient && attempt < maxAttempts) {
+        if (isTransient && ++attempt < maxAttempts) {
           final delayMs = 1000 * (1 << (attempt - 1));
           AppLogger.w(
             '$operationName transient network error (attempt $attempt/$maxAttempts): $e. Retrying in ${delayMs}ms...',
@@ -127,7 +127,7 @@ class TelegramService {
         }
         rethrow;
       } catch (e) {
-        if (attempt < maxAttempts) {
+        if (++attempt < maxAttempts) {
           final delayMs = 1000 * (1 << (attempt - 1));
           AppLogger.w(
             '$operationName error (attempt $attempt/$maxAttempts): $e. Retrying in ${delayMs}ms...',
@@ -148,7 +148,7 @@ class TelegramService {
     void Function(int sent, int total)? onSendProgress,
   }) async {
     return _withRetry(() async {
-      await TelegramRateLimiter.instance.acquire();
+      await TelegramRateLimiter.instance.acquireSend();
       try {
         AppLogger.d('Uploading: $filename (${bytes.length} bytes)',
             tag: 'TelegramService');
@@ -379,7 +379,7 @@ class TelegramService {
   /// Used to discover the pinned metadata file_id on a fresh device.
   Future<String> getFileIdOfMessage(int messageId) async {
     return _withRetry(() async {
-      await TelegramRateLimiter.instance.acquire();
+      await TelegramRateLimiter.instance.acquireSend();
       try {
         AppLogger.d('Getting file_id for message $messageId via forward...',
             tag: 'TelegramService');
